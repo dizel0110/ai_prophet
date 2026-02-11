@@ -1,0 +1,48 @@
+import asyncio
+import logging
+import multiprocessing
+import uvicorn
+from aiogram import Bot, Dispatcher
+from fastapi import FastAPI
+from config import TOKEN, PORT
+from core.network import apply_dns_patch
+from handlers import messages, vip
+
+# Настройка логов
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# FastAPI для Hugging Face
+app = FastAPI()
+@app.get("/")
+async def root(): return {"status": "AI Prophet Modular is Running"}
+
+def start_web():
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
+
+async def start_bot():
+    apply_dns_patch()
+    
+    bot = Bot(token=TOKEN)
+    dp = Dispatcher()
+    
+    # Регистрация роутеров
+    dp.include_router(vip.router)
+    dp.include_router(messages.router)
+    
+    logger.info("🚀 AI Prophet Modular System Started")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    
+    # Запуск веб-сервера
+    p_web = multiprocessing.Process(target=start_web)
+    p_web.start()
+    
+    try:
+        asyncio.run(start_bot())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Stopped.")
+    finally:
+        p_web.terminate()

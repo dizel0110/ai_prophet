@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prophet AI Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #030712;
+            --card: rgba(17, 24, 39, 0.7);
+            --accent: #8b5cf6;
+            --text: #f9fafb;
+            --muted: #6b7280;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.12);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background-color: var(--bg);
+            background-image: radial-gradient(circle at top right, #1e1b4b, transparent),
+                radial-gradient(circle at bottom left, #2e1065, transparent);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-height: 100vh;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin: 0;
+            background: linear-gradient(135deg, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 24px;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .prophecy-card {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.15));
+            border: 1px solid rgba(139, 92, 246, 0.5);
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+        }
+
+        .prophecy-card:active {
+            transform: scale(0.96);
+        }
+
+        .skill-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .skill-item {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 16px;
+            border-radius: 18px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .skill-item:active:not(.locked) {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .skill-item.locked {
+            filter: grayscale(1) opacity(0.5);
+            cursor: default;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skill-item.locked::after {
+            content: "Coming Soon";
+            position: absolute;
+            background: var(--accent);
+            color: white;
+            font-size: 8px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            top: 5px;
+            right: 5px;
+        }
+
+        .footer-text {
+            font-size: 13px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: auto;
+            padding-bottom: 20px;
+        }
+
+        .icon-circle {
+            width: 40px;
+            height: 40px;
+            background: rgba(139, 92, 246, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>AI Prophet</h1>
+        <p style="color: #9ca3af; font-size: 15px; margin-top: 8px;">Quantum Oracle Interface</p>
+    </div>
+
+    <!-- Основное действие -->
+    <div class="card prophecy-card" onclick="sendToBot('daily_prediction')">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div class="icon-circle">✨</div>
+            <div>
+                <div style="font-size: 18px; font-weight: 700;">Get Prophecy</div>
+                <div style="font-size: 11px; color: #d1d5db; margin-top: 2px;">Reveal your destiny for today</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin: 0 0 16px 0; font-size: 16px; opacity: 0.8;">Active Capabilities</h3>
+        <div class="skill-grid">
+            <div class="skill-item" onclick="sendToBot('vision_info')">
+                <div class="icon-circle">👁️</div>
+                <span>Vision AI</span>
+            </div>
+            <div class="skill-item locked">
+                <div class="icon-circle">🎵</div>
+                <span>Voice & Music</span>
+            </div>
+            <div class="skill-item locked">
+                <div class="icon-circle">🧠</div>
+                <span>Memory</span>
+            </div>
+            <div class="skill-item locked">
+                <div class="icon-circle">🛠️</div>
+                <span>Toolbox</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-text">
+        Powered by Gemini 2.5 Flash & Prophet Engine v3.0
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        // Устанавливаем цвета темы Telegram
+        tg.MainButton.setText("Close Oracle").show().onClick(() => tg.close());
+        tg.MainButton.setParams({
+            color: '#8b5cf6',
+            text_color: '#ffffff'
+        });
+
+        function sendToBot(action) {
+            tg.HapticFeedback.impactOccurred('medium');
+            tg.sendData(action);
+        }
+    </script>
+</body>
+
+</html>

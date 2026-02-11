@@ -1,0 +1,6 @@
+aiogram
+google-genai
+python-dotenv
+fastapi
+uvicorn
+dnspython
