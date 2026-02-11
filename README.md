@@ -7,61 +7,41 @@ sdk: docker
 pinned: false
 ---
 
-# 🔮 AI Prophet
+# 🔮 AI Prophet: The Oracle of 2026
 
 [![GitHub Stars](https://img.shields.io/github/stars/dizel0110/ai_prophet?style=for-the-badge&color=8b5cf6)](https://github.com/dizel0110/ai_prophet/stargazers)
 [![Telegram](https://img.shields.io/badge/Telegram-Mini_App-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/ai_prophet_io_bot)
-[![AI](https://img.shields.io/badge/Model-Gemini_1.5_Flash-orange?style=for-the-badge&logo=google-cloud)](https://aistudio.google.com/)
+[![Engine](https://img.shields.io/badge/Engine-Gemini_2.5_Flash-orange?style=for-the-badge&logo=google-cloud)](https://aistudio.google.com/)
+[![Secondary Engine](https://img.shields.io/badge/Fallback-Qwen_&_Llama_4-green?style=for-the-badge&logo=huggingface)](https://huggingface.co/)
 
-> **"The bridge between ancient wisdom and future intelligence."**
-
-**AI Prophet** — это ультимативный ИИ-агент для Telegram, объединяющий мощь мозгa **Gemini 1.5 Flash**, гибкость **Function Calling** и премиальный визуальный опыт через **Telegram Mini App**.
+**AI Prophet** — это не просто чат-бот, а мультимодальный ИИ-агент нового поколения. Он объединяет пророческую мудрость с мощью передовых нейросетей Google и Hugging Face.
 
 ---
 
-## ✨ Ключевые особенности (Skills)
+## ✨ Ключевые возможности
 
-*   🧠 **Contextual Memory**: Агент помнит историю диалога, создавая ощущение реального общения.
-*   👁️ **Computer Vision**: Отправьте фото, и Пророк проанализирует его в деталях.
-*   🛠️ **Real-time Skills**: Бот умеет вызывать внешние инструменты (информация о времени, системные отчеты и др.) через Function Calling.
-*   💎 **Premium Mini App**: Интерфейс в стиле Glassmorphism с поддержкой Haptic Feedback и синхронизацией данных.
-*   🚀 **CI/CD Ready**: Автоматический деплой через GitHub Actions.
+*   🧠 **Adaptive Context**: Пророк помнит историю общения и адаптирует приветствия под время суток и ваш характер.
+*   👁️ **Multimodal Vision**: Анализ фото и скриншотов с использованием `Gemini 2.5` и `Phi-3 Vision`. Извлечение текста, кода и глубинных смыслов.
+*   🎙️ **Audio Resonance**: Полная поддержка голосовых сообщений. Распознавание через `Whisper` и мгновенный ответ.
+*   🛡️ **Unstoppable Logic**: Трехуровневая система Fallback. Если Google перегружен, на помощь приходят облачные мощности Hugging Face (Qwen & Llama 4).
+*   💎 **Premium TMA**: Telegram Mini App в стиле Glassmorphism — ваш пульт управления будущим.
+
+---
 
 ## 🛠 Технологический стек
 
-*   **Core:** Python 3.10+, `python-telegram-bot`
-*   **AI Engine:** Google Generative AI (Gemini SDK)
-*   **Web:** Vanilla JS, CSS (Glassmorphism), Telegram Web App SDK
-*   **DevOps:** Docker, GitHub Actions
-
-## 🚀 Быстрый старт
-
-1.  **Клонируйте репозиторий:**
-    ```bash
-    git clone https://github.com/dizel0110/ai_prophet.git
-    cd ai_prophet
-    ```
-2.  **Настройте окружение:**
-    Создайте `.env` и вставьте ваши ключи:
-    ```env
-    TELEGRAM_TOKEN=your_token
-    GEMINI_API_KEY=your_key
-    ```
-3.  **Запуск:**
-    ```bash
-    pip install -r requirements.txt
-    python bot.py
-    ```
-
-## 🏗 Структура проекта
-
-```text
-├── .github/workflows/   # Авто-деплой (GitHub Actions)
-├── bot.py               # Мозг агента и логика инструментов
-├── index.html           # Интерфейс Mini App (Smart Lounge)
-├── Dockerfile           # Контейнеризация для хостинга
-└── requirements.txt     # Зависимости проекта
-```
+*   **Logic:** Python 3.10+ & Aiogram 3.x
+*   **Core AI:** Google Generative AI (Gemini 2.5 Flash / 1.5 Flash)
+*   **Edge AI:** Hugging Face Inference API (Qwen 2.5, Whisper, Llama 3.1)
+*   **Deployment:** Docker, GitHub Actions, Hugging Face Spaces
 
 ---
-*Разработано с помощью ИИ для будущего.*
+
+## 🚀 Разработка и CI/CD
+
+Проект использует современный цикл поставки:
+1.  **Local Dev**: Разработка в локальных ветках.
+2.  **Production (`main`)**: Каждая отправка (`push`) в ветку `main` автоматически обновляет бота на сервере Hugging Face.
+
+---
+*Являя суть вещей через код. 2026.*
