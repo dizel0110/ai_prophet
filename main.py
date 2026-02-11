@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2026 dizel0110
+# Project: AI Prophet (The bridge between ancient wisdom and future intelligence)
+# Licensed under the Apache License, Version 2.0
+# -----------------------------------------------------------------------------
+
 import asyncio
 import logging
 import multiprocessing
