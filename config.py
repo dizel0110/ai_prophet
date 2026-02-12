@@ -20,13 +20,13 @@ if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 # ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Февраль 2026)
 FALLBACK_MODELS = [
     'gemini-2.0-flash',       # Основная активная
-    'gemini-1.5-flash',       # Резерв
-    'gemini-1.5-pro'          # Тяжелая артиллерия
+    'gemini-1.5-flash', 
+    'gemini-2.0-flash-lite'
 ]
 
-# Оптимизированные модели для HF
+# Оптимизированные модели для HF (Router-Ready)
 HF_TASKS = {
-    "text": "HuggingFaceH4/zephyr-7b-beta",        # Очень стабильная на бесплатном плане
+    "text": "Qwen/Qwen2.5-7B-Instruct",             # Рекомендуемая HF для роутера
     "vision": "Salesforce/blip-image-captioning-base", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
