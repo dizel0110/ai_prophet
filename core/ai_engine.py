@@ -36,8 +36,8 @@ def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
-    # Февраль 2026: Единственный рабочий эндпоинт для Serverless Inference
-    api_url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
+    # Переходим на классический эндпоинт, он стабильнее для прямого вызова моделей
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
     
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
