@@ -63,7 +63,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
             response = requests.post(api_url, headers=headers, json=payload, timeout=30)
 
         if response.status_code != 200:
-            logger.error(f"❌ HF Error {response.status_code}: {response.text[:100]}")
+            logger.error(f"❌ HF Error {response.status_code} for {model_id} at {api_url}: {response.text[:100]}")
             return None
 
         result = response.json()

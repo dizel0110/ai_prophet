@@ -17,18 +17,18 @@ OWNER_USERNAME = "dizel0110"
 TEMP_DIR = "temp"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Проверенные)
+# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-2.0-flash-exp',   # Всегда держим как первый вариант
-    'gemini-2.5-flash-lite',  # Хороша для простых задач
-    'gemini-2.5-flash'
+    'gemini-1.5-flash',       # Самая стабильная в v1beta
+    'gemini-2.0-flash-lite-preview-02-05', 
+    'gemini-2.0-flash'
 ]
 
-# Оптимизированные модели для HF (Открытые, без лишних подтверждений)
+# Оптимизированные модели для HF
 HF_TASKS = {
-    "text": "Qwen/Qwen2.5-7B-Instruct",             # Мощная открытая модель
+    "text": "mistralai/Mistral-7B-Instruct-v0.3",   # Безотказная классика
     "vision": "Salesforce/blip-image-captioning-large", 
-    "audio": "openai/whisper-large-v3",             # Золотой стандарт
+    "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }
 
