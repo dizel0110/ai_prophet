@@ -36,26 +36,26 @@ def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
-    # Февраль 2026: Официальный адрес роутера для Inference
-    api_url = f"https://router.huggingface.co/models/{model_id}"
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "x-wait-for-model": "true"
+    }
     
     try:
         if task == "vision" and image_path:
-            # Для Vision на HF часто лучше работает прямая отправка бинарника
-            with open(image_path, "rb") as f:
-                data = f.read()
-            response = requests.post(api_url, headers=headers, data=data, timeout=30)
+            with open(image_path, "rb") as f: data = f.read()
+            response = requests.post(api_url, headers=headers, data=data, timeout=60)
         elif task == "audio" and image_path:
-            with open(image_path, "rb") as f:
-                data = f.read()
-            response = requests.post(api_url, headers=headers, data=data, timeout=30)
+            with open(image_path, "rb") as f: data = f.read()
+            response = requests.post(api_url, headers=headers, data=data, timeout=60)
         else:
             payload = {
                 "inputs": f"{SYSTEM_PROMPT}\n\nUser: {text}\nProphet:",
-                "parameters": {"max_new_tokens": 500}
+                "parameters": {"max_new_tokens": 500},
+                "options": {"wait_for_model": True}
             }
-            response = requests.post(api_url, headers=headers, json=payload, timeout=20)
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
 
         if response.status_code != 200:
             logger.error(f"❌ HF Error {response.status_code}: {response.text[:100]}")

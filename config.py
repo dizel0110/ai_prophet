@@ -28,8 +28,8 @@ FALLBACK_MODELS = [
 # Оптимизированные модели для HF (Inference API Free Tier)
 HF_TASKS = {
     "text": "meta-llama/Llama-3.2-3B-Instruct",      # Легкая и стабильная
-    "vision": "Salesforce/blip-image-captioning-large", # Безотказная
-    "audio": "openai/whisper-tiny",                  # Молниеносная транскрипция
+    "vision": "Salesforce/blip-image-captioning-large", 
+    "audio": "openai/whisper-large-v3",             # Золотой стандарт HF
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }
 
