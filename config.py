@@ -26,7 +26,7 @@ FALLBACK_MODELS = [
 
 # Оптимизированные модели для HF
 HF_TASKS = {
-    "text": "mistralai/Mistral-7B-Instruct-v0.3",   # Безотказная классика
+    "text": "microsoft/Phi-3-mini-4k-instruct",   # Самая надежная и быстрая на HF
     "vision": "Salesforce/blip-image-captioning-large", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 

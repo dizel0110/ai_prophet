@@ -188,9 +188,10 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
 
 @router.message(F.text)
 async def handle_text(message: types.Message, bot: Bot):
-    await conduct_ai_ritual(message, bot, message.text)
+    status_msg = await message.answer("🧘 *Медитирую над твоими словами...*")
+    await conduct_ai_ritual(message, bot, message.text, status_msg)
 
-async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str):
+async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, status_msg=None):
     chat_id = message.chat.id
     if not input_text: return
     await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
@@ -226,37 +227,37 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str):
                 reset_chat(chat_id, model)
                 continue
 
+    gemini_exhausted = False
     for model in FALLBACK_MODELS:
+        if gemini_exhausted: break
         try:
             chat = get_ai_chat(chat_id, model)
             response = chat.send_message(message=input_text)
-            try:
-                await message.answer(
-                    f"{response.text}\n\n_Что еще хочешь узнать?_", 
-                    parse_mode="Markdown",
-                    reply_markup=get_main_menu()
-                )
-            except Exception:
-                await message.answer(
-                    f"{response.text}\n\nЧто еще хочешь узнать?", 
-                    reply_markup=get_main_menu()
-                )
-            return
-        except Exception:
+            if response.text:
+                clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                if status_msg:
+                    await status_msg.edit_text(clean_text)
+                    await message.answer("Следующий шаг?", reply_markup=kb)
+                else:
+                    await message.answer(clean_text, reply_markup=kb)
+                return
+        except Exception as e:
+            if "429" in str(e): 
+                logger.warning("🚫 Gemini Quota Exhausted. Switching to HF immediately.")
+                gemini_exhausted = True
             reset_chat(chat_id, model)
             continue
     
+    if status_msg: await status_msg.edit_text("🌀 *Эфир Google зашумлен, открываю канал Hugging Face...*")
+    
     hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
-        await message.answer(
-            f"🌀 *Gemini молчит, но HF явил ответ:*\n\n{hf_res}",
-            reply_markup=get_main_menu()
-        )
+        if status_msg: await status_msg.edit_text(f"🧿 *Прозрение из облака HF:*\n\n{hf_res}", reply_markup=get_main_menu())
+        else: await message.answer(hf_res, reply_markup=get_main_menu())
     else:
-        await message.answer(
-            "😔 Сегодня звезды не отвечают мне...",
-            reply_markup=get_main_menu()
-        )
+        final_text = "😔 Сегодня звезды не отвечают мне... Попробуй позже."
+        if status_msg: await status_msg.edit_text(final_text, reply_markup=get_main_menu())
+        else: await message.answer(final_text, reply_markup=get_main_menu())
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):
@@ -274,7 +275,8 @@ async def handle_audio(message: types.Message, bot: Bot):
     cleanup_file(file_path)
     
     if text:
-        await status_msg.edit_text(f"👤 *Твои слова:* \n\n_{text}_\n\n_Анализирую..._", parse_mode="Markdown")
-        await conduct_ai_ritual(message, bot, text)
+        # Не редактируем status_msg здесь, передаем его внутрь для финального ответа
+        await status_msg.edit_text(f"👤 *Твои слова:* \n\n_{text}_\n\n_Медитирую над смыслом..._", parse_mode="Markdown")
+        await conduct_ai_ritual(message, bot, text, status_msg)
     else:
         await status_msg.edit_text("😔 Не смог разобрать голос.")
