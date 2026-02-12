@@ -14,21 +14,20 @@ OWNER_USERNAME = "dizel0110"
 TEMP_DIR = "temp"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ
+# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Актуально на Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-2.5-flash',       # Флагман скорости и ума
-    'gemini-2.5-flash-lite',  # Массивный масштаб, минимум лимитов
-    'gemini-1.5-flash',       # Вечная классика (Stable)
-    'gemini-1.5-flash-8b'    # Самая быстрая для простых задач
+    'gemini-3-flash-preview', # Новинка: скорость и ум
+    'gemini-2.5-flash',       # Стабильный стандарт
+    'gemini-2.5-flash-lite',  # Макс. квоты
+    'gemini-1.5-flash'        # Самый надежный резерв
 ]
 
 # Оптимизированные модели для HF (Inference API Free Tier)
-# Выбираем те, что точно работают в Serverless режиме
 HF_TASKS = {
-    "text": "meta-llama/Llama-3.1-8B-Instruct",      # Всегда в онлайне
-    "vision": "microsoft/phi-3-vision-128k-instruct", # Современное легкое зрение
-    "audio": "openai/whisper-small",                  # Легче, чем turbo, меньше падений
-    "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" # Интеллект DeepSeek в легком весе
+    "text": "meta-llama/Llama-3.2-3B-Instruct",      # Быстрая и стабильная
+    "vision": "Salesforce/blip-image-captioning-large", # Всегда онлайн
+    "audio": "openai/whisper-large-v3-turbo",         # Скорость и точность
+    "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }
 
 SYSTEM_PROMPT = (
