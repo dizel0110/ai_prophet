@@ -60,10 +60,10 @@ def get_hf_response(text=None, image_path=None, task="text"):
                 "parameters": {"max_new_tokens": 500},
                 "options": {"wait_for_model": True}
             }
-            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+            response = requests.post(api_url, headers=headers, json=payload, timeout=60)
 
         if response.status_code != 200:
-            logger.error(f"❌ HF Error {response.status_code} for {model_id} at {api_url}: {response.text[:100]}")
+            logger.error(f"❌ HF Error {response.status_code} for {model_id}: {response.text}")
             return None
 
         result = response.json()

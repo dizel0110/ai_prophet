@@ -26,7 +26,7 @@ FALLBACK_MODELS = [
 
 # Оптимизированные модели для HF
 HF_TASKS = {
-    "text": "Qwen/Qwen2.5-7B-Instruct",             # Лучшая открытая модель для чата
+    "text": "HuggingFaceH4/zephyr-7b-beta",        # Очень стабильная на бесплатном плане
     "vision": "Salesforce/blip-image-captioning-base", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
