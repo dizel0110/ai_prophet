@@ -9,6 +9,7 @@ from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response
+from core.tools import web_search
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
 
@@ -186,6 +187,34 @@ async def handle_text(message: types.Message, bot: Bot):
     if user_settings.get(chat_id, {}).get('pending_photo'):
         await handle_vision_action(message, bot, chat_id, message.text)
         return
+
+    # Логика Web Search (Базовая: по ключевым словам)
+    trigger_words = ["найди", "погугли", "что слышно о", "курс", "цена"]
+    text_lower = message.text.lower()
+    
+    if any(word in text_lower for word in trigger_words):
+        status_msg = await message.answer("🔎 *Обращаюсь к мировому эфиру за информацией...*", parse_mode="Markdown")
+        search_res = web_search(message.text)
+        
+        # Передаем результаты поиска в Gemini для анализа
+        full_prompt = (
+            f"Используя свежие данные из поиска:\n\n{search_res}\n\n"
+            f"Ответь на запрос пользователя: {message.text}\n"
+            f"Стиль: Пророческий. Ссылайся на полученную информацию."
+        )
+        await status_msg.edit_text("🧘 *Медитирую над потоком данных...*")
+        
+        for model in FALLBACK_MODELS:
+            try:
+                chat = get_ai_chat(chat_id, model)
+                response = chat.send_message(message=full_prompt)
+                clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                await status_msg.edit_text(clean_text)
+                await message.answer("Мои прозрения верны?", reply_markup=kb)
+                return
+            except Exception:
+                reset_chat(chat_id, model)
+                continue
 
     for model in FALLBACK_MODELS:
         try:
