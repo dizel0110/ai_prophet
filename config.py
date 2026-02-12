@@ -7,6 +7,9 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
+# Базовый URL для Hugging Face Inference API через Router (актуально на Февраль 2026)
+HF_ROUTER_BASE_URL = "https://router.huggingface.co/hf-inference/models/"
+
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = "dizel0110"
 
@@ -16,10 +19,10 @@ if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Актуально на Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-2.0-flash-exp',   # Проверенный и рабочий на проде
-    'gemini-2.5-flash',       # Новый стандарт
-    'gemini-1.5-flash',       # Классика
-    'gemini-1.5-pro'          # Мощный интеллект
+    'gemini-3-flash',         # Флагман скорости и ума (V3)
+    'gemini-3-pro',           # Максимальный интеллект (V3)
+    'gemini-2.5-flash',       # Стабильный стандарт
+    'gemini-2.5-flash-lite'   # Массивный масштаб, минимум лимитов
 ]
 
 # Оптимизированные модели для HF (Inference API Free Tier)
