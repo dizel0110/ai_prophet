@@ -186,7 +186,7 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
         
     await handle_vision_action(callback.message, bot, callback.message.chat.id, user_text)
 
-@router.message()
+@router.message(F.text)
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = message.chat.id
     if not message.text: return
