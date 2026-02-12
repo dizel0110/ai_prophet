@@ -188,26 +188,28 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
 
 @router.message(F.text)
 async def handle_text(message: types.Message, bot: Bot):
+    await conduct_ai_ritual(message, bot, message.text)
+
+async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str):
     chat_id = message.chat.id
-    if not message.text: return
+    if not input_text: return
     await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     
     if user_settings.get(chat_id, {}).get('pending_photo'):
-        await handle_vision_action(message, bot, chat_id, message.text)
+        await handle_vision_action(message, bot, chat_id, input_text)
         return
 
-    # Логика Web Search (Базовая: по ключевым словам)
+    # Логика Web Search
     trigger_words = ["найди", "погугли", "что слышно о", "курс", "цена"]
-    text_lower = message.text.lower()
+    text_lower = input_text.lower()
     
     if any(word in text_lower for word in trigger_words):
         status_msg = await message.answer("🔎 *Обращаюсь к мировому эфиру за информацией...*", parse_mode="Markdown")
-        search_res = web_search(message.text)
+        search_res = web_search(input_text)
         
-        # Передаем результаты поиска в Gemini для анализа
         full_prompt = (
             f"Используя свежие данные из поиска:\n\n{search_res}\n\n"
-            f"Ответь на запрос пользователя: {message.text}\n"
+            f"Ответь на запрос пользователя: {input_text}\n"
             f"Стиль: Пророческий. Ссылайся на полученную информацию."
         )
         await status_msg.edit_text("🧘 *Медитирую над потоком данных...*")
@@ -227,7 +229,7 @@ async def handle_text(message: types.Message, bot: Bot):
     for model in FALLBACK_MODELS:
         try:
             chat = get_ai_chat(chat_id, model)
-            response = chat.send_message(message=message.text)
+            response = chat.send_message(message=input_text)
             try:
                 await message.answer(
                     f"{response.text}\n\n_Что еще хочешь узнать?_", 
@@ -244,7 +246,7 @@ async def handle_text(message: types.Message, bot: Bot):
             reset_chat(chat_id, model)
             continue
     
-    hf_res = get_hf_response(text=message.text, task="text")
+    hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
         await message.answer(
             f"🌀 *Gemini молчит, но HF явил ответ:*\n\n{hf_res}",
@@ -273,7 +275,6 @@ async def handle_audio(message: types.Message, bot: Bot):
     
     if text:
         await status_msg.edit_text(f"👤 *Твои слова:* \n\n_{text}_\n\n_Анализирую..._", parse_mode="Markdown")
-        message.text = text
-        await handle_text(message, bot)
+        await conduct_ai_ritual(message, bot, text)
     else:
         await status_msg.edit_text("😔 Не смог разобрать голос.")
