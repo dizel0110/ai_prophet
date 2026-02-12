@@ -3,15 +3,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
-
-# Проверка загрузки (для логов)
-if not TOKEN: print("⚠️ WARNING: TELEGRAM_TOKEN not found!")
-if not GEMINI_KEY: print("⚠️ WARNING: GEMINI_API_KEY not found!")
-if not HF_TOKEN: print("⚠️ WARNING: HF_TOKEN not found!")
-else: print(f"✅ HF_TOKEN loaded (prefix: {HF_TOKEN[:5]}...)")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = "dizel0110"
@@ -20,11 +14,10 @@ OWNER_USERNAME = "dizel0110"
 TEMP_DIR = "temp"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ НА 2026 ГОД
-# Имена без префикса 'models/', библиотека сама их добавит если нужно
+# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ
 FALLBACK_MODELS = [
-    'gemini-2.0-flash',       # Флагман скорости и ума
-    'gemini-2.0-flash-lite',  # Массивный масштаб, минимум лимитов
+    'gemini-2.5-flash',       # Флагман скорости и ума
+    'gemini-2.5-flash-lite',  # Массивный масштаб, минимум лимитов
     'gemini-1.5-flash',       # Вечная классика (Stable)
     'gemini-1.5-flash-8b'    # Самая быстрая для простых задач
 ]
