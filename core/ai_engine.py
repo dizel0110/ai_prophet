@@ -59,8 +59,19 @@ def get_hf_response(text=None, image_path=None, task="text"):
         else:
             return None
 
+        if response.status_code == 404:
+            # ПОПЫТКА №2: Прямой эндпоинт HF (черный ход)
+            direct_url = f"https://huggingface.co/api/models/{model_id}/inference"
+            logger.info(f"🔄 Router 404, attempting direct API for {model_id}...")
+            if task == "text":
+                response = requests.post(direct_url, headers=headers, json=payload, timeout=60)
+            else:
+                headers_media = headers.copy()
+                if task == "audio": headers_media["Content-Type"] = "audio/ogg"
+                response = requests.post(direct_url, headers=headers_media, data=data, timeout=60)
+
         if response.status_code != 200:
-            logger.error(f"❌ HF Final Error {response.status_code} for {model_id}: {response.text[:200]}")
+            logger.error(f"❌ HF Final Error {response.status_code} for {model_id}: {response.text[:100]}")
             return None
 
         result = response.json()
