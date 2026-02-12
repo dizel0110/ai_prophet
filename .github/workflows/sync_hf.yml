@@ -17,4 +17,4 @@ jobs:
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://dizel0110:$HF_TOKEN@huggingface.co/spaces/dizel0110/ai_prophet main
+        run: git push --force https://dizel0110:$HF_TOKEN@huggingface.co/spaces/dizel0110/ai_prophet HEAD:main
