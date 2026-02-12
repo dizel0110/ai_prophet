@@ -29,6 +29,10 @@ def start_web():
 async def start_bot():
     apply_dns_patch()
     
+    from config import HF_TOKEN, GEMINI_KEY
+    if not HF_TOKEN: logger.warning("⚠️ HF_TOKEN is not set! Voice and WebSearch fallback will fail.")
+    else: logger.info(f"✅ HF_TOKEN is loaded (prefix: {HF_TOKEN[:5]}...)")
+    
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
     
