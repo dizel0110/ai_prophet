@@ -24,11 +24,11 @@ FALLBACK_MODELS = [
     'gemini-2.5-flash'
 ]
 
-# Оптимизированные модели для HF (Inference API Free Tier)
+# Оптимизированные модели для HF (Открытые, без лишних подтверждений)
 HF_TASKS = {
-    "text": "meta-llama/Llama-3.2-3B-Instruct",      # Легкая и стабильная
+    "text": "Qwen/Qwen2.5-7B-Instruct",             # Мощная открытая модель
     "vision": "Salesforce/blip-image-captioning-large", 
-    "audio": "openai/whisper-large-v3",             # Золотой стандарт HF
+    "audio": "openai/whisper-large-v3",             # Золотой стандарт
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }
 
