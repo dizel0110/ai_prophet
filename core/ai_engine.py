@@ -36,10 +36,13 @@ def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
-    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    # Февраль 2026: Единственный рабочий эндпоинт для Serverless Inference
+    api_url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
+    
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
-        "x-wait-for-model": "true"
+        "x-wait-for-model": "true",
+        "x-use-cache": "false"
     }
     
     try:
@@ -48,6 +51,8 @@ def get_hf_response(text=None, image_path=None, task="text"):
             response = requests.post(api_url, headers=headers, data=data, timeout=60)
         elif task == "audio" and image_path:
             with open(image_path, "rb") as f: data = f.read()
+            # Для аудио на роутере иногда нужно явно указывать Content-Type
+            headers["Content-Type"] = "audio/ogg"
             response = requests.post(api_url, headers=headers, data=data, timeout=60)
         else:
             payload = {

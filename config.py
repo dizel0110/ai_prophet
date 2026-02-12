@@ -17,12 +17,11 @@ OWNER_USERNAME = "dizel0110"
 TEMP_DIR = "temp"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Проверенные на проде)
+# ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Проверенные)
 FALLBACK_MODELS = [
-    'gemini-2.5-flash-lite',  # Работает! (но лимиты 20/день)
-    'gemini-2.5-flash', 
-    'gemini-1.5-flash', 
-    'gemini-1.5-pro'
+    'gemini-2.0-flash-exp',   # Всегда держим как первый вариант
+    'gemini-2.5-flash-lite',  # Хороша для простых задач
+    'gemini-2.5-flash'
 ]
 
 # Оптимизированные модели для HF (Inference API Free Tier)
