@@ -132,7 +132,8 @@ async def handle_photo(message: types.Message, bot: Bot):
         await status_msg.edit_text(clean_text)
         await message.answer("Следующий шаг?", reply_markup=kb)
     else:
-        await status_msg.edit_text("📸 *Образ получен.* Каналы зашумлены, но я готов обсудить фото текстом.", reply_markup=get_main_menu())
+        await status_msg.edit_text("📸 *Образ получен.* Каналы зашумлены, но я готов обсудить фото текстом.")
+        await message.answer("Воспользуйся меню:", reply_markup=get_main_menu())
 
 async def handle_vision_action(message, bot, chat_id, user_text):
     pending_info = user_settings.get(chat_id, {})
