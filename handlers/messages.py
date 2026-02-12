@@ -108,7 +108,11 @@ async def handle_photo(message: types.Message, bot: Bot):
             
             if response.text:
                 clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
-                await status_msg.edit_text(f"🧿 *Мой взор запечатлел ({model_name}):*\n\n{clean_text}", parse_mode="Markdown")
+                try:
+                    await status_msg.edit_text(f"🧿 *Мой взор запечатлел:* \n\n{clean_text}", parse_mode="Markdown")
+                except Exception:
+                    await status_msg.edit_text(f"🧿 Мой взор запечатлел:\n\n{clean_text}")
+                
                 await message.answer("Что мне совершить?", reply_markup=kb)
                 return
         except Exception as e:
@@ -224,11 +228,17 @@ async def handle_text(message: types.Message, bot: Bot):
         try:
             chat = get_ai_chat(chat_id, model)
             response = chat.send_message(message=message.text)
-            await message.answer(
-                f"{response.text}\n\n_Что еще хочешь узнать?_", 
-                parse_mode="Markdown",
-                reply_markup=get_main_menu()
-            )
+            try:
+                await message.answer(
+                    f"{response.text}\n\n_Что еще хочешь узнать?_", 
+                    parse_mode="Markdown",
+                    reply_markup=get_main_menu()
+                )
+            except Exception:
+                await message.answer(
+                    f"{response.text}\n\nЧто еще хочешь узнать?", 
+                    reply_markup=get_main_menu()
+                )
             return
         except Exception:
             reset_chat(chat_id, model)

@@ -36,8 +36,8 @@ def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
-    # Переход на новый Router эндпоинт HF (февраль 2026)
-    api_url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
+    # Февраль 2026: Официальный адрес роутера для Inference
+    api_url = f"https://router.huggingface.co/models/{model_id}"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
     try:
