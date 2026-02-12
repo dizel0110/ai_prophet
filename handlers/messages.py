@@ -252,12 +252,20 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
     
     hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
-        if status_msg: await status_msg.edit_text(f"🧿 *Прозрение из облака HF:*\n\n{hf_res}", reply_markup=get_main_menu())
-        else: await message.answer(hf_res, reply_markup=get_main_menu())
+        if status_msg: 
+            # Нельзя прикреплять ReplyKeyboardMarkup к edit_text. 
+            # Просто редактируем статус и присылаем ответ новым сообщением.
+            await status_msg.edit_text("🧿 *Поток данных из облака HF сформирован:*")
+            await message.answer(hf_res, reply_markup=get_main_menu())
+        else: 
+            await message.answer(hf_res, reply_markup=get_main_menu())
     else:
         final_text = "😔 Сегодня звезды не отвечают мне... Попробуй позже."
-        if status_msg: await status_msg.edit_text(final_text, reply_markup=get_main_menu())
-        else: await message.answer(final_text, reply_markup=get_main_menu())
+        if status_msg: 
+            await status_msg.edit_text(final_text)
+            await message.answer("Вернись, когда эфир очистится.", reply_markup=get_main_menu())
+        else: 
+            await message.answer(final_text, reply_markup=get_main_menu())
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):

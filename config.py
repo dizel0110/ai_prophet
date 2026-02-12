@@ -19,14 +19,14 @@ if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-1.5-flash',       # Самая стабильная в v1beta
-    'gemini-2.0-flash-lite-preview-02-05', 
-    'gemini-2.0-flash'
+    'gemini-2.0-flash',       # Самая рабочая версия сейчас
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite'
 ]
 
 # Оптимизированные модели для HF
 HF_TASKS = {
-    "text": "microsoft/Phi-3-mini-4k-instruct",   # Самая надежная и быстрая на HF
+    "text": "Qwen/Qwen2.5-7B-Instruct",             # Очень стабильная на HF
     "vision": "Salesforce/blip-image-captioning-large", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
