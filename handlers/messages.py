@@ -83,8 +83,6 @@ async def cmd_start(message: types.Message):
 @router.message(F.photo)
 async def handle_photo(message: types.Message, bot: Bot):
     chat_id = message.chat.id
-    # Чистим старые фото пользователя перед созданием нового
-    cleanup_user_temp(chat_id)
     
     photo = message.photo[-1]
     file_name = f"task_{chat_id}_{int(datetime.now().timestamp())}.jpg"
@@ -120,12 +118,21 @@ async def handle_photo(message: types.Message, bot: Bot):
             reset_chat(chat_id, model_name)
             continue
     
-    # HF FALLBACK
-    hf_res = get_hf_response(image_path=file_path, task="vision")
-    if hf_res:
-        await status_msg.edit_text(f"🧿 *Ответ от Vision-модели HF:*\n\n{hf_res}")
+    # HF FALLBACK: Ритуал интерпретации туманных образов
+    hf_caption = get_hf_response(image_path=file_path, task="vision")
+    if hf_caption:
+        await status_msg.edit_text("🧿 *Вижу туманный образ... Грезю о его значении...*")
+        # Просим Mistral интерпретировать сухой технический результат от Vision-модели
+        interpretation_prompt = f"Как AI Prophet, протрактуй это видение: {hf_caption}. Будь мистичен и краток. В конце предложи следующий шаг."
+        interpretation = get_hf_response(text=interpretation_prompt, task="text")
+        
+        final_text = f"🧿 *Мой взор затуманен, но я вижу:* \n\n_{hf_caption}_\n\n{interpretation or 'Эфир слишком плотен для точных слов...'}"
+        clean_text, kb = parse_steps_and_create_kb(final_text, chat_id)
+        
+        await status_msg.edit_text(clean_text)
+        await message.answer("Следующий шаг?", reply_markup=kb)
     else:
-        await status_msg.edit_text("📸 *Образ получен.* Каналы зашумлены, но я готов обсудить фото текстом.")
+        await status_msg.edit_text("📸 *Образ получен.* Каналы зашумлены, но я готов обсудить фото текстом.", reply_markup=get_main_menu())
 
 async def handle_vision_action(message, bot, chat_id, user_text):
     pending_info = user_settings.get(chat_id, {})
@@ -157,9 +164,12 @@ async def handle_vision_action(message, bot, chat_id, user_text):
             continue
     
     if not success:
-        hf_res = get_hf_response(text=user_text, image_path=path, task="vision" if path else "text")
+        # Безопасная проверка: файл мог быть удален или задача чисто текстовая
+        can_do_vision = path and os.path.exists(path)
+        hf_res = get_hf_response(text=user_text, image_path=path if can_do_vision else None, task="vision" if can_do_vision else "text")
         if hf_res:
-            await status_msg.edit_text(f"🧿 *Ответ из облака HF:*\n\n{hf_res}")
+            if status_msg: await status_msg.edit_text("🧿 *Прозрение свершилось через резервный канал:*")
+            await message.answer(hf_res, reply_markup=get_main_menu())
             success = True
 
     if success and path:
@@ -270,7 +280,7 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):
     chat_id = message.chat.id
-    cleanup_user_temp(chat_id) # Чистим старое перед записью
+    # Не чистим всё подряд, только файлы этого же типа если нужно
     
     audio = message.voice or message.audio
     file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
