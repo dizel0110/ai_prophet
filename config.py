@@ -16,17 +16,17 @@ if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # ТОЧНЫЕ ИМЕНА МОДЕЛЕЙ (Актуально на Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-3-flash-preview', # Новинка: скорость и ум
-    'gemini-2.5-flash',       # Стабильный стандарт
-    'gemini-2.5-flash-lite',  # Макс. квоты
-    'gemini-1.5-flash'        # Самый надежный резерв
+    'gemini-2.0-flash-exp',   # Проверенный и рабочий на проде
+    'gemini-2.5-flash',       # Новый стандарт
+    'gemini-1.5-flash',       # Классика
+    'gemini-1.5-pro'          # Мощный интеллект
 ]
 
 # Оптимизированные модели для HF (Inference API Free Tier)
 HF_TASKS = {
-    "text": "meta-llama/Llama-3.2-3B-Instruct",      # Быстрая и стабильная
-    "vision": "Salesforce/blip-image-captioning-large", # Всегда онлайн
-    "audio": "openai/whisper-large-v3-turbo",         # Скорость и точность
+    "text": "meta-llama/Llama-3.2-3B-Instruct",      # Легкая и стабильная
+    "vision": "Salesforce/blip-image-captioning-large", # Безотказная
+    "audio": "openai/whisper-tiny",                  # Молниеносная транскрипция
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }
 
