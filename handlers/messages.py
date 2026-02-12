@@ -35,6 +35,12 @@ def cleanup_user_temp(chat_id):
     for f in glob.glob(pattern_audio):
         cleanup_file(f)
 
+def get_main_menu():
+    """Возвращает стандартную клавиатуру с Mini App"""
+    web_app_url = "https://dizel0110.github.io/ai_prophet/"
+    kb = [[KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))]]
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
 def parse_steps_and_create_kb(text, chat_id):
     """Парсит текст на наличие 'ШАГ:' и создает клавиатуру"""
     kb = []
@@ -68,11 +74,9 @@ def get_adaptive_greeting(username):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
     username = message.from_user.first_name or "путник"
-    web_app_url = "https://dizel0110.github.io/ai_prophet/"
-    kb = [[KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))]]
     await message.answer(
         f"{get_adaptive_greeting(username)}\n\nЯ AI Prophet. Пришли фото или спроси о чем угодно.",
-        reply_markup=ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True),
+        reply_markup=get_main_menu(),
         parse_mode="Markdown"
     )
 
@@ -220,7 +224,11 @@ async def handle_text(message: types.Message, bot: Bot):
         try:
             chat = get_ai_chat(chat_id, model)
             response = chat.send_message(message=message.text)
-            await message.answer(f"{response.text}\n\n_Что еще хочешь узнать?_", parse_mode="Markdown")
+            await message.answer(
+                f"{response.text}\n\n_Что еще хочешь узнать?_", 
+                parse_mode="Markdown",
+                reply_markup=get_main_menu()
+            )
             return
         except Exception:
             reset_chat(chat_id, model)
@@ -228,9 +236,15 @@ async def handle_text(message: types.Message, bot: Bot):
     
     hf_res = get_hf_response(text=message.text, task="text")
     if hf_res:
-        await message.answer(f"🌀 *Gemini молчит, но HF явил ответ:*\n\n{hf_res}")
+        await message.answer(
+            f"🌀 *Gemini молчит, но HF явил ответ:*\n\n{hf_res}",
+            reply_markup=get_main_menu()
+        )
     else:
-        await message.answer("😔 Сегодня звезды не отвечают мне...")
+        await message.answer(
+            "😔 Сегодня звезды не отвечают мне...",
+            reply_markup=get_main_menu()
+        )
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):

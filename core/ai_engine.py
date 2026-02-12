@@ -61,8 +61,15 @@ def get_hf_response(text=None, image_path=None, task="text"):
             return None
 
         result = response.json()
+        # Whisper возвращает {'text': '...'}, Llama возвращает [{'generated_text': '...'}]
+        if isinstance(result, dict):
+            return result.get('text', result.get('generated_text', str(result)))
+        
         if isinstance(result, list) and len(result) > 0:
-            return result[0].get('generated_text', result[0].get('summary_text', str(result)))
+            item = result[0]
+            if isinstance(item, dict):
+                return item.get('text', item.get('generated_text', item.get('summary_text', str(result))))
+        
         return str(result)
 
     except Exception as e:
