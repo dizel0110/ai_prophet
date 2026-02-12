@@ -34,6 +34,29 @@ def cleanup_user_temp(chat_id):
     for f in glob.glob(pattern_audio):
         cleanup_file(f)
 
+def parse_steps_and_create_kb(text, chat_id):
+    """Парсит текст на наличие 'ШАГ:' и создает клавиатуру"""
+    kb = []
+    lines = text.split('\n')
+    new_text_lines = []
+    
+    for line in lines:
+        if line.strip().startswith("ШАГ:"):
+            step_text = line.replace("ШАГ:", "").strip().strip("[]")
+            # Telegram limit is 64 bytes for callback_data
+            # "vision_task:custom:" is 19 bytes. Остается 45.
+            callback_val = step_text[:40]
+            btn_text = step_text[:30] + "..." if len(step_text) > 30 else step_text
+            kb.append([InlineKeyboardButton(text=f"🔮 {btn_text}", callback_data=f"vision_task:custom:{callback_val}")])
+        else:
+            new_text_lines.append(line)
+    
+    # Всегда добавляем кнопку своего варианта
+    kb.append([InlineKeyboardButton(text="⌨️ Свой вариант", callback_data="vision_task:manual")])
+    
+    remaining_text = "\n".join(new_text_lines).strip()
+    return remaining_text, InlineKeyboardMarkup(inline_keyboard=kb)
+
 def get_adaptive_greeting(username):
     hour = datetime.now().hour
     if 0 <= hour < 6: return f"🔮 *Доброй ночи, {username}.* Эфир чист для глубоких прозрений..."
@@ -79,12 +102,9 @@ async def handle_photo(message: types.Message, bot: Bot):
             )
             
             if response.text:
-                await status_msg.edit_text(f"🧿 *Мой взор запечатлел ({model_name}):*\n\n{response.text}", parse_mode="Markdown")
-                kb = [
-                    [InlineKeyboardButton(text="📝 Извлечь текст/код", callback_data="vision_task:text")],
-                    [InlineKeyboardButton(text="📊 Резюмировать содержимое", callback_data="vision_task:summary")]
-                ]
-                await message.answer("Что мне совершить?", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+                clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                await status_msg.edit_text(f"🧿 *Мой взор запечатлел ({model_name}):*\n\n{clean_text}", parse_mode="Markdown")
+                await message.answer("Что мне совершить?", reply_markup=kb)
                 return
         except Exception as e:
             logger.warning(f"Vision failure on {model_name}: {e}")
@@ -117,9 +137,12 @@ async def handle_vision_action(message, bot, chat_id, user_text):
             else:
                 response = chat.send_message(message=full_prompt)
             
-            await status_msg.edit_text(response.text)
-            success = True
-            break
+            if response.text:
+                clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                await status_msg.edit_text(clean_text)
+                await message.answer("Следующий шаг?", reply_markup=kb)
+                success = True
+                break
         except Exception:
             reset_chat(chat_id, model)
             continue
@@ -136,10 +159,23 @@ async def handle_vision_action(message, bot, chat_id, user_text):
 
 @router.callback_query(F.data.startswith("vision_task:"))
 async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
-    task = callback.data.split(":")[1]
-    prompts = {"text": "Извлеки весь текст и код.", "summary": "Резюмируй кратко."}
+    data = callback.data.split(":")
+    task = data[1]
+    
+    if task == "manual":
+        await callback.answer("Жду твоего повеления...")
+        await callback.message.answer("⌨️ *Напиши свой запрос к этому фото:*", parse_mode="Markdown")
+        return
+
     await callback.answer("Свершаю...")
-    await handle_vision_action(callback.message, bot, callback.message.chat.id, prompts[task])
+    
+    if task == "custom":
+        user_text = data[2]
+    else:
+        prompts = {"text": "Извлеки весь текст и код.", "summary": "Резюмируй кратко."}
+        user_text = prompts.get(task, "Продолжай анализ.")
+        
+    await handle_vision_action(callback.message, bot, callback.message.chat.id, user_text)
 
 @router.message()
 async def handle_text(message: types.Message, bot: Bot):

@@ -33,7 +33,11 @@ def get_ai_chat(chat_id, model_name=None):
     return _chats[session_key]
 
 def get_hf_response(text=None, image_path=None, task="text"):
-    if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
+    if not HF_TOKEN: 
+        logger.error("❌ HF_TOKEN is missing in get_hf_response context!")
+        return "Ошибка: HF_TOKEN не настроен."
+    
+    logger.info(f"📡 Sending HF Request (Task: {task}, Model: {HF_TASKS.get(task)})")
     
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
     api_url = f"https://api-inference.huggingface.co/models/{model_id}"
