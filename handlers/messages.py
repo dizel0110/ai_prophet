@@ -1,5 +1,8 @@
 import os
 import logging
+import asyncio
+import random
+import glob
 import json
 from datetime import datetime
 from aiogram import Router, types, Bot, F
@@ -115,7 +118,7 @@ async def cmd_start(message: types.Message):
 
 @router.message(F.photo)
 async def handle_photo(message: types.Message, bot: Bot):
-    chat_id = message.chat.id
+    chat_id = str(message.chat.id)
     
     photo = message.photo[-1]
     file_name = f"task_{chat_id}_{int(datetime.now().timestamp())}.jpg"
@@ -175,6 +178,7 @@ async def handle_photo(message: types.Message, bot: Bot):
         await message.answer("Воспользуйся меню:", reply_markup=get_main_menu())
 
 async def handle_vision_action(message, bot, chat_id, user_text):
+    chat_id = str(chat_id)
     pending_info = user_settings.get(chat_id, {})
     path = pending_info.get('pending_photo')
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
@@ -240,7 +244,7 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
 
 @router.message()
 async def handle_text(message: types.Message, bot: Bot):
-    chat_id = message.chat.id
+    chat_id = str(message.chat.id)
     text = message.text
     if not text: return
 
@@ -268,7 +272,7 @@ async def handle_text(message: types.Message, bot: Bot):
     await conduct_ai_ritual(message, bot, message.text, status_msg)
 
 async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, status_msg=None):
-    chat_id = message.chat.id
+    chat_id = str(message.chat.id)
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     
     if not input_text: return
@@ -360,7 +364,7 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):
-    chat_id = message.chat.id
+    chat_id = str(message.chat.id)
     # Не чистим всё подряд, только файлы этого же типа если нужно
     
     audio = message.voice or message.audio
