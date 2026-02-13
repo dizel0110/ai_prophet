@@ -107,37 +107,43 @@ async def handle_photo(message: types.Message, bot: Bot):
     await bot.download(photo, destination=file_path)
     user_settings[chat_id] = {'pending_photo': file_path}
     
+    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     status_msg = await message.answer("🌀 *Вхожу в транс прозрения...*")
     
-    for model_name in FALLBACK_MODELS:
-        try:
-            chat = get_ai_chat(chat_id, model_name)
-            if not chat: continue
-            
-            with open(file_path, 'rb') as f: bytes_data = f.read()
-            prompt = "Ты — AI Prophet. Кратко опиши фото и предложи 3 варианта: текст, детали, предсказание."
-            response = chat.send_message(
-                message=[prompt, genai_types.Part.from_bytes(data=bytes_data, mime_type='image/jpeg')]
-            )
-            
-            if response.text:
-                clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
-                try:
-                    await status_msg.edit_text(f"🧿 *Мой взор запечатлел:* \n\n{clean_text}", parse_mode="Markdown")
-                except Exception:
-                    await status_msg.edit_text(f"🧿 Мой взор запечатлел:\n\n{clean_text}")
+    if engine != "hf":
+        logger.info(f"🔮 User {chat_id} uses {engine} for initial vision.")
+        for model_name in FALLBACK_MODELS:
+            try:
+                chat = get_ai_chat(chat_id, model_name)
+                if not chat: continue
                 
-                await message.answer("Что мне совершить?", reply_markup=kb)
-                return
-        except Exception as e:
-            logger.warning(f"Vision failure on {model_name}: {e}")
-            reset_chat(chat_id, model_name)
-            continue
+                with open(file_path, 'rb') as f: bytes_data = f.read()
+                prompt = "Ты — AI Prophet. Кратко опиши фото и предложи 3 варианта: текст, детали, предсказание."
+                response = chat.send_message(
+                    message=[prompt, genai_types.Part.from_bytes(data=bytes_data, mime_type='image/jpeg')]
+                )
+                
+                if response.text:
+                    clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                    try:
+                        await status_msg.edit_text(f"🧿 *Мой взор запечатлел:* \n\n{clean_text}", parse_mode="Markdown")
+                    except Exception:
+                        await status_msg.edit_text(f"🧿 Мой взор запечатлел:\n\n{clean_text}")
+                    
+                    await message.answer("Что мне совершить?", reply_markup=kb)
+                    return
+            except Exception as e:
+                logger.warning(f"Vision failure on {model_name}: {e}")
+                reset_chat(chat_id, model_name)
+                continue
+    else:
+        logger.info(f"🧿 User {chat_id} forced HF for initial vision.")
     
     # HF FALLBACK: Ритуал интерпретации туманных образов
     hf_caption = get_hf_response(image_path=file_path, task="vision")
     if hf_caption:
-        await status_msg.edit_text("🧿 *Вижу туманный образ... Грезю о его значении...*")
+        await status_msg.edit_text(f"🧿 *Пророчество через HF:* \n\n{hf_caption}", reply_markup=get_main_menu())
+        return
         # Просим Mistral интерпретировать сухой технический результат от Vision-модели
         interpretation_prompt = f"Как AI Prophet, протрактуй это видение: {hf_caption}. Будь мистичен и краток. В конце предложи следующий шаг."
         interpretation = get_hf_response(text=interpretation_prompt, task="text")
@@ -344,12 +350,15 @@ async def handle_audio(message: types.Message, bot: Bot):
     file_path = os.path.join(TEMP_DIR, file_name)
     
     await bot.download(audio, destination=file_path)
-    status_msg = await message.answer("👂 *Внимательно слушаю твой голос...*")
+    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
+    status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
     
+    logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
     text = get_hf_response(image_path=file_path, task="audio")
     cleanup_file(file_path)
     
     if text:
+        logger.info(f"✅ Audio transcribed: {text[:50]}...")
         # Отправляем транскрипцию как отдельное сообщение, чтобы она не стерлась в истории
         await message.answer(f"👤 *Прочитал в эфире:* \n\n_{text}_", parse_mode="Markdown")
         # Создаем новый статус для процесса раздумий
