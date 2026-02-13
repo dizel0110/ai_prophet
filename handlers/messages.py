@@ -1,8 +1,4 @@
-import os
-import logging
-import asyncio
-import random
-import glob
+import json
 from datetime import datetime
 from aiogram import Router, types, Bot, F
 from aiogram.enums import ChatAction
@@ -15,7 +11,26 @@ from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
 router = Router()
-user_settings = {}
+
+# Путь к файлу настроек
+SETTINGS_FILE = os.path.join(TEMP_DIR, "user_settings.json")
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception: return {}
+    return {}
+
+def save_settings(settings):
+    try:
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save settings: {e}")
+
+user_settings = load_settings()
 
 def cleanup_file(path):
     """Безопасное удаление файла"""
@@ -238,6 +253,7 @@ async def handle_text(message: types.Message, bot: Bot):
     elif "🧿 Только Hugging Face" in text: user_settings.setdefault(chat_id, {})['engine'] = 'hf'
     
     if any(x in text for x in ["🤖 Авто", "💎 Только Gemini", "🧿 Только Hugging Face"]):
+        save_settings(user_settings) # Сохраняем при изменении
         await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(), parse_mode="Markdown")
         return
 
