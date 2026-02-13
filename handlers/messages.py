@@ -6,7 +6,7 @@ from aiogram import Router, types, Bot, F
 from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response
+from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini
 from core.tools import web_search
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
@@ -372,7 +372,16 @@ async def handle_audio(message: types.Message, bot: Bot):
     status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
     
     logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
-    text = get_hf_response(image_path=file_path, task="audio")
+    
+    if engine == "hf":
+        text = get_hf_response(image_path=file_path, task="audio")
+    else:
+        text = transcribe_with_gemini(file_path)
+        # Если Gemini не справился, пробуем HF как бэкап
+        if not text:
+            logger.info("♻️ Gemini Transcription failed, falling back to HF.")
+            text = get_hf_response(image_path=file_path, task="audio")
+    
     cleanup_file(file_path)
     
     if text:
