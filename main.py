@@ -40,7 +40,9 @@ async def start_bot():
     dp.include_router(vip.router)
     dp.include_router(messages.router)
     
-    logger.info("🚀 AI Prophet Modular System Started")
+    logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
+    # Очищаем очередь старых сообщений, чтобы избежать конфликтов при перезапуске
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
