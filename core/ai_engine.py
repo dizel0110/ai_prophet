@@ -33,7 +33,8 @@ def get_ai_chat(chat_id, model_name=None):
 def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
-    BASE_ROUTER_URL = "https://router.huggingface.co"
+    # ФЕВРАЛЬ 2026: Единственный живой корень для всех задач
+    BASE_URL = "https://router.huggingface.co/hf-inference"
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
     
     headers = {
@@ -42,57 +43,47 @@ def get_hf_response(text=None, image_path=None, task="text"):
     }
     
     try:
+        # Для ТЕКСТА роутер любит OpenAI формат или прямой /models/
         if task == "text":
-            # Используем OpenAI-совместимый эндпоинт
-            api_url = f"{BASE_ROUTER_URL}/v1/chat/completions"
+            api_url = f"{BASE_URL}/v1/chat/completions"
             payload = {
                 "model": model_id,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": text}
-                ],
-                "max_tokens": 500,
-                "temperature": 0.7
+                "messages": [{"role": "user", "content": f"{SYSTEM_PROMPT}\n\n{text}"}],
+                "max_tokens": 500
             }
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
             if response.status_code == 200:
                 logger.info(f"✅ HF V1 Chat Success for {model_id}")
-                result = response.json()
-                return result['choices'][0]['message']['content']
-            else:
-                # Попытка №2: Старый путь через роутер
-                fallback_url = f"{BASE_ROUTER_URL}/hf-inference/models/{model_id}"
-                response = requests.post(fallback_url, headers=headers, json={"inputs": text}, timeout=60)
+                return response.json()['choices'][0]['message']['content']
         
+        # Для МЕДИА (Фото/Голос) - используем новый путь Роутера /models/
+        api_url = f"{BASE_URL}/models/{model_id}"
+        
+        if task == "vision" and image_path:
+            with open(image_path, "rb") as f: data = f.read()
+            response = requests.post(api_url, headers=headers, data=data, timeout=60)
+        elif task == "audio" and image_path:
+            with open(image_path, "rb") as f: data = f.read()
+            # Whisper на Роутере требует чистого потока
+            response = requests.post(api_url, headers=headers, data=data, timeout=60)
+        elif task == "text": # Если V1 не сработал
+            response = requests.post(api_url, headers=headers, json={"inputs": text}, timeout=60)
         else:
-            # Для медиа (аудио/фото) - используем ПРЯМОЙ эндпоинт API (он надежнее для бинарных данных)
-            api_url = f"https://api-inference.huggingface.co/models/{model_id}"
-            
-            if task == "vision" and image_path:
-                with open(image_path, "rb") as f: data = f.read()
-                response = requests.post(api_url, headers=headers, data=data, timeout=60)
-            elif task == "audio" and image_path:
-                with open(image_path, "rb") as f: data = f.read()
-                # Whisper на HF любит raw binary без лишних заголовков или с audio/flac
-                audio_headers = headers.copy()
-                response = requests.post(api_url, headers=audio_headers, data=data, timeout=60)
-            else:
-                return None
+            return None
 
         if response.status_code != 200:
-            logger.error(f"❌ HF Error {response.status_code} for {model_id}: {response.text[:200]}")
+            logger.error(f"❌ HF Router Error {response.status_code} for {model_id} at {api_url}: {response.text[:200]}")
             return None
 
         result = response.json()
-        logger.info(f"✅ HF {task} raw response: {str(result)[:100]}")
+        logger.info(f"✅ HF {task} raw result received.")
         
         if isinstance(result, dict):
             return result.get('text', result.get('generated_text', str(result)))
         if isinstance(result, list) and len(result) > 0:
             item = result[0]
             if isinstance(item, dict):
-                resp = item.get('generated_text', item.get('text', ''))
-                return resp
+                return item.get('text', item.get('generated_text', ''))
         return str(result)
 
     except Exception as e:
