@@ -36,7 +36,9 @@ def cleanup_user_temp(chat_id):
         cleanup_file(f)
 
 def get_main_menu():
+    web_app_url = "https://dizel0110.github.io/ai_prophet/"
     kb = [
+        [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
         [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
         [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
     ]
@@ -256,6 +258,7 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         
         hf_res = get_hf_response(text=input_text, task="text")
         if hf_res:
+            logger.info(f"✅ HF Response received for user {chat_id}")
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
             await message.answer(hf_res, reply_markup=get_main_menu())
         else:

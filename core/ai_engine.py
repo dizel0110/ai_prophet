@@ -57,6 +57,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
             }
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
             if response.status_code == 200:
+                logger.info(f"✅ HF V1 Chat Success for {model_id}")
                 result = response.json()
                 return result['choices'][0]['message']['content']
             else:
