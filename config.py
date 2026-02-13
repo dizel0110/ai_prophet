@@ -23,7 +23,7 @@ FALLBACK_MODELS = [
 
 # Модели для HF Router (OpenAI Compatible)
 HF_TASKS = {
-    "text": "mistralai/Mistral-7B-Instruct-v0.3",    # Классика, самая стабильная через роутер
+    "text": "Qwen/Qwen2.5-7B-Instruct",            # Вернулся к Qwen, так как Mistral в 404
     "vision": "Qwen/Qwen2-VL-7B-Instruct", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 

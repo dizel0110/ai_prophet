@@ -291,9 +291,11 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
             logger.info(f"✅ HF Response received for user {chat_id}")
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
             await message.answer(hf_res, reply_markup=get_main_menu())
+            return
         else:
-            await status_msg.edit_text("😔 Канал HF зашумлен. Попробуй позже.")
-        return
+            logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
+            if status_msg: await status_msg.edit_text("🌀 *Канал HF зашумлен, обращаюсь к звездам Google...*")
+            # Не делаем return, идем ниже к Gemini
 
     # Логика Web Search
     trigger_words = ["найди", "погугли", "что слышно о", "курс", "цена"]
