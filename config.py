@@ -25,7 +25,7 @@ FALLBACK_MODELS = [
 HF_TASKS = {
     "text": "Qwen/Qwen2.5-7B-Instruct",            # Самый надежный выбор для Роутера 2026
     "vision": "Qwen/Qwen2-VL-7B-Instruct", 
-    "audio": "openai/whisper-large-v3", 
+    "audio": "openai/whisper-large-v3-turbo",       # Быстрее и стабильнее
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }
 

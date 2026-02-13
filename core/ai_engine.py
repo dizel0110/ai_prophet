@@ -33,7 +33,6 @@ def get_ai_chat(chat_id, model_name=None):
 def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
-    # 2026: Прямой путь через Роутер без лишних префиксов
     BASE_ROUTER_URL = "https://router.huggingface.co"
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
     
@@ -44,7 +43,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
     
     try:
         if task == "text":
-            # Используем самый надежный OpenAI-совместимый путь
+            # Используем OpenAI-совместимый эндпоинт
             api_url = f"{BASE_ROUTER_URL}/v1/chat/completions"
             payload = {
                 "model": model_id,
@@ -61,36 +60,39 @@ def get_hf_response(text=None, image_path=None, task="text"):
                 result = response.json()
                 return result['choices'][0]['message']['content']
             else:
-                # Попытка №2: Если v1 не сработал, пробуем старый /models/ путь, но через роутер
+                # Попытка №2: Старый путь через роутер
                 fallback_url = f"{BASE_ROUTER_URL}/hf-inference/models/{model_id}"
-                payload_alt = {"inputs": text, "parameters": {"max_new_tokens": 500}}
-                response = requests.post(fallback_url, headers=headers, json=payload_alt, timeout=60)
+                response = requests.post(fallback_url, headers=headers, json={"inputs": text}, timeout=60)
         
         else:
-            # Для медиа (аудио/фото)
-            api_url = f"{BASE_ROUTER_URL}/hf-inference/models/{model_id}"
+            # Для медиа (аудио/фото) - используем ПРЯМОЙ эндпоинт API (он надежнее для бинарных данных)
+            api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+            
             if task == "vision" and image_path:
                 with open(image_path, "rb") as f: data = f.read()
                 response = requests.post(api_url, headers=headers, data=data, timeout=60)
             elif task == "audio" and image_path:
                 with open(image_path, "rb") as f: data = f.read()
-                headers["Content-Type"] = "audio/ogg"
-                response = requests.post(api_url, headers=headers, data=data, timeout=60)
+                # Whisper на HF любит raw binary без лишних заголовков или с audio/flac
+                audio_headers = headers.copy()
+                response = requests.post(api_url, headers=audio_headers, data=data, timeout=60)
             else:
                 return None
 
         if response.status_code != 200:
-            logger.error(f"❌ HF Router Error {response.status_code} for {model_id}: {response.text[:150]}")
+            logger.error(f"❌ HF Error {response.status_code} for {model_id}: {response.text[:200]}")
             return None
 
         result = response.json()
+        logger.info(f"✅ HF {task} raw response: {str(result)[:100]}")
+        
         if isinstance(result, dict):
             return result.get('text', result.get('generated_text', str(result)))
         if isinstance(result, list) and len(result) > 0:
             item = result[0]
             if isinstance(item, dict):
                 resp = item.get('generated_text', item.get('text', ''))
-                return resp.split("Prophet:")[-1].strip() if "Prophet:" in resp else resp
+                return resp
         return str(result)
 
     except Exception as e:

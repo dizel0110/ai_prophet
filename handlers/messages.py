@@ -154,13 +154,15 @@ async def handle_photo(message: types.Message, bot: Bot):
 async def handle_vision_action(message, bot, chat_id, user_text):
     pending_info = user_settings.get(chat_id, {})
     path = pending_info.get('pending_photo')
+    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     status_msg = await message.answer("🔮 *Свершаю чудо...*")
     
     success = False
-    for model in FALLBACK_MODELS:
-        try:
-            chat = get_ai_chat(chat_id, model)
-            full_prompt = f"Как AI Prophet, выполни волю: {user_text}. В конце предложи следующий шаг."
+    if engine != "hf":
+        for model in FALLBACK_MODELS:
+            try:
+                chat = get_ai_chat(chat_id, model)
+                full_prompt = f"Как AI Prophet, выполни волю: {user_text}. В конце предложи следующий шаг."
             
             if path and os.path.exists(path):
                 with open(path, 'rb') as f: bytes_data = f.read()
