@@ -16,15 +16,15 @@ if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # АКТУАЛЬНЫЕ МОДЕЛИ (Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-2.5-flash',       # Новая стабильная база
     'gemini-3-flash-preview', # Флагман 2026 года
+    'gemini-2.5-flash',       # Основная стабильная база
     'gemini-2.5-pro'
 ]
 
 # Модели для HF Router (OpenAI Compatible)
 HF_TASKS = {
-    "text": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", # Топ-1 по стабильности на HF сейчас
-    "vision": "Qwen/Qwen2-VL-7B-Instruct",            # Современный стандарт зрения
+    "text": "mistralai/Mistral-7B-Instruct-v0.3",    # Самая стабильная open-source модель
+    "vision": "Qwen/Qwen2-VL-7B-Instruct", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
 }

@@ -215,6 +215,7 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = message.chat.id
     text = message.text
+    if not text: return
 
     if text == "⚙️ Настройки":
         engine = user_settings.get(chat_id, {}).get('engine', 'auto')
