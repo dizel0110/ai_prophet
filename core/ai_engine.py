@@ -77,7 +77,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
                 return None
 
         if response.status_code != 200:
-            logger.error(f"❌ HF Router Error {response.status_code}: {response.text[:150]}")
+            logger.error(f"❌ HF Router Error {response.status_code} for {model_id}: {response.text[:150]}")
             return None
 
         result = response.json()

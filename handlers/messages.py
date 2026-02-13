@@ -36,9 +36,23 @@ def cleanup_user_temp(chat_id):
         cleanup_file(f)
 
 def get_main_menu():
-    """Возвращает стандартную клавиатуру с Mini App"""
-    web_app_url = "https://dizel0110.github.io/ai_prophet/"
-    kb = [[KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))]]
+    kb = [
+        [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
+        [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_settings_menu(current_engine):
+    engines = {
+        "auto": "🤖 Авто (Gemini -> HF)",
+        "gemini": "💎 Только Gemini",
+        "hf": "🧿 Только Hugging Face"
+    }
+    kb = []
+    for code, name in engines.items():
+        prefix = "✅ " if current_engine == code else ""
+        kb.append([KeyboardButton(text=f"{prefix}{name}")])
+    kb.append([KeyboardButton(text="⬅️ Назад")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 def parse_steps_and_create_kb(text, chat_id):
@@ -197,18 +211,54 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
         
     await handle_vision_action(callback.message, bot, callback.message.chat.id, user_text)
 
-@router.message(F.text)
+@router.message()
 async def handle_text(message: types.Message, bot: Bot):
+    chat_id = message.chat.id
+    text = message.text
+
+    if text == "⚙️ Настройки":
+        engine = user_settings.get(chat_id, {}).get('engine', 'auto')
+        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:", 
+                           reply_markup=get_settings_menu(engine), parse_mode="Markdown")
+        return
+
+    if "🤖 Авто" in text: user_settings.setdefault(chat_id, {})['engine'] = 'auto'
+    elif "💎 Только Gemini" in text: user_settings.setdefault(chat_id, {})['engine'] = 'gemini'
+    elif "🧿 Только Hugging Face" in text: user_settings.setdefault(chat_id, {})['engine'] = 'hf'
+    
+    if any(x in text for x in ["🤖 Авто", "💎 Только Gemini", "🧿 Только Hugging Face"]):
+        await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(), parse_mode="Markdown")
+        return
+
+    if text == "⬅️ Назад":
+        await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu())
+        return
+
+    # Остальная логика handle_text...
     status_msg = await message.answer("🧘 *Медитирую над твоими словами...*")
     await conduct_ai_ritual(message, bot, message.text, status_msg)
 
 async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, status_msg=None):
     chat_id = message.chat.id
+    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
+    
     if not input_text: return
     await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     
     if user_settings.get(chat_id, {}).get('pending_photo'):
         await handle_vision_action(message, bot, chat_id, input_text)
+        return
+
+    if engine == "hf":
+        if status_msg: await status_msg.edit_text("🧿 *Прямое подключение к каналу Hugging Face...*")
+        else: status_msg = await message.answer("🧿 *Прямое подключение к каналу Hugging Face...*")
+        
+        hf_res = get_hf_response(text=input_text, task="text")
+        if hf_res:
+            await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
+            await message.answer(hf_res, reply_markup=get_main_menu())
+        else:
+            await status_msg.edit_text("😔 Канал HF зашумлен. Попробуй позже.")
         return
 
     # Логика Web Search
