@@ -163,24 +163,24 @@ async def handle_vision_action(message, bot, chat_id, user_text):
             try:
                 chat = get_ai_chat(chat_id, model)
                 full_prompt = f"Как AI Prophet, выполни волю: {user_text}. В конце предложи следующий шаг."
-            
-            if path and os.path.exists(path):
-                with open(path, 'rb') as f: bytes_data = f.read()
-                response = chat.send_message(
-                    message=[full_prompt, genai_types.Part.from_bytes(data=bytes_data, mime_type='image/jpeg')]
-                )
-            else:
-                response = chat.send_message(message=full_prompt)
-            
-            if response.text:
-                clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
-                await status_msg.edit_text(clean_text)
-                await message.answer("Следующий шаг?", reply_markup=kb)
-                success = True
-                break
-        except Exception:
-            reset_chat(chat_id, model)
-            continue
+                
+                if path and os.path.exists(path):
+                    with open(path, 'rb') as f: bytes_data = f.read()
+                    response = chat.send_message(
+                        message=[full_prompt, genai_types.Part.from_bytes(data=bytes_data, mime_type='image/jpeg')]
+                    )
+                else:
+                    response = chat.send_message(message=full_prompt)
+                
+                if response.text:
+                    clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                    await status_msg.edit_text(clean_text)
+                    await message.answer("Следующий шаг?", reply_markup=kb)
+                    success = True
+                    break
+            except Exception:
+                reset_chat(chat_id, model)
+                continue
     
     if not success:
         # Безопасная проверка: файл мог быть удален или задача чисто текстовая
