@@ -32,9 +32,8 @@ def get_ai_chat(chat_id, model_name=None):
 def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
-    BASE_ROUTER_URL = "https://router.huggingface.co/hf-inference"
-    model_id = HF_TASKS.get(task, HF_TASKS["text"])
-    api_url = f"{BASE_ROUTER_URL}/models/{model_id}"
+    # Февраль 2026: Роутер — единственный путь
+    api_url = f"https://router.huggingface.co/hf-inference/models/{HF_TASKS[task]}"
     
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
@@ -44,9 +43,8 @@ def get_hf_response(text=None, image_path=None, task="text"):
     try:
         if task == "text":
             payload = {
-                "inputs": f"{SYSTEM_PROMPT}\n\nUser: {text}\nProphet:",
-                "parameters": {"max_new_tokens": 500, "temperature": 0.7},
-                "options": {"wait_for_model": True}
+                "inputs": f"<s>[INST] {SYSTEM_PROMPT}\n\nUser: {text} [/INST] Prophet:",
+                "parameters": {"max_new_tokens": 500, "temperature": 0.7}
             }
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
         elif task == "vision" and image_path:
@@ -59,37 +57,23 @@ def get_hf_response(text=None, image_path=None, task="text"):
         else:
             return None
 
-        if response.status_code == 404:
-            # ПОПЫТКА №2: Прямой эндпоинт HF (черный ход)
-            direct_url = f"https://huggingface.co/api/models/{model_id}/inference"
-            logger.info(f"🔄 Router 404, attempting direct API for {model_id}...")
-            if task == "text":
-                response = requests.post(direct_url, headers=headers, json=payload, timeout=60)
-            else:
-                headers_media = headers.copy()
-                if task == "audio": headers_media["Content-Type"] = "audio/ogg"
-                response = requests.post(direct_url, headers=headers_media, data=data, timeout=60)
-
         if response.status_code != 200:
-            logger.error(f"❌ HF Final Error {response.status_code} for {model_id}: {response.text[:100]}")
+            logger.error(f"❌ HF Error {response.status_code}: {response.text[:100]}")
             return None
 
         result = response.json()
         
-        # Обработка разных форматов ответа HF
-        if isinstance(result, dict):
-            return result.get('text', result.get('generated_text', str(result)))
-        
         if isinstance(result, list) and len(result) > 0:
             item = result[0]
             if isinstance(item, dict):
-                # Для моделей типа Mistral/Zephyr ответ часто в generated_text
                 text_res = item.get('generated_text', item.get('text', ''))
-                # Очистка от промпта, если модель его повторила
                 if "Prophet:" in text_res:
                     text_res = text_res.split("Prophet:")[-1].strip()
                 return text_res
         
+        if isinstance(result, dict):
+            return result.get('text', result.get('generated_text', str(result)))
+            
         return str(result)
 
     except Exception as e:
