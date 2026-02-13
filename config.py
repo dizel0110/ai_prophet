@@ -23,7 +23,7 @@ FALLBACK_MODELS = [
 
 # Модели для HF Router (OpenAI Compatible)
 HF_TASKS = {
-    "text": "mistralai/Mistral-7B-Instruct-v0.3",    # Самая стабильная open-source модель
+    "text": "Qwen/Qwen2.5-7B-Instruct",            # Самый надежный выбор для Роутера 2026
     "vision": "Qwen/Qwen2-VL-7B-Instruct", 
     "audio": "openai/whisper-large-v3", 
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 

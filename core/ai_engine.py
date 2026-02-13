@@ -33,7 +33,8 @@ def get_ai_chat(chat_id, model_name=None):
 def get_hf_response(text=None, image_path=None, task="text"):
     if not HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
     
-    BASE_ROUTER_URL = "https://router.huggingface.co/hf-inference"
+    # 2026: Прямой путь через Роутер без лишних префиксов
+    BASE_ROUTER_URL = "https://router.huggingface.co"
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
     
     headers = {
@@ -43,7 +44,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
     
     try:
         if task == "text":
-            # Используем OpenAI-совместимый эндпоинт (самый стабильный для роутера 2026)
+            # Используем самый надежный OpenAI-совместимый путь
             api_url = f"{BASE_ROUTER_URL}/v1/chat/completions"
             payload = {
                 "model": model_id,
@@ -58,10 +59,15 @@ def get_hf_response(text=None, image_path=None, task="text"):
             if response.status_code == 200:
                 result = response.json()
                 return result['choices'][0]['message']['content']
+            else:
+                # Попытка №2: Если v1 не сработал, пробуем старый /models/ путь, но через роутер
+                fallback_url = f"{BASE_ROUTER_URL}/hf-inference/models/{model_id}"
+                payload_alt = {"inputs": text, "parameters": {"max_new_tokens": 500}}
+                response = requests.post(fallback_url, headers=headers, json=payload_alt, timeout=60)
         
         else:
-            # Для медиа (аудио/фото) используем прямой путь к модели через роутер
-            api_url = f"{BASE_ROUTER_URL}/models/{model_id}"
+            # Для медиа (аудио/фото)
+            api_url = f"{BASE_ROUTER_URL}/hf-inference/models/{model_id}"
             if task == "vision" and image_path:
                 with open(image_path, "rb") as f: data = f.read()
                 response = requests.post(api_url, headers=headers, data=data, timeout=60)
@@ -73,7 +79,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
                 return None
 
         if response.status_code != 200:
-            logger.error(f"❌ HF Router Error {response.status_code} for {model_id} at {api_url}: {response.text[:150]}")
+            logger.error(f"❌ HF Router Error {response.status_code} for {model_id}: {response.text[:150]}")
             return None
 
         result = response.json()
@@ -82,11 +88,12 @@ def get_hf_response(text=None, image_path=None, task="text"):
         if isinstance(result, list) and len(result) > 0:
             item = result[0]
             if isinstance(item, dict):
-                return item.get('text', item.get('generated_text', str(result)))
+                resp = item.get('generated_text', item.get('text', ''))
+                return resp.split("Prophet:")[-1].strip() if "Prophet:" in resp else resp
         return str(result)
 
     except Exception as e:
-        logger.error(f"❌ HF Exception: {e}")
+        logger.error(f"❌ HF Engine Exception: {e}")
         return None
 
 def reset_chat(chat_id, model_name=None):
