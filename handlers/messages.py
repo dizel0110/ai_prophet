@@ -84,10 +84,10 @@ def parse_steps_and_create_kb(text, chat_id):
     new_text_lines = []
     
     for line in lines:
-        if line.strip().startswith("ШАГ:"):
-            step_text = line.replace("ШАГ:", "").strip().strip("[]")
+        stripped_line = line.strip()
+        if stripped_line and (stripped_line.upper().startswith("ШАГ:") or stripped_line.upper().startswith("STEP:")):
+            step_text = stripped_line.split(":", 1)[1].strip().strip("[]")
             # Telegram limit is 64 bytes for callback_data
-            # "vision_task:custom:" is 19 bytes. Остается 45.
             callback_val = step_text[:40]
             btn_text = step_text[:30] + "..." if len(step_text) > 30 else step_text
             kb.append([InlineKeyboardButton(text=f"🔮 {btn_text}", callback_data=f"vision_task:custom:{callback_val}")])
@@ -145,12 +145,13 @@ async def handle_photo(message: types.Message, bot: Bot):
                 
                 if response.text:
                     clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                    icon = "🤖" if engine == "auto" else "💎"
                     try:
-                        await status_msg.edit_text(f"🧿 *Мой взор запечатлел:* \n\n{clean_text}", parse_mode="Markdown")
+                        await status_msg.edit_text(f"{icon} *Мой взор запечатлел:* \n\n{clean_text}", parse_mode="Markdown")
                     except Exception:
-                        await status_msg.edit_text(f"🧿 Мой взор запечатлел:\n\n{clean_text}")
+                        await status_msg.edit_text(f"{icon} Мой взор запечатлел:\n\n{clean_text}")
                     
-                    await message.answer("Что мне совершить?", reply_markup=kb)
+                    await message.answer("Следующий шаг?", reply_markup=kb)
                     return
             except Exception as e:
                 logger.warning(f"Vision failure on {model_name}: {e}")
@@ -162,16 +163,15 @@ async def handle_photo(message: types.Message, bot: Bot):
     # HF FALLBACK: Ритуал интерпретации туманных образов
     hf_caption = get_hf_response(image_path=file_path, task="vision")
     if hf_caption:
-        await status_msg.edit_text(f"🧿 *Пророчество через HF:* \n\n{hf_caption}", reply_markup=get_main_menu())
-        return
         # Просим Mistral интерпретировать сухой технический результат от Vision-модели
         interpretation_prompt = f"Как AI Prophet, протрактуй это видение: {hf_caption}. Будь мистичен и краток. В конце предложи следующий шаг."
         interpretation = get_hf_response(text=interpretation_prompt, task="text")
         
-        final_text = f"🧿 *Мой взор затуманен, но я вижу:* \n\n_{hf_caption}_\n\n{interpretation or 'Эфир слишком плотен для точных слов...'}"
-        clean_text, kb = parse_steps_and_create_kb(final_text, chat_id)
+        raw_text = interpretation or f"Вижу это: {hf_caption}. Эфир плотен для деталей."
+        clean_text, kb = parse_steps_and_create_kb(raw_text, chat_id)
         
-        await status_msg.edit_text(clean_text)
+        final_text = f"🧿 *Прозрение через HF:* \n\n_{hf_caption}_\n\n{clean_text}"
+        await status_msg.edit_text(final_text)
         await message.answer("Следующий шаг?", reply_markup=kb)
     else:
         await status_msg.edit_text("📸 *Образ получен.* Каналы зашумлены, но я готов обсудить фото текстом.")
@@ -201,7 +201,8 @@ async def handle_vision_action(message, bot, chat_id, user_text):
                 
                 if response.text:
                     clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
-                    await status_msg.edit_text(clean_text)
+                    icon = "🤖" if engine == "auto" else "💎"
+                    await status_msg.edit_text(f"{icon} {clean_text}")
                     await message.answer("Следующий шаг?", reply_markup=kb)
                     success = True
                     break
@@ -215,7 +216,8 @@ async def handle_vision_action(message, bot, chat_id, user_text):
         hf_res = get_hf_response(text=user_text, image_path=path if can_do_vision else None, task="vision" if can_do_vision else "text")
         if hf_res:
             if status_msg: await status_msg.edit_text("🧿 *Прозрение свершилось через резервный канал:*")
-            await message.answer(hf_res, reply_markup=get_main_menu())
+            clean_text, kb = parse_steps_and_create_kb(hf_res, chat_id)
+            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
             success = True
 
     if success and path:
@@ -290,7 +292,8 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         if hf_res:
             logger.info(f"✅ HF Response received for user {chat_id}")
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
-            await message.answer(hf_res, reply_markup=get_main_menu())
+            clean_text, kb = parse_steps_and_create_kb(hf_res, chat_id)
+            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
             return
         else:
             logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
@@ -332,11 +335,12 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
             response = chat.send_message(message=input_text)
             if response.text:
                 clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                icon = "🤖" if engine == "auto" else "💎"
                 if status_msg:
-                    await status_msg.edit_text(clean_text)
+                    await status_msg.edit_text(f"{icon} {clean_text}")
                     await message.answer("Следующий шаг?", reply_markup=kb)
                 else:
-                    await message.answer(clean_text, reply_markup=kb)
+                    await message.answer(f"{icon} {clean_text}", reply_markup=kb)
                 return
         except Exception as e:
             if "429" in str(e): 
@@ -349,13 +353,12 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
     
     hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
+        clean_text, kb = parse_steps_and_create_kb(hf_res, chat_id)
         if status_msg: 
-            # Нельзя прикреплять ReplyKeyboardMarkup к edit_text. 
-            # Просто редактируем статус и присылаем ответ новым сообщением.
             await status_msg.edit_text("🧿 *Поток данных из облака HF сформирован:*")
-            await message.answer(hf_res, reply_markup=get_main_menu())
+            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
         else: 
-            await message.answer(hf_res, reply_markup=get_main_menu())
+            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
     else:
         final_text = "😔 Сегодня звезды не отвечают мне... Попробуй позже."
         if status_msg: 
