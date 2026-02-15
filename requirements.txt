@@ -4,7 +4,9 @@ python-dotenv
 fastapi
 uvicorn
 dnspython
-duckduckgo-search
+ddgs
 requests
 mcp
 huggingface-hub
+yt-dlp
+ffmpeg-python
