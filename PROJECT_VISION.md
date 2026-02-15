@@ -5,7 +5,11 @@
 
 ### Что уже реализовано:
 - [x] **Core Logic**: Модульная архитектура на Aiogram 3.
-- [x] **Visual Cortex**: Полноценная работа с фото (Gemini 2.5 + Fallback).
+- [x] **Visual- **🔊 Voice/Audio**: Транскрипция голосовых сообщений (Whisper/Gemini) + синтез речи (в планах).
+- **🎵 Media Search & Downloader**:
+  - Умный поиск музыки и видео (через DuckDuckGo Videos).
+  - Скачивание аудио (m4a/mp3) напрямую из YouTube.
+  - Поддержка запросов `[MEDIA: ...]`.
 - [x] **Auditory Sense**: Распознавание голоса через Whisper (HF).
 - [x] **Resilience**: Система автоматического переключения моделей (Google <-> HF).
 - [x] **Auto-Cleanup**: Интеллектуальное управление временными файлами.

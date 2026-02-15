@@ -22,25 +22,189 @@ def web_search(query: str, max_results: int = 5):
         logger.error(f"❌ Ошибка поиска: {e}")
         return f"К сожалению, я не смог подключиться к информационному полю: {e}"
 
-def create_music_playlist(genre: str, mood: str, count: int = 5):
-    """Формирует музыкальный плейлист (заглушка для MCP)"""
-    logger.info(f"🎵 Формирую плейлист: {genre}, настроение: {mood}, треков: {count}")
+def search_youtube_videos(query: str, max_results: int = 5):
+    """Ищет видео на YouTube через yt-dlp"""
+    try:
+        import yt_dlp
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': False, # Включаем логи yt-dlp для дебага
+            'ignoreerrors': True, # Не падать при ошибках видео
+            'default_search': f'ytsearch{max_results}',
+            'extract_flat': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            res = ydl.extract_info(query, download=False)
+            if 'entries' in res:
+                return res['entries']
+    except ImportError:
+        logger.error("❌ yt-dlp не установлен. Установите: pip install yt-dlp")
+        return []
+    except Exception as e:
+        logger.error(f"❌ YouTube Search Error: {e}")
     
-    # Генерируем фейковые треки для демонстрации
+    # Fallback: DuckDuckGo Video Search
+    try:
+        logger.info(f"🦆 Пробуем DDG Video Search для: {query}")
+        with DDGS() as ddgs:
+            # Ищем видео
+            results = list(ddgs.videos(query, max_results=max_results))
+            if results:
+                # Приводим к формату yt-dlp (примерно)
+                normalized = []
+                for r in results:
+                    normalized.append({
+                        'title': r.get('title'),
+                        'url': r.get('content'), # DDG возвращает ссылку в 'content' или 'click_url'
+                        'id': 'unknown'
+                    })
+                return normalized
+    except Exception as e:
+        logger.error(f"❌ DDG Video Search Error: {e}")
+
+    return []
+
+def search_media_content(query: str, media_type: str = 'audio', count: int = 5):
+    """
+    Универсальный поиск медиа (аудио/видео) на YouTube/DDG.
+    query: Что искать (жанр, исполнитель, название)
+    media_type: 'audio' (музыка) или 'video' (клипы/видео)
+    count: количество результатов
+    """
+    import random
+    
+    # Нормализуем тип
+    media_type = media_type.lower()
+    if media_type not in ['audio', 'video']: media_type = 'audio'
+    
+    logger.info(f"📹 Поиск медиа: query='{query}', type={media_type}, count={count}")
+    
+    all_videos = []
+    queries = []
+    
+    # 1. Формируем умные запросы
+    if media_type == 'audio':
+        # Для музыки ищем треки с текстом или аудио (чтобы не клипы)
+        queries = [
+            f"{query} {media_type}",
+            f"{query} lyrics",
+            f"Best {query} songs",
+        ]
+    else:
+        # Для видео ищем клипы или официальные видео
+        queries = [
+            f"{query} official video",
+            f"{query} music video",
+            f"{query} hd",
+        ]
+    
+    # Если просили 1 трек, берем самый точный запрос
+    if count == 1:
+        queries = [queries[0]] 
+    else:
+        # Иначе миксуем для разнообразия
+        queries = random.sample(queries, min(2, len(queries)))
+
+    # 2. Ищем через DDG Video Search (он работает надежнее)
+    for q in queries:
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.videos(q, max_results=count))
+                if results:
+                    all_videos.extend(results)
+        except Exception as e:
+            logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
+            
+    # 3. Дедупликация и рандом
+    unique_videos = {} 
+    for v in all_videos:
+        # DDG возвращает 'content' как ссылку
+        url = v.get('content') or v.get('click_url')
+        if url and 'youtube.com' in url: # Фильтруем только YouTube
+            unique_videos[url] = v
+            
+    final_playlist = list(unique_videos.values())
+    
+    # Если это плейлист (>1), перемешиваем
+    if count > 1:
+        random.shuffle(final_playlist)
+    
+    # Обрезаем
+    final_playlist = final_playlist[:count]
+    
+    # 4. Формируем ответ
     tracks = []
-    for i in range(1, count + 1):
-        tracks.append(f"{i}. {genre} Track #{i} - {mood} Vibes")
-    
+    if final_playlist:
+        for i, video in enumerate(final_playlist, 1):
+            title = video.get('title', 'Unknown Track')
+            url = video.get('content') or video.get('click_url')
+            
+            # Иконка зависит от типа
+            icon = "🎵" if media_type == 'audio' else "🎬"
+            tracks.append(f"{i}. {icon} [{title}]({url})")
+            
+        status_line = f"✨ Найдено {len(tracks)} рез. по запросу: {query}"
+    else:
+        # Fallback (DDG ссылки на поиск)
+        status_line = "⚠️ Прямой поток недоступен, вот поисковая выдача:"
+        search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
+        tracks.append(f"1. 🔍 [Найти '{query}' на YouTube]({search_url})")
+
     tracks_list = "\n".join(tracks)
     
+    header = f"🎧 *Аудио-поток: {query}*" if media_type == 'audio' else f"📺 *Видео-поток: {query}*"
+    
     result = (
-        f"🎵 *Плейлист '{genre} — {mood}'*\n\n"
+        f"{header}\n\n"
         f"{tracks_list}\n\n"
-        f"📊 Всего треков: {count}\n"
-        f"🎧 Готов к воспроизведению!"
+        f"{status_line}"
     )
     
     return result
+
+def download_audio(url: str):
+    """
+    Скачивает аудио из YouTube видео (m4a/mp3) во временную папку.
+    Возвращает (путь_к_файлу, название_трека).
+    """
+    import os
+    from config import TEMP_DIR
+    import yt_dlp
+    
+    if not os.path.exists(TEMP_DIR):
+        os.makedirs(TEMP_DIR)
+        
+    # Генерируем уникальное имя
+    import uuid
+    sys_filename = f"audio_{uuid.uuid4().hex[:8]}"
+    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+    
+    ydl_opts = {
+        'format': 'bestaudio[ext=m4a]/bestaudio/best', # m4a лучше всего для Telegram
+        'outtmpl': output_template,
+        'noplaylist': True,
+        'quiet': True,
+        'max_filesize': 50 * 1024 * 1024, # 50 MB лимит
+    }
+    
+    try:
+        logger.info(f"⬇️ Скачиваю аудио: {url}")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            # Получаем реальное имя файла
+            filename = ydl.prepare_filename(info)
+            
+            # Получаем название трека
+            title = info.get('title', 'Audio Track')
+            # Чистим от лишнего мусора
+            clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').replace('(Lyrics)', '').strip()
+            
+            return filename, clean_title
+    except Exception as e:
+        logger.error(f"❌ Audio Download Error: {e}")
+        return None, None
 
 def get_prophet_tools_spec():
     """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""
@@ -57,20 +221,21 @@ def get_prophet_tools_spec():
             }
         },
         {
-            "name": "create_music_playlist",
-            "description": "Создает музыкальный плейлист на основе жанра и настроения.",
+            "name": "search_media_content",
+            "description": "Поиск музыки или видео на YouTube/Интернет.",
             "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                    "genre": {"type": "STRING", "description": "Жанр музыки (например, Cyberpunk, Ambient)"},
-                    "mood": {"type": "STRING", "description": "Настроение (например, Концентрация, Энергия)"}
+                    "query": {"type": "STRING", "description": "Что искать (жанр, исполнитель, название трека)"},
+                    "media_type": {"type": "STRING", "description": "'audio' или 'video'"},
+                    "count": {"type": "INTEGER", "description": "Количество результатов (по умолчанию 5)"}
                 },
-                "required": ["genre", "mood"]
+                "required": ["query", "media_type"]
             }
         }
     ]
 
 AVAILABLE_FUNCTIONS = {
     "web_search": web_search,
-    "create_music_playlist": create_music_playlist
+    "search_media_content": search_media_content
 }

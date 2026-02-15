@@ -10,7 +10,7 @@ from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini
-from core.tools import web_search, create_music_playlist, AVAILABLE_FUNCTIONS
+from core.tools import web_search, search_media_content, AVAILABLE_FUNCTIONS
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
 
@@ -104,27 +104,44 @@ def parse_steps_and_create_kb(text, chat_id):
 def parse_and_execute_tools(text):
     """
     Парсит текст на наличие маркеров инструментов и выполняет их.
-    Возвращает: (очищенный_текст, результат_выполнения_или_None)
+    Поддерживает: [MEDIA: query, type, count] и [PLAYLIST: genre, mood, count]
     """
     import re
     
-    # Ищем маркер [PLAYLIST: жанр, настроение] или [PLAYLIST: жанр, настроение, количество]
-    playlist_pattern = r'\[PLAYLIST:\s*([^,]+),\s*([^,\]]+)(?:,\s*(\d+))?\]'
-    match = re.search(playlist_pattern, text, re.IGNORECASE)
+    # 1. Сначала ищем новый маркер [MEDIA: ...]
+    media_pattern = r'\[MEDIA:\s*([^,]+),\s*([^,]+)(?:,\s*(\d+))?\]'
+    match_media = re.search(media_pattern, text, re.IGNORECASE)
     
-    if match:
-        genre = match.group(1).strip()
-        mood = match.group(2).strip()
-        count = int(match.group(3)) if match.group(3) else 5  # По умолчанию 5 треков
+    if match_media:
+        query = match_media.group(1).strip()
+        m_type = match_media.group(2).strip().lower() # 'audio' или 'video'
+        count = int(match_media.group(3)) if match_media.group(3) else 5
         
-        logger.info(f"🎵 Обнаружен маркер плейлиста: жанр={genre}, настроение={mood}, треков={count}")
+        logger.info(f"📹 Обнаружен маркер MEDIA: query={query}, type={m_type}, count={count}")
         
-        # Вызываем функцию создания плейлиста
-        result = create_music_playlist(genre=genre, mood=mood, count=count)
+        # Вызываем универсальный поиск медиа
+        result = search_media_content(query=query, media_type=m_type, count=count)
         
-        # Убираем маркер из текста
+        # Убираем маркер
+        clean_text = re.sub(media_pattern, '', text, flags=re.IGNORECASE).strip()
+        return clean_text, result
+
+    # 2. Ищем старый маркер [PLAYLIST: ...] для совместимости
+    playlist_pattern = r'\[PLAYLIST:\s*([^,]+),\s*([^,\]]+)(?:,\s*(\d+))?\]'
+    match_playlist = re.search(playlist_pattern, text, re.IGNORECASE)
+    
+    if match_playlist:
+        genre = match_playlist.group(1).strip()
+        mood = match_playlist.group(2).strip()
+        count = int(match_playlist.group(3)) if match_playlist.group(3) else 5
+        
+        logger.info(f"🎵 Обнаружен маркер PLAYLIST (legacy): genre={genre}, mood={mood}")
+        
+        # Преобразуем в MEDIA запрос
+        query = f"Best {genre} songs {mood} vibe"
+        result = search_media_content(query=query, media_type='audio', count=count)
+        
         clean_text = re.sub(playlist_pattern, '', text, flags=re.IGNORECASE).strip()
-        
         return clean_text, result
     
     return text, None
@@ -321,19 +338,35 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         if hf_res:
             logger.info(f"✅ HF Response received for user {chat_id}")
             
-            # Парсим и выполняем инструменты
+            # Parse and execute tools
             clean_text, tool_result = parse_and_execute_tools(hf_res)
             
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
+            await message.answer(f"🧿 {clean_text}")
             
-            # Отправляем текст только если он не пустой
-            if clean_text.strip():
-                await message.answer(f"🧿 {clean_text}")
-            
-            # Если был вызван инструмент, отправляем результат
+            # Send tool result if any
             if tool_result:
-                await message.answer(tool_result, parse_mode="Markdown")
-            
+                # Пытаемся найти ВСЕ ссылки YouTube для кнопок
+                import re
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                
+                # Ищем ссылки (youtu.be или youtube.com)
+                links = re.findall(r'https://(?:www\.)?youtu(?:be\.com/watch\?v=|\.be/)([\w-]+)', tool_result)
+                kb = None
+                
+                if links:
+                    # Создаем ряд кнопок: [⬇️ 1] [⬇️ 2] ...
+                    buttons_row = []
+                    for i, video_id in enumerate(links, 1):
+                        # Лимит 5 кнопок в ряд, чтобы не засорять
+                        if i > 5: break
+                        buttons_row.append(
+                            InlineKeyboardButton(text=f"⬇️ {i}", callback_data=f"dl_audio:{video_id}")
+                        )
+                    
+                    kb = InlineKeyboardMarkup(inline_keyboard=[buttons_row])
+                
+                await message.answer(f"🎵 {tool_result}", reply_markup=kb, disable_web_page_preview=True)
             return
         else:
             logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
@@ -437,6 +470,42 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
             await message.answer("Вернись, когда эфир очистится.", reply_markup=get_main_menu())
         else: 
             await message.answer(final_text, reply_markup=get_main_menu())
+
+@router.callback_query(F.data.startswith("dl_audio:"))
+async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
+    import os
+    from aiogram.types import FSInputFile
+    from core.tools import download_audio
+
+    video_id = callback.data.split(":")[1]
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    await callback.answer("⏳ Начинаю магию конвертации...")
+    status_msg = await bot.send_message(callback.message.chat.id, f"⬇️ Скачиваю и конвертирую: {url}")
+    
+    file_path, title = download_audio(url)
+    
+    if file_path and os.path.exists(file_path):
+        try:
+            await status_msg.edit_text(f"📤 Отправляю: {title}...")
+            audio_file = FSInputFile(file_path)
+            # Отправляем с реальным названием
+            await bot.send_audio(
+                callback.message.chat.id, 
+                audio_file, 
+                title=title, 
+                performer="AI Prophet Media",
+                caption=f"🎧 *{title}*\n🔗 [Источник]({url})"
+            )
+            await status_msg.delete()
+        except Exception as e:
+            await status_msg.edit_text(f"❌ Ошибка отправки: {e}")
+        finally:
+            # Чистим файл
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    else:
+        await status_msg.edit_text("❌ Не удалось скачать аудио. Возможно, видео слишком длинное или недоступно.")
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):
