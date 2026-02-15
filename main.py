@@ -16,7 +16,10 @@ from core.network import apply_dns_patch
 from handlers import messages, vip
 
 # Настройка логов
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+logging.getLogger("google.genai").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # FastAPI для Hugging Face
