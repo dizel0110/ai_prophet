@@ -6,3 +6,5 @@ uvicorn
 dnspython
 duckduckgo-search
 requests
+mcp
+huggingface-hub

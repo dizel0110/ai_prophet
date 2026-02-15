@@ -10,7 +10,7 @@ from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini
-from core.tools import web_search
+from core.tools import web_search, create_music_playlist, AVAILABLE_FUNCTIONS
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
 
@@ -87,8 +87,9 @@ def parse_steps_and_create_kb(text, chat_id):
         stripped_line = line.strip()
         if stripped_line and (stripped_line.upper().startswith("ШАГ:") or stripped_line.upper().startswith("STEP:")):
             step_text = stripped_line.split(":", 1)[1].strip().strip("[]")
-            # Telegram limit is 64 bytes for callback_data
-            callback_val = step_text[:40]
+            # Telegram limit: 64 bytes. Префикс "vision_task:custom:" = 19 байт. Остается 45 байт.
+            # Кириллица в UTF-8 = 2 байта/символ, поэтому берем max 20 символов.
+            callback_val = step_text[:20]
             btn_text = step_text[:30] + "..." if len(step_text) > 30 else step_text
             kb.append([InlineKeyboardButton(text=f"🔮 {btn_text}", callback_data=f"vision_task:custom:{callback_val}")])
         else:
@@ -99,6 +100,34 @@ def parse_steps_and_create_kb(text, chat_id):
     
     remaining_text = "\n".join(new_text_lines).strip()
     return remaining_text, InlineKeyboardMarkup(inline_keyboard=kb)
+
+def parse_and_execute_tools(text):
+    """
+    Парсит текст на наличие маркеров инструментов и выполняет их.
+    Возвращает: (очищенный_текст, результат_выполнения_или_None)
+    """
+    import re
+    
+    # Ищем маркер [PLAYLIST: жанр, настроение] или [PLAYLIST: жанр, настроение, количество]
+    playlist_pattern = r'\[PLAYLIST:\s*([^,]+),\s*([^,\]]+)(?:,\s*(\d+))?\]'
+    match = re.search(playlist_pattern, text, re.IGNORECASE)
+    
+    if match:
+        genre = match.group(1).strip()
+        mood = match.group(2).strip()
+        count = int(match.group(3)) if match.group(3) else 5  # По умолчанию 5 треков
+        
+        logger.info(f"🎵 Обнаружен маркер плейлиста: жанр={genre}, настроение={mood}, треков={count}")
+        
+        # Вызываем функцию создания плейлиста
+        result = create_music_playlist(genre=genre, mood=mood, count=count)
+        
+        # Убираем маркер из текста
+        clean_text = re.sub(playlist_pattern, '', text, flags=re.IGNORECASE).strip()
+        
+        return clean_text, result
+    
+    return text, None
 
 def get_adaptive_greeting(username):
     hour = datetime.now().hour
@@ -291,9 +320,20 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         hf_res = get_hf_response(text=input_text, task="text")
         if hf_res:
             logger.info(f"✅ HF Response received for user {chat_id}")
+            
+            # Парсим и выполняем инструменты
+            clean_text, tool_result = parse_and_execute_tools(hf_res)
+            
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
-            clean_text, kb = parse_steps_and_create_kb(hf_res, chat_id)
-            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
+            
+            # Отправляем текст только если он не пустой
+            if clean_text.strip():
+                await message.answer(f"🧿 {clean_text}")
+            
+            # Если был вызван инструмент, отправляем результат
+            if tool_result:
+                await message.answer(tool_result, parse_mode="Markdown")
+            
             return
         else:
             logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
@@ -333,6 +373,29 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         try:
             chat = get_ai_chat(chat_id, model)
             response = chat.send_message(message=input_text)
+            
+            # --- ЛОГИКА ОБРАБОТКИ ИНСТРУМЕНТОВ ---
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.call:
+                        fn_name = part.call.name
+                        args = part.call.args
+                        logger.info(f"🛠 ИИ вызывает инструмент: {fn_name} с аргументами {args}")
+                        
+                        if status_msg: await status_msg.edit_text(f"⚒ *Задействую инструмент:* `{fn_name}`...")
+                        
+                        if fn_name in AVAILABLE_FUNCTIONS:
+                            result = AVAILABLE_FUNCTIONS[fn_name](**args)
+                            # Отправляем ответ инструмента обратно модели
+                            response = chat.send_message(
+                                message=genai_types.Part.from_function_response(
+                                    name=fn_name,
+                                    response={"result": result}
+                                )
+                            )
+                        else:
+                            logger.error(f"❌ Инструмент {fn_name} не найден")
+
             if response.text:
                 clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
                 icon = "🤖" if engine == "auto" else "💎"
@@ -353,12 +416,20 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
     
     hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
-        clean_text, kb = parse_steps_and_create_kb(hf_res, chat_id)
+        # Парсим и выполняем инструменты
+        clean_text, tool_result = parse_and_execute_tools(hf_res)
+        
         if status_msg: 
             await status_msg.edit_text("🧿 *Поток данных из облака HF сформирован:*")
-            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
-        else: 
-            await message.answer(f"🧿 {clean_text}", reply_markup=kb)
+            if clean_text.strip():
+                await message.answer(f"🧿 {clean_text}")
+        else:
+            if clean_text.strip():
+                await message.answer(f"🧿 {clean_text}")
+        
+        # Если был вызван инструмент, отправляем результат
+        if tool_result:
+            await message.answer(tool_result, parse_mode="Markdown")
     else:
         final_text = "😔 Сегодня звезды не отвечают мне... Попробуй позже."
         if status_msg: 

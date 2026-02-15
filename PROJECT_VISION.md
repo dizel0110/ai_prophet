@@ -18,6 +18,7 @@
 ### PHASE 3: Instrumental Power (Toolbox & MCP) 🛠️ — IN PROGRESS 🚀
 *Цель: Дать Пророку руки, чтобы он мог менять мир вокруг.*
 - [ ] **MCP Connection**: Подключение к Model Context Protocol серверам (Filesystem & Research).
+- [ ] **Music Engine**: Создание системы умных плейлистов и управление плеерами.
 - [x] **Web Search**: Оснащение Пророка способностью искать свежую информацию в сети (DuckDuckGo integration).
 - [ ] **Task Manager**: Автоматизация рутинных действий.
 
