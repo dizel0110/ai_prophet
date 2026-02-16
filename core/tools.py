@@ -202,26 +202,20 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
 
 def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, max_filesize_mb: int = None):
     """
-    Скачивает аудио из YouTube/SoundCloud видео (m4a/mp3) во временную папку.
+    Скачивает аудио из YouTube/SoundCloud (m4a/mp3) во временную папку.
     Возвращает (путь_к_файлу, название_трека, длительность).
 
-    Алгоритм (Февраль 2026):
-    1. ytmusicapi (YouTube Music — работает стабильнее на серверах)
-    2. Cobalt API (стабильно, без блокировок)
-    3. Invidious API (fallback)
-    4. yt-dlp + cookies (локально, где нет блокировок)
-    5. SoundCloud (альтернатива, не блокирует серверные IP)
+    Использует yt-dlp с эмуляцией браузера для обхода блокировок.
 
     chat_id: ID чата для загрузки пользовательских лимитов
-    max_duration_sec: максимальная длительность (по умолчанию из настроек пользователя или 1800 сек = 30 мин)
-    max_filesize_mb: максимальный размер файла (по умолчанию из настроек пользователя или 100 MB)
+    max_duration_sec: максимальная длительность (по умолчанию 1800 сек = 30 мин)
+    max_filesize_mb: максимальный размер файла (по умолчанию 100 MB)
     """
     import os
     from config import TEMP_DIR
     import yt_dlp
     import time
     import json
-    import requests
 
     # Загрузка пользовательских лимитов
     limits_file = "temp/user_limits.json"
@@ -249,217 +243,61 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     # Генерируем уникальное имя
     import uuid
     sys_filename = f"audio_{uuid.uuid4().hex[:8]}"
-
-    # Извлекаем video_id из URL
-    video_id = url.split('v=')[-1].split('&')[0].split('?')[0] if 'v=' in url else url.split('/')[-1].split('?')[0]
+    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
 
     start_time = time.time()
-    logger.info(f"⬇️ Скачиваю аудио: {url} (video_id: {video_id})")
+    logger.info(f"⬇️ Скачиваю аудио: {url}")
 
-    # === ПОПЫТКА 1: ytmusicapi (YouTube Music API) ===
+    # === yt-dlp с эмуляцией браузера (как локально) ===
+    ydl_opts = {
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'outtmpl': output_template,
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+        'max_filesize': max_filesize_mb * 1024 * 1024,
+
+        # Эмуляция браузера для обхода блокировок
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.youtube.com/',
+
+        # Обход блокировок YouTube
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web', 'web_embedded'],
+                'player_skip': ['webpage'],
+            }
+        },
+    }
+
     try:
-        logger.info("🎵 ytmusicapi: попытка...")
-        from ytmusicapi import YTMusic
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            title = info.get('title', 'Audio Track')
+            duration = info.get('duration', 0)
+            clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').strip()
 
-        ytmusic = YTMusic()
-        # Получаем информацию о треке
-        stream_url = ytmusic.get_song(video_id)
+            download_time = time.time() - start_time
+            logger.info(f"✅ Скачано: {clean_title} ({duration} сек) за {download_time:.1f} сек")
+            return filename, clean_title, duration
 
-        if stream_url and 'streamingData' in stream_url:
-            formats = stream_url.get('streamingData', {}).get('formats', [])
-            adaptive_formats = stream_url.get('streamingData', {}).get('adaptiveFormats', [])
-
-            # Ищем аудио формат
-            audio_format = None
-            for fmt in adaptive_formats:
-                if 'audio' in fmt.get('mimeType', ''):
-                    audio_format = fmt
-                    break
-
-            if not audio_format and formats:
-                for fmt in formats:
-                    if 'audio' in fmt.get('mimeType', ''):
-                        audio_format = fmt
-                        break
-
-            if audio_format and 'url' in audio_format:
-                audio_url = audio_format['url']
-                duration = audio_format.get('approxDurationMs', 0) // 1000
-                title = stream_url.get('videoDetails', {}).get('title', 'Audio Track')
-
-                # Скачиваем
-                output_path = os.path.join(TEMP_DIR, f"{sys_filename}.m4a")
-                audio_response = requests.get(audio_url, timeout=120)
-
-                if audio_response.status_code == 200:
-                    with open(output_path, 'wb') as f:
-                        f.write(audio_response.content)
-
-                    download_time = time.time() - start_time
-                    logger.info(f"✅ ytmusicapi: {title} ({duration} сек) за {download_time:.1f} сек")
-                    return output_path, title, duration
-
-        logger.warning("⚠️ ytmusicapi: нет доступных потоков")
-
-    except ImportError:
-        logger.warning("⚠️ ytmusicapi: не установлен")
     except Exception as e:
-        logger.warning(f"⚠️ ytmusicapi failed: {e}")
+        error_msg = str(e)
 
-    # === ПОПЫТКА 2: Cobalt API ===
-    try:
-        logger.info("📡 Cobalt API: запрос...")
-        cobalt_url = "https://api.cobalt.tools/api/json"
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "url": url,
-            "isAudioOnly": True,
-            "filenamePattern": "simple",
-        }
-
-        response = requests.post(cobalt_url, headers=headers, json=payload, timeout=30)
-
-        if response.status_code == 200:
-            data = response.json()
-            status = data.get("status", "")
-
-            if status == "stream" or status == "redirect":
-                download_url = data.get("url")
-                if download_url:
-                    logger.info(f"🎵 Cobalt: найден поток")
-
-                    output_path = os.path.join(TEMP_DIR, f"{sys_filename}.mp3")
-                    audio_response = requests.get(download_url, timeout=120)
-
-                    if audio_response.status_code == 200:
-                        with open(output_path, 'wb') as f:
-                            f.write(audio_response.content)
-
-                        download_time = time.time() - start_time
-                        logger.info(f"✅ Cobalt: скачано за {download_time:.1f} сек")
-                        return output_path, f"Audio_{video_id}", 0
-                    else:
-                        logger.warning(f"⚠️ Cobalt: ошибка скачивания {audio_response.status_code}")
-            elif status == "error":
-                logger.warning(f"⚠️ Cobalt error: {data.get('text', 'unknown')}")
-            else:
-                logger.warning(f"⚠️ Cobalt status: {status}")
+        # Анализ ошибки
+        if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
+            logger.error("❌ YouTube требует авторизацию (блокировка серверных IP)")
+            logger.info("💡 Решение:")
+            logger.info("   1. Локальный запуск (домашний IP работает)")
+            logger.info("   2. SoundCloud (не блокируется)")
+            logger.info("   3. Cookies файл: temp/youtube_cookies.txt")
+        elif "HTTP Error 429" in error_msg:
+            logger.warning("⚠️ YouTube заблокировал запрос (слишком много запросов)")
         else:
-            logger.warning(f"⚠️ Cobalt HTTP error: {response.status_code}")
+            logger.error(f"❌ Ошибка: {e}")
 
-    except Exception as e:
-        logger.warning(f"⚠️ Cobalt API failed: {e}")
-
-    # === ПОПЫТКА 3: Invidious API ===
-    invidious_instances = [
-        "https://inv.tux.pizza",
-        "https://invidious.io.lol",
-        "https://yewtu.be",
-    ]
-
-    for instance in invidious_instances:
-        try:
-            logger.info(f"📡 Invidious: {instance}")
-            api_url = f"{instance}/api/v1/videos/{video_id}"
-
-            response = requests.get(api_url, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                title = data.get('title', 'Audio Track')
-                duration = data.get('lengthSeconds', 0)
-
-                audio_streams = data.get('adaptiveFormats', [])
-                audio_stream = None
-                for fmt in audio_streams:
-                    if 'audio' in fmt.get('type', ''):
-                        audio_stream = fmt
-                        break
-
-                if audio_stream:
-                    audio_url = audio_stream.get('url')
-                    output_path = os.path.join(TEMP_DIR, f"{sys_filename}.m4a")
-                    audio_response = requests.get(audio_url, timeout=60)
-
-                    if audio_response.status_code == 200:
-                        with open(output_path, 'wb') as f:
-                            f.write(audio_response.content)
-
-                        download_time = time.time() - start_time
-                        logger.info(f"✅ Invidious: {title} ({duration} сек) за {download_time:.1f} сек")
-                        return output_path, title, duration
-
-        except Exception as inst_error:
-            logger.warning(f"⚠️ Invidious failed: {inst_error}")
-            continue
-
-    # === ПОПЫТКА 4: yt-dlp с cookies (если есть файл) ===
-    cookies_file = os.path.join(TEMP_DIR, "youtube_cookies.txt")
-    if os.path.exists(cookies_file):
-        logger.info("🍪 yt-dlp: используем cookies файл...")
-
-        output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
-        ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': output_template,
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-            'max_filesize': max_filesize_mb * 1024 * 1024,
-            'cookiefile': cookies_file,  # Cookies файл
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                title = info.get('title', 'Audio Track')
-                duration = info.get('duration', 0)
-                clean_title = title.replace('(Official Video)', '').strip()
-
-                download_time = time.time() - start_time
-                logger.info(f"✅ yt-dlp+cookies: {clean_title} ({duration} сек) за {download_time:.1f} сек")
-                return filename, clean_title, duration
-        except Exception as e:
-            logger.warning(f"⚠️ yt-dlp+cookies failed: {e}")
-
-    # === ПОПЫТКА 5: SoundCloud (альтернатива, не блокирует) ===
-    if 'soundcloud.com' in url:
-        logger.info("🎵 SoundCloud: попытка...")
-
-        output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_template,
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                title = info.get('title', 'Audio Track')
-                duration = info.get('duration', 0)
-                clean_title = title.strip()
-
-                download_time = time.time() - start_time
-                logger.info(f"✅ SoundCloud: {clean_title} ({duration} сек) за {download_time:.1f} сек")
-                return filename, clean_title, duration
-        except Exception as e:
-            logger.warning(f"⚠️ SoundCloud failed: {e}")
-
-    # === ВСЕ МЕТОДЫ НЕ СРАБОТАЛИ ===
-    logger.error("❌ Все методы не сработали")
-    logger.info("💡 Попробуй:")
-    logger.info("   1. SoundCloud (не блокируется)")
-    logger.info("   2. Локальный запуск (домашний IP)")
-    logger.info("   3. Cookies файл (инструкция в README)")
-
-    return None, None, None
+        return None, None, None
 
 def get_prophet_tools_spec():
     """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""
