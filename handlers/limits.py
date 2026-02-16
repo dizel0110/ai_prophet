@@ -8,9 +8,8 @@ import json
 import logging
 from aiogram import Router, types, F
 from aiogram.types import (
-    ReplyKeyboardMarkup, KeyboardButton, 
+    ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    Modal, TextInput
 )
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
