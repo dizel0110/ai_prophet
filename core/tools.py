@@ -202,14 +202,15 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
 
 def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, max_filesize_mb: int = None):
     """
-    Скачивает аудио из YouTube видео (m4a/mp3) во временную папку.
+    Скачивает аудио из YouTube/SoundCloud видео (m4a/mp3) во временную папку.
     Возвращает (путь_к_файлу, название_трека, длительность).
 
     Алгоритм (Февраль 2026):
     1. ytmusicapi (YouTube Music — работает стабильнее на серверах)
     2. Cobalt API (стабильно, без блокировок)
     3. Invidious API (fallback)
-    4. yt-dlp (локально, где нет блокировок)
+    4. yt-dlp + cookies (локально, где нет блокировок)
+    5. SoundCloud (альтернатива, не блокирует серверные IP)
 
     chat_id: ID чата для загрузки пользовательских лимитов
     max_duration_sec: максимальная длительность (по умолчанию из настроек пользователя или 1800 сек = 30 мин)
@@ -394,48 +395,71 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
             logger.warning(f"⚠️ Invidious failed: {inst_error}")
             continue
 
-    # === ПОПЫТКА 4: yt-dlp с эмуляцией браузера ===
-    logger.warning("⚠️ Online сервисы не сработали, пробуем yt-dlp с эмуляцией...")
+    # === ПОПЫТКА 4: yt-dlp с cookies (если есть файл) ===
+    cookies_file = os.path.join(TEMP_DIR, "youtube_cookies.txt")
+    if os.path.exists(cookies_file):
+        logger.info("🍪 yt-dlp: используем cookies файл...")
 
-    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+        output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'outtmpl': output_template,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'max_filesize': max_filesize_mb * 1024 * 1024,
+            'cookiefile': cookies_file,  # Cookies файл
+        }
 
-    # Заголовки реального браузера для обхода блокировок
-    ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
-        'outtmpl': output_template,
-        'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-        'max_filesize': max_filesize_mb * 1024 * 1024,
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                title = info.get('title', 'Audio Track')
+                duration = info.get('duration', 0)
+                clean_title = title.replace('(Official Video)', '').strip()
 
-        # Эмуляция браузера
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'referer': 'https://www.youtube.com/',
+                download_time = time.time() - start_time
+                logger.info(f"✅ yt-dlp+cookies: {clean_title} ({duration} сек) за {download_time:.1f} сек")
+                return filename, clean_title, duration
+        except Exception as e:
+            logger.warning(f"⚠️ yt-dlp+cookies failed: {e}")
 
-        # Обход блокировок
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web', 'web_embedded'],
-                'player_skip': ['webpage'],
-            }
-        },
-    }
+    # === ПОПЫТКА 5: SoundCloud (альтернатива, не блокирует) ===
+    if 'soundcloud.com' in url:
+        logger.info("🎵 SoundCloud: попытка...")
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            title = info.get('title', 'Audio Track')
-            duration = info.get('duration', 0)
-            clean_title = title.replace('(Official Video)', '').strip()
+        output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_template,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+        }
 
-            download_time = time.time() - start_time
-            logger.info(f"✅ yt-dlp: {clean_title} ({duration} сек) за {download_time:.1f} сек")
-            return filename, clean_title, duration
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                title = info.get('title', 'Audio Track')
+                duration = info.get('duration', 0)
+                clean_title = title.strip()
 
-    except Exception as e:
-        logger.error(f"❌ Все методы не сработали: {e}")
-        return None, None, None
+                download_time = time.time() - start_time
+                logger.info(f"✅ SoundCloud: {clean_title} ({duration} сек) за {download_time:.1f} сек")
+                return filename, clean_title, duration
+        except Exception as e:
+            logger.warning(f"⚠️ SoundCloud failed: {e}")
+
+    # === ВСЕ МЕТОДЫ НЕ СРАБОТАЛИ ===
+    logger.error("❌ Все методы не сработали")
+    logger.info("💡 Попробуй:")
+    logger.info("   1. SoundCloud (не блокируется)")
+    logger.info("   2. Локальный запуск (домашний IP)")
+    logger.info("   3. Cookies файл (инструкция в README)")
+
+    return None, None, None
 
 def get_prophet_tools_spec():
     """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""
