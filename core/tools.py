@@ -67,19 +67,53 @@ def search_youtube_videos(query: str, max_results: int = 5):
 
     return []
 
-def search_media_content(query: str, media_type: str = 'audio', count: int = 5):
+def search_media_content(query: str, media_type: str = 'audio', count: int = 5, chat_id: str = None):
     """
     Универсальный поиск медиа (аудио/видео) на YouTube/DDG.
+
     query: Что искать (жанр, исполнитель, название)
     media_type: 'audio' (музыка) или 'video' (клипы/видео)
-    count: количество результатов
+    count: количество результатов (по умолчанию 5)
+    chat_id: ID чата для загрузки пользовательских лимитов
     """
     import random
-    
+    import json
+
+    # Загрузка лимитов пользователя
+    limits_file = "temp/user_limits.json"
+    if chat_id and os.path.exists(limits_file):
+        try:
+            with open(limits_file, 'r', encoding='utf-8') as f:
+                all_limits = json.load(f)
+                user_limits = all_limits.get(str(chat_id), {})
+
+                # Определяем количество результатов на основе лимитов
+                duration = user_limits.get("duration", 1800)
+                size = user_limits.get("size", 50)
+
+                if duration <= 300 and size <= 10:
+                    # Быстрый режим — можно больше результатов
+                    auto_count = min(count, 10)
+                    speed_label = "⚡ быстро"
+                elif duration <= 1800 and size <= 50:
+                    # Баланс
+                    auto_count = min(count, 5)
+                    speed_label = "⚖️ нормально"
+                else:
+                    # Максимум — меньше результатов (долгая загрузка)
+                    auto_count = min(count, 3)
+                    speed_label = "🐢 долго"
+
+                logger.info(f"🎛 Лимиты: {duration} сек, {size} MB → {auto_count} рез. ({speed_label})")
+                count = auto_count
+
+        except Exception as e:
+            logger.warning(f"Failed to load user limits: {e}")
+
     # Нормализуем тип
     media_type = media_type.lower()
     if media_type not in ['audio', 'video']: media_type = 'audio'
-    
+
     logger.info(f"📹 Поиск медиа: query='{query}', type={media_type}, count={count}")
     
     all_videos = []
@@ -170,6 +204,11 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     Скачивает аудио из YouTube видео (m4a/mp3) во временную папку.
     Возвращает (путь_к_файлу, название_трека).
 
+    Алгоритм (Февраль 2026):
+    1. Cobalt API (стабильно, без блокировок)
+    2. Invidious API (fallback)
+    3. yt-dlp (локально, где нет блокировок)
+
     chat_id: ID чата для загрузки пользовательских лимитов
     max_duration_sec: максимальная длительность (по умолчанию из настроек пользователя или 1800 сек = 30 мин)
     max_filesize_mb: максимальный размер файла (по умолчанию из настроек пользователя или 100 MB)
@@ -179,6 +218,7 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     import yt_dlp
     import time
     import json
+    import requests
 
     # Загрузка пользовательских лимитов
     limits_file = "temp/user_limits.json"
@@ -206,64 +246,130 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     # Генерируем уникальное имя
     import uuid
     sys_filename = f"audio_{uuid.uuid4().hex[:8]}"
-    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+
+    # Извлекаем video_id из URL
+    video_id = url.split('v=')[-1].split('&')[0].split('?')[0] if 'v=' in url else url.split('/')[-1].split('?')[0]
 
     start_time = time.time()
-    logger.info(f"⬇️ Скачиваю аудио: {url} (макс. {max_duration_sec} сек, {max_filesize_mb} MB)")
+    logger.info(f"⬇️ Скачиваю аудио: {url} (video_id: {video_id})")
 
+    # === ПОПЫТКА 1: Cobalt API (стабильно, Февраль 2026) ===
+    try:
+        logger.info("📡 Cobalt API: запрос...")
+        cobalt_url = "https://api.cobalt.tools/api/json"
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "url": url,
+            "isAudioOnly": True,
+            "filenamePattern": "simple",
+        }
+
+        response = requests.post(cobalt_url, headers=headers, json=payload, timeout=30)
+
+        if response.status_code == 200:
+            data = response.json()
+            status = data.get("status", "")
+
+            if status == "stream" or status == "redirect":
+                download_url = data.get("url")
+                if download_url:
+                    logger.info(f"🎵 Cobalt: найден поток {download_url[:50]}...")
+
+                    # Скачиваем аудио
+                    output_path = os.path.join(TEMP_DIR, f"{sys_filename}.mp3")
+                    audio_response = requests.get(download_url, timeout=120)
+
+                    if audio_response.status_code == 200:
+                        with open(output_path, 'wb') as f:
+                            f.write(audio_response.content)
+
+                        download_time = time.time() - start_time
+                        logger.info(f"✅ Cobalt: скачано за {download_time:.1f} сек")
+                        return output_path, f"Audio_{video_id}"
+                    else:
+                        logger.warning(f"⚠️ Cobalt: ошибка скачивания {audio_response.status_code}")
+            elif status == "error":
+                logger.warning(f"⚠️ Cobalt error: {data.get('text', 'unknown')}")
+            else:
+                logger.warning(f"⚠️ Cobalt status: {status}")
+        else:
+            logger.warning(f"⚠️ Cobalt HTTP error: {response.status_code}")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Cobalt API failed: {e}")
+
+    # === ПОПЫТКА 2: Invidious API (fallback) ===
+    invidious_instances = [
+        "https://inv.tux.pizza",
+        "https://invidious.io.lol",
+        "https://yewtu.be",
+    ]
+
+    for instance in invidious_instances:
+        try:
+            logger.info(f"📡 Invidious: {instance}")
+            api_url = f"{instance}/api/v1/videos/{video_id}"
+
+            response = requests.get(api_url, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                title = data.get('title', 'Audio Track')
+                duration = data.get('lengthSeconds', 0)
+
+                audio_streams = data.get('adaptiveFormats', [])
+                audio_stream = None
+                for fmt in audio_streams:
+                    if 'audio' in fmt.get('type', ''):
+                        audio_stream = fmt
+                        break
+
+                if audio_stream:
+                    audio_url = audio_stream.get('url')
+                    output_path = os.path.join(TEMP_DIR, f"{sys_filename}.m4a")
+                    audio_response = requests.get(audio_url, timeout=60)
+
+                    if audio_response.status_code == 200:
+                        with open(output_path, 'wb') as f:
+                            f.write(audio_response.content)
+
+                        clean_title = title.replace('(Official Video)', '').strip()
+                        download_time = time.time() - start_time
+                        logger.info(f"✅ Invidious: {clean_title} за {download_time:.1f} сек")
+                        return output_path, clean_title
+
+        except Exception as inst_error:
+            logger.warning(f"⚠️ Invidious failed: {inst_error}")
+            continue
+
+    # === ПОПЫТКА 3: yt-dlp (локально) ===
+    logger.warning("⚠️ Online сервисы не сработали, пробуем yt-dlp...")
+
+    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
     ydl_opts = {
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'outtmpl': output_template,
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
-        'max_filesize': max_filesize_mb * 1024 * 1024,  # MB → bytes
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'm4a',
-        }],
+        'max_filesize': max_filesize_mb * 1024 * 1024,
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-
-            # Информация о файле
-            duration = info.get('duration', 0)
-            filesize = info.get('filesize', 0)
-            title = info.get('title', 'Audio Track')
-
-            # Проверки (предупреждения, но не блокировка)
-            if duration and duration > max_duration_sec:
-                logger.warning(f"⚠️ Длительное аудио: {duration} сек (рекомендуется до {max_duration_sec} сек)")
-
-            if filesize and filesize > max_filesize_mb * 1024 * 1024:
-                logger.warning(f"⚠️ Большой файл: {filesize / 1024 / 1024:.1f} MB (макс. {max_filesize_mb} MB)")
-
             filename = ydl.prepare_filename(info)
-            clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').replace('(Lyrics)', '').strip()
+            title = info.get('title', 'Audio Track')
+            clean_title = title.replace('(Official Video)', '').strip()
 
             download_time = time.time() - start_time
-            logger.info(f"✅ Скачано: {clean_title} ({duration} сек, {filesize / 1024 / 1024:.1f} MB) за {download_time:.1f} сек")
-
+            logger.info(f"✅ yt-dlp: {clean_title} за {download_time:.1f} сек")
             return filename, clean_title
 
     except Exception as e:
-        error_msg = str(e)
-
-        # Анализ ошибки
-        if "max_duration" in error_msg.lower():
-            logger.warning(f"⚠️ Превышена максимальная длительность")
-        elif "max_filesize" in error_msg.lower():
-            logger.warning(f"⚠️ Превышен максимальный размер файла")
-        elif "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-            logger.warning("⚠️ YouTube требует авторизацию (защита от ботов)")
-        elif "JavaScript runtime" in error_msg:
-            logger.warning("⚠️ Не найден JavaScript runtime. Установите Node.js или добавьте --js-runtimes")
-        elif "HTTP Error 429" in error_msg:
-            logger.warning("⚠️ YouTube заблокировал запрос (слишком много запросов). Попробуйте позже.")
-
-        logger.error(f"❌ Audio Download Error: {e}")
+        logger.error(f"❌ Все методы не сработали: {e}")
         return None, None
 
 def get_prophet_tools_spec():

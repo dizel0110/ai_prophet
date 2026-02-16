@@ -104,27 +104,29 @@ def parse_steps_and_create_kb(text, chat_id):
     remaining_text = "\n".join(new_text_lines).strip()
     return remaining_text, InlineKeyboardMarkup(inline_keyboard=kb)
 
-def parse_and_execute_tools(text):
+def parse_and_execute_tools(text, chat_id: str = None):
     """
     Парсит текст на наличие маркеров инструментов и выполняет их.
     Поддерживает: [MEDIA: query, type, count] и [PLAYLIST: genre, mood, count]
+
+    chat_id: ID чата для загрузки пользовательских лимитов
     """
     import re
-    
+
     # 1. Сначала ищем новый маркер [MEDIA: ...]
     media_pattern = r'\[MEDIA:\s*([^,]+),\s*([^,]+)(?:,\s*(\d+))?\]'
     match_media = re.search(media_pattern, text, re.IGNORECASE)
-    
+
     if match_media:
         query = match_media.group(1).strip()
         m_type = match_media.group(2).strip().lower() # 'audio' или 'video'
         count = int(match_media.group(3)) if match_media.group(3) else 5
-        
+
         logger.info(f"📹 Обнаружен маркер MEDIA: query={query}, type={m_type}, count={count}")
-        
-        # Вызываем универсальный поиск медиа
-        result = search_media_content(query=query, media_type=m_type, count=count)
-        
+
+        # Вызываем универсальный поиск медиа с chat_id
+        result = search_media_content(query=query, media_type=m_type, count=count, chat_id=chat_id)
+
         # Убираем маркер
         clean_text = re.sub(media_pattern, '', text, flags=re.IGNORECASE).strip()
         return clean_text, result
@@ -132,21 +134,21 @@ def parse_and_execute_tools(text):
     # 2. Ищем старый маркер [PLAYLIST: ...] для совместимости
     playlist_pattern = r'\[PLAYLIST:\s*([^,]+),\s*([^,\]]+)(?:,\s*(\d+))?\]'
     match_playlist = re.search(playlist_pattern, text, re.IGNORECASE)
-    
+
     if match_playlist:
         genre = match_playlist.group(1).strip()
         mood = match_playlist.group(2).strip()
         count = int(match_playlist.group(3)) if match_playlist.group(3) else 5
-        
+
         logger.info(f"🎵 Обнаружен маркер PLAYLIST (legacy): genre={genre}, mood={mood}")
-        
+
         # Преобразуем в MEDIA запрос
         query = f"Best {genre} songs {mood} vibe"
-        result = search_media_content(query=query, media_type='audio', count=count)
-        
+        result = search_media_content(query=query, media_type='audio', count=count, chat_id=chat_id)
+
         clean_text = re.sub(playlist_pattern, '', text, flags=re.IGNORECASE).strip()
         return clean_text, result
-    
+
     return text, None
 
 def get_adaptive_greeting(username):
@@ -395,9 +397,9 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         hf_res = get_hf_response(text=input_text, task="text")
         if hf_res:
             logger.info(f"✅ HF Response received for user {chat_id}")
-            
-            # Parse and execute tools
-            clean_text, tool_result = parse_and_execute_tools(hf_res)
+
+            # Parse and execute tools с chat_id
+            clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
             
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
             await message.answer(f"🧿 {clean_text}")
@@ -504,11 +506,11 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
             continue
     
     if status_msg: await status_msg.edit_text("🌀 *Эфир Google зашумлен, открываю канал Hugging Face...*")
-    
+
     hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
-        # Парсим и выполняем инструменты
-        clean_text, tool_result = parse_and_execute_tools(hf_res)
+        # Парсим и выполняем инструменты с chat_id
+        clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
         
         if status_msg: 
             await status_msg.edit_text("🧿 *Поток данных из облака HF сформирован:*")
