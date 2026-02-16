@@ -13,6 +13,7 @@ from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response,
 from core.tools import web_search, search_media_content, AVAILABLE_FUNCTIONS
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
+from handlers.limits import load_user_limits, create_limits_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -60,7 +61,9 @@ def get_main_menu():
     kb = [
         [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
         [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
-        [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
+        [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="🎵 Музыка")],
+        [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="🎛 Лимиты")],
+        [KeyboardButton(text="ℹ️ Помощь")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -298,14 +301,62 @@ async def handle_text(message: types.Message, bot: Bot):
 
     if text == "⚙️ Настройки":
         engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:", 
+        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:",
                            reply_markup=get_settings_menu(engine), parse_mode="Markdown")
+        return
+
+    if text == "🎛 Лимиты":
+        limits = load_user_limits(chat_id)
+        await message.answer(
+            f"🎛 *Настройки загрузки аудио*\n\n"
+            f"⏱ Длительность: {limits.get('duration', 1800) // 60} мин\n"
+            f"📦 Размер: {limits.get('size', 50)} MB\n\n"
+            f"Нажми на кнопки ниже для настройки:",
+            reply_markup=create_limits_keyboard(chat_id),
+            parse_mode="Markdown"
+        )
+        return
+
+    if text == "ℹ️ Помощь":
+        help_text = (
+            "📖 *Инструкция AI Prophet*\n\n"
+            "🎙 *Голос Судьбы* — отправь голосовое сообщение, бот распознает и ответит.\n"
+            "🖼 *Видение* — отправь фото, бот проанализирует его.\n"
+            "🎵 *Музыка* — напиши жанр/настроение, бот найдёт трек.\n"
+            "🔮 *Предсказание* — задай вопрос, получи ответ.\n\n"
+            "⚙️ *Настройки* — выбери движок (Gemini/HF/Auto).\n\n"
+            "💡 *Советы:*\n"
+            "• Голосовые до 60 сек — быстрое распознавание\n"
+            "• Для музыки пиши: 'найти Pink Floyd', 'рок 80х', 'ambient для сна'\n"
+            "• ⏱️ Короткие треки (<5 мин) скачиваются за секунды\n"
+            "• 🕐 Длинные треки (30+ мин) могут загружаться несколько минут"
+        )
+        await message.answer(help_text, parse_mode="Markdown")
+        return
+
+    if text == "🎵 Музыка":
+        await message.answer(
+            "🎶 *Поиск музыки*\n\n"
+            "Напиши жанр, исполнителя или настроение:\n"
+            "• 'найти Pink Floyd'\n"
+            "• 'рок 80х'\n"
+            "• 'ambient для сна'\n"
+            "• 'лучшие хиты 2024'\n\n"
+            "⏱️ *Время загрузки:*\n"
+            "• Короткие треки (<5 мин) — ~10-30 сек\n"
+            "• Средние треки (5-30 мин) — ~1-3 мин\n"
+            "• Длинные треки (30+ мин) — ~3-10 мин\n\n"
+            "📦 *Лимиты:*\n"
+            "• Макс. длительность: 30 мин\n"
+            "• Макс. размер: 100 MB",
+            parse_mode="Markdown"
+        )
         return
 
     if "🤖 Авто" in text: user_settings.setdefault(chat_id, {})['engine'] = 'auto'
     elif "💎 Только Gemini" in text: user_settings.setdefault(chat_id, {})['engine'] = 'gemini'
     elif "🧿 Только Hugging Face" in text: user_settings.setdefault(chat_id, {})['engine'] = 'hf'
-    
+
     if any(x in text for x in ["🤖 Авто", "💎 Только Gemini", "🧿 Только Hugging Face"]):
         save_settings(user_settings) # Сохраняем при изменении
         await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(), parse_mode="Markdown")
@@ -313,6 +364,13 @@ async def handle_text(message: types.Message, bot: Bot):
 
     if text == "⬅️ Назад":
         await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu())
+        return
+
+    # Проверка на музыкальные запросы
+    music_triggers = ["найти музыку", "найди песню", "скачай трек", "включи музыку"]
+    if any(trigger in text.lower() for trigger in music_triggers):
+        status_msg = await message.answer("🎵 *Ищу музыку...*")
+        await conduct_ai_ritual(message, bot, text, status_msg)
         return
 
     # Остальная логика handle_text...
@@ -479,11 +537,13 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
 
     video_id = callback.data.split(":")[1]
     url = f"https://www.youtube.com/watch?v={video_id}"
-    
+    chat_id = str(callback.message.chat.id)
+
     await callback.answer("⏳ Начинаю магию конвертации...")
-    status_msg = await bot.send_message(callback.message.chat.id, f"⬇️ Скачиваю и конвертирую: {url}")
-    
-    file_path, title = download_audio(url)
+    status_msg = await bot.send_message(chat_id, f"⬇️ Скачиваю и конвертирую: {url}")
+
+    # Передаём chat_id для загрузки пользовательских лимитов
+    file_path, title = download_audio(url, chat_id=chat_id)
     
     if file_path and os.path.exists(file_path):
         try:

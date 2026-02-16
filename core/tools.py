@@ -1,4 +1,5 @@
 import logging
+import requests
 from duckduckgo_search import DDGS
 
 logger = logging.getLogger(__name__)
@@ -164,17 +165,40 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5):
     
     return result
 
-def download_audio(url: str):
+def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, max_filesize_mb: int = None):
     """
     Скачивает аудио из YouTube видео (m4a/mp3) во временную папку.
     Возвращает (путь_к_файлу, название_трека).
 
-    Пробует: Invidious API → yt-dlp (если есть cookies)
+    chat_id: ID чата для загрузки пользовательских лимитов
+    max_duration_sec: максимальная длительность (по умолчанию из настроек пользователя или 1800 сек = 30 мин)
+    max_filesize_mb: максимальный размер файла (по умолчанию из настроек пользователя или 100 MB)
     """
     import os
     from config import TEMP_DIR
-    import subprocess
+    import yt_dlp
+    import time
     import json
+
+    # Загрузка пользовательских лимитов
+    limits_file = "temp/user_limits.json"
+    if chat_id and os.path.exists(limits_file):
+        try:
+            with open(limits_file, 'r', encoding='utf-8') as f:
+                all_limits = json.load(f)
+                user_limits = all_limits.get(str(chat_id), {})
+                if max_duration_sec is None:
+                    max_duration_sec = user_limits.get("duration", 1800)
+                if max_filesize_mb is None:
+                    max_filesize_mb = user_limits.get("size", 100)
+        except Exception:
+            pass
+
+    # Значения по умолчанию
+    if max_duration_sec is None:
+        max_duration_sec = 1800
+    if max_filesize_mb is None:
+        max_filesize_mb = 100
 
     if not os.path.exists(TEMP_DIR):
         os.makedirs(TEMP_DIR)
@@ -182,98 +206,65 @@ def download_audio(url: str):
     # Генерируем уникальное имя
     import uuid
     sys_filename = f"audio_{uuid.uuid4().hex[:8]}"
+    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
 
-    # Извлекаем video_id из URL
-    video_id = url.split('v=')[-1].split('&')[0].split('?')[0] if 'v=' in url else url.split('/')[-1].split('?')[0]
+    start_time = time.time()
+    logger.info(f"⬇️ Скачиваю аудио: {url} (макс. {max_duration_sec} сек, {max_filesize_mb} MB)")
 
-    logger.info(f"⬇️ Скачиваю аудио: {url} (video_id: {video_id})")
+    ydl_opts = {
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'outtmpl': output_template,
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+        'max_filesize': max_filesize_mb * 1024 * 1024,  # MB → bytes
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'm4a',
+        }],
+    }
 
-    # === ПОПЫТКА 1: Invidious API (без авторизации) ===
     try:
-        # Список Invidious инстансов
-        invidious_instances = [
-            "https://inv.tux.pizza",
-            "https://invidious.io.lol",
-            "https://yewtu.be",
-            "https://invidious.projectsegfau.lt",
-        ]
-
-        for instance in invidious_instances:
-            try:
-                api_url = f"{instance}/api/v1/videos/{video_id}"
-                logger.info(f"📡 Запрос к Invidious: {api_url}")
-
-                response = requests.get(api_url, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    title = data.get('title', 'Audio Track')
-
-                    # Находим лучший аудиопоток
-                    audio_streams = data.get('adaptiveFormats', [])
-                    audio_stream = None
-                    for fmt in audio_streams:
-                        if fmt.get('type') and 'audio' in fmt.get('type', ''):
-                            audio_stream = fmt
-                            break
-
-                    if audio_stream:
-                        audio_url = audio_stream.get('url')
-                        logger.info(f"🎵 Найден аудиопоток: {audio_stream.get('type')}")
-
-                        # Скачиваем аудио
-                        output_path = os.path.join(TEMP_DIR, f"{sys_filename}.m4a")
-                        audio_response = requests.get(audio_url, timeout=30)
-                        if audio_response.status_code == 200:
-                            with open(output_path, 'wb') as f:
-                                f.write(audio_response.content)
-
-                            clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').replace('(Lyrics)', '').strip()
-                            logger.info(f"✅ Скачано через Invidious: {clean_title}")
-                            return output_path, clean_title
-                        else:
-                            logger.warning(f"⚠️ Не удалось скачать аудио: {audio_response.status_code}")
-                    else:
-                        logger.warning(f"⚠️ Нет аудиопотоков в ответе Invidious")
-                else:
-                    logger.warning(f"⚠️ Invidious API error: {response.status_code}")
-
-            except Exception as inst_error:
-                logger.warning(f"⚠️ Invidious instance failed: {inst_error}")
-                continue
-
-        logger.warning("⚠️ Все Invidious инстансы не сработали")
-
-    except Exception as e:
-        logger.error(f"❌ Invidious download failed: {e}")
-
-    # === ПОПЫТКА 2: yt-dlp (может требовать cookies) ===
-    try:
-        import yt_dlp
-
-        output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
-
-        ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
-            'outtmpl': output_template,
-            'noplaylist': True,
-            'quiet': True,
-            'max_filesize': 50 * 1024 * 1024,
-        }
-
-        logger.info(f"🔄 Пробуем yt-dlp...")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+
+            # Информация о файле
+            duration = info.get('duration', 0)
+            filesize = info.get('filesize', 0)
             title = info.get('title', 'Audio Track')
+
+            # Проверки (предупреждения, но не блокировка)
+            if duration and duration > max_duration_sec:
+                logger.warning(f"⚠️ Длительное аудио: {duration} сек (рекомендуется до {max_duration_sec} сек)")
+
+            if filesize and filesize > max_filesize_mb * 1024 * 1024:
+                logger.warning(f"⚠️ Большой файл: {filesize / 1024 / 1024:.1f} MB (макс. {max_filesize_mb} MB)")
+
+            filename = ydl.prepare_filename(info)
             clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').replace('(Lyrics)', '').strip()
 
-            logger.info(f"✅ Скачано через yt-dlp: {clean_title}")
+            download_time = time.time() - start_time
+            logger.info(f"✅ Скачано: {clean_title} ({duration} сек, {filesize / 1024 / 1024:.1f} MB) за {download_time:.1f} сек")
+
             return filename, clean_title
 
     except Exception as e:
-        logger.error(f"❌ yt-dlp download failed: {e}")
+        error_msg = str(e)
 
-    return None, None
+        # Анализ ошибки
+        if "max_duration" in error_msg.lower():
+            logger.warning(f"⚠️ Превышена максимальная длительность")
+        elif "max_filesize" in error_msg.lower():
+            logger.warning(f"⚠️ Превышен максимальный размер файла")
+        elif "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
+            logger.warning("⚠️ YouTube требует авторизацию (защита от ботов)")
+        elif "JavaScript runtime" in error_msg:
+            logger.warning("⚠️ Не найден JavaScript runtime. Установите Node.js или добавьте --js-runtimes")
+        elif "HTTP Error 429" in error_msg:
+            logger.warning("⚠️ YouTube заблокировал запрос (слишком много запросов). Попробуйте позже.")
+
+        logger.error(f"❌ Audio Download Error: {e}")
+        return None, None
 
 def get_prophet_tools_spec():
     """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""

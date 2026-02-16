@@ -13,7 +13,7 @@ from aiogram import Bot, Dispatcher
 from fastapi import FastAPI
 from config import TOKEN, PORT
 from core.network import apply_dns_patch
-from handlers import messages, vip
+from handlers import messages, vip, limits
 
 # Настройка логов
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -42,6 +42,7 @@ async def start_bot():
     
     # Регистрация роутеров
     dp.include_router(vip.router)
+    dp.include_router(limits.router)
     dp.include_router(messages.router)
     
     logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
