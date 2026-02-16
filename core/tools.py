@@ -168,43 +168,112 @@ def download_audio(url: str):
     """
     Скачивает аудио из YouTube видео (m4a/mp3) во временную папку.
     Возвращает (путь_к_файлу, название_трека).
+
+    Пробует: Invidious API → yt-dlp (если есть cookies)
     """
     import os
     from config import TEMP_DIR
-    import yt_dlp
-    
+    import subprocess
+    import json
+
     if not os.path.exists(TEMP_DIR):
         os.makedirs(TEMP_DIR)
-        
+
     # Генерируем уникальное имя
     import uuid
     sys_filename = f"audio_{uuid.uuid4().hex[:8]}"
-    output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
-    
-    ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best', # m4a лучше всего для Telegram
-        'outtmpl': output_template,
-        'noplaylist': True,
-        'quiet': True,
-        'max_filesize': 50 * 1024 * 1024, # 50 MB лимит
-    }
-    
+
+    # Извлекаем video_id из URL
+    video_id = url.split('v=')[-1].split('&')[0].split('?')[0] if 'v=' in url else url.split('/')[-1].split('?')[0]
+
+    logger.info(f"⬇️ Скачиваю аудио: {url} (video_id: {video_id})")
+
+    # === ПОПЫТКА 1: Invidious API (без авторизации) ===
     try:
-        logger.info(f"⬇️ Скачиваю аудио: {url}")
+        # Список Invidious инстансов
+        invidious_instances = [
+            "https://inv.tux.pizza",
+            "https://invidious.io.lol",
+            "https://yewtu.be",
+            "https://invidious.projectsegfau.lt",
+        ]
+
+        for instance in invidious_instances:
+            try:
+                api_url = f"{instance}/api/v1/videos/{video_id}"
+                logger.info(f"📡 Запрос к Invidious: {api_url}")
+
+                response = requests.get(api_url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    title = data.get('title', 'Audio Track')
+
+                    # Находим лучший аудиопоток
+                    audio_streams = data.get('adaptiveFormats', [])
+                    audio_stream = None
+                    for fmt in audio_streams:
+                        if fmt.get('type') and 'audio' in fmt.get('type', ''):
+                            audio_stream = fmt
+                            break
+
+                    if audio_stream:
+                        audio_url = audio_stream.get('url')
+                        logger.info(f"🎵 Найден аудиопоток: {audio_stream.get('type')}")
+
+                        # Скачиваем аудио
+                        output_path = os.path.join(TEMP_DIR, f"{sys_filename}.m4a")
+                        audio_response = requests.get(audio_url, timeout=30)
+                        if audio_response.status_code == 200:
+                            with open(output_path, 'wb') as f:
+                                f.write(audio_response.content)
+
+                            clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').replace('(Lyrics)', '').strip()
+                            logger.info(f"✅ Скачано через Invidious: {clean_title}")
+                            return output_path, clean_title
+                        else:
+                            logger.warning(f"⚠️ Не удалось скачать аудио: {audio_response.status_code}")
+                    else:
+                        logger.warning(f"⚠️ Нет аудиопотоков в ответе Invidious")
+                else:
+                    logger.warning(f"⚠️ Invidious API error: {response.status_code}")
+
+            except Exception as inst_error:
+                logger.warning(f"⚠️ Invidious instance failed: {inst_error}")
+                continue
+
+        logger.warning("⚠️ Все Invidious инстансы не сработали")
+
+    except Exception as e:
+        logger.error(f"❌ Invidious download failed: {e}")
+
+    # === ПОПЫТКА 2: yt-dlp (может требовать cookies) ===
+    try:
+        import yt_dlp
+
+        output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'outtmpl': output_template,
+            'noplaylist': True,
+            'quiet': True,
+            'max_filesize': 50 * 1024 * 1024,
+        }
+
+        logger.info(f"🔄 Пробуем yt-dlp...")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            # Получаем реальное имя файла
             filename = ydl.prepare_filename(info)
-            
-            # Получаем название трека
             title = info.get('title', 'Audio Track')
-            # Чистим от лишнего мусора
             clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').replace('(Lyrics)', '').strip()
-            
+
+            logger.info(f"✅ Скачано через yt-dlp: {clean_title}")
             return filename, clean_title
+
     except Exception as e:
-        logger.error(f"❌ Audio Download Error: {e}")
-        return None, None
+        logger.error(f"❌ yt-dlp download failed: {e}")
+
+    return None, None
 
 def get_prophet_tools_spec():
     """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""
