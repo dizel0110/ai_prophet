@@ -545,19 +545,21 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
     status_msg = await bot.send_message(chat_id, f"⬇️ Скачиваю и конвертирую: {url}")
 
     # Передаём chat_id для загрузки пользовательских лимитов
-    file_path, title = download_audio(url, chat_id=chat_id)
-    
+    # download_audio возвращает 3 значения: (file_path, title, duration)
+    file_path, title, duration = download_audio(url, chat_id=chat_id)
+
     if file_path and os.path.exists(file_path):
         try:
-            await status_msg.edit_text(f"📤 Отправляю: {title}...")
+            duration_text = f" ({duration} сек)" if duration else ""
+            await status_msg.edit_text(f"📤 Отправляю: {title}{duration_text}...")
             audio_file = FSInputFile(file_path)
             # Отправляем с реальным названием
             await bot.send_audio(
-                callback.message.chat.id, 
-                audio_file, 
-                title=title, 
+                callback.message.chat.id,
+                audio_file,
+                title=title,
                 performer="AI Prophet Media",
-                caption=f"🎧 *{title}*\n🔗 [Источник]({url})"
+                caption=f"🎧 *{title}*{duration_text}\n🔗 [Источник]({url})"
             )
             await status_msg.delete()
         except Exception as e:
@@ -567,7 +569,7 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
             if os.path.exists(file_path):
                 os.remove(file_path)
     else:
-        await status_msg.edit_text("❌ Не удалось скачать аудио. Возможно, видео слишком длинное или недоступно.")
+        await status_msg.edit_text("❌ Не удалось скачать аудио. Попробуй другой трек или напиши текстом.")
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):

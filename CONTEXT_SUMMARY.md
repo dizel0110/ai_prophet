@@ -1,8 +1,9 @@
 # 🧠 AI Prophet — Context Summary для Нового Чата
 
-**Дата:** 2026-02-17  
-**Ветка:** `dev-phase3`  
+**Дата:** 2026-02-17
+**Ветка:** `dev-phase3`
 **Статус:** ✅ Работает на HF Spaces
+**Последний коммит:** ce05f30
 
 ---
 
@@ -11,7 +12,7 @@
 **AI Prophet** — Telegram бот с мультимодальным ИИ:
 - 🎙 Голосовые сообщения (транскрибация + ответ)
 - 🖼 Анализ фото (Gemini Vision + HF fallback)
-- 🎵 Поиск и скачивание музыки (YouTube)
+- 🎵 Поиск и скачивание музыки (YouTube, 4 источника)
 - ⚙️ Настройки движка (Gemini/HF/Auto)
 - 🎛 Лимиты аудио (длительность/размер файла)
 
@@ -20,7 +21,7 @@
 ## 🔧 Ключевые Изменения (Сессия Февраль 2026)
 
 ### 1. Транскрибация Аудио
-**Проблема:** HF не транскрибировал голосовые.  
+**Проблема:** HF не транскрибировал голосовые.
 **Решение:**
 - `transcribe_with_gemini()` — таймаут через threading, перебор MIME types
 - `get_hf_response(task="audio")` — Whisper API
@@ -51,8 +52,8 @@
 **Проблема:** YouTube блокирует серверные IP (HF Spaces).
 
 **Решение (каскад):**
-1. **ytmusicapi** — YouTube Music API
-2. **Cobalt API** — публичный API
+1. **ytmusicapi** — YouTube Music API (стабильнее на серверах)
+2. **Cobalt API** — публичный API без авторизации
 3. **Invidious API** — альтернативные фронтенды
 4. **yt-dlp** — локально (fallback)
 
@@ -64,7 +65,7 @@
 
 ---
 
-### 4. Production Fixes
+### 4. Production Bug Fixes
 **Ошибки:**
 - `TelegramBadRequest: message is not modified`
 - `NameError: name 'os' is not defined`
@@ -89,7 +90,9 @@ ai_prophet/
 ├── config.py             # Конфигурация, токены
 ├── main.py               # Точка входа (FastAPI + Aiogram)
 ├── requirements.txt      # ytmusicapi, yt-dlp, ddgs...
-└── HISTORY.md            # Полная летопись проекта
+├── HISTORY.md            # Летопись проекта
+├── CONTEXT_SUMMARY.md    # Это файл (саммари для чата)
+└── internal/             # Внутренняя документация
 ```
 
 ---
@@ -130,10 +133,36 @@ git log --oneline -10
 
 | Проблема | Статус | Решение |
 |----------|--------|---------|
-| YouTube блокирует HF Spaces | ⚠️ Частично | ytmusicapi + Cobalt + Invidious |
+| YouTube блокирует HF Spaces | 🔴 Критично | Все 4 источника блокируются (ytmusicapi, Cobalt, Invidious, yt-dlp) |
 | Telegram: message not modified | ✅ Исправлено | try/except в `update_limits_message()` |
+| ValueError: too many values | ✅ Исправлено | `download_audio()` возвращает 3 значения |
 | HF Whisper 410 ошибка | ✅ Исправлено | fallback на Gemini |
 | Gemini 429 quota | ✅ Исправлено | fallback на HF |
+| NameError: os not defined | ✅ Исправлено | добавлен import os |
+
+---
+
+## 🔧 Актуальные Задачи
+
+### 1. Скачать музыку на HF Spaces (КРИТИЧНО)
+**Проблема:** YouTube блокирует все серверные IP (HF Spaces, Docker, облака).
+
+**Текущий статус:**
+- ❌ ytmusicapi — нет доступных потоков
+- ❌ Cobalt API — HTTP 400
+- ❌ Invidious — таймауты (блокируются)
+- ❌ yt-dlp — требует авторизации
+
+**Возможные решения:**
+1. **Прокси/VPN** — обход блокировок по IP
+2. **Cookies** — экспорт из браузера, передача в yt-dlp
+3. **Спонсируемые API** — платные сервисы (RapidAPI)
+4. **Локальный сервер** — запуск дома, HF как фронтенд
+5. **Альтернативы** — SoundCloud, Deezer (30 сек превью)
+
+**Временное решение:**
+- Локальный запуск работает ✅
+- HF Spaces — только текстовые запросы
 
 ---
 
@@ -151,6 +180,18 @@ git log --oneline -10
 
 ---
 
+## 📝 Последние Коммиты
+
+```
+ce05f30 docs: обновлена HISTORY.md + CONTEXT_SUMMARY.md для нового чата
+217e2c2 feat: ytmusicapi + длительность трека (полные треки)
+70ba508 fix: критические ошибки на проде (os import + TelegramBadRequest)
+d3c89c8 fix: удалить несуществующий импорт Modal (aiogram 3.x)
+40c2e5d feat: плавные лимиты с интеграцией в поиск музыки
+```
+
+---
+
 ## 📝 Следующие Шаги (Roadmap)
 
 - [ ] MCP интеграция (Model Context Protocol)
@@ -163,8 +204,8 @@ git log --oneline -10
 
 ## 🔑 Контакты и Доступы
 
-**GitHub:** https://github.com/dizel0110/ai_prophet  
-**Telegram Bot:** @ai_prophet_io_bot  
+**GitHub:** https://github.com/dizel0110/ai_prophet
+**Telegram Bot:** @ai_prophet_io_bot
 **HF Spaces:** https://huggingface.co/spaces/dizel0110/ai_prophet
 
 **Ветка:** `dev-phase3` (основная для разработки)
