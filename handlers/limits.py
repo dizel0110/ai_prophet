@@ -211,15 +211,15 @@ async def handle_limit_callback(callback: types.CallbackQuery, state: FSMContext
     
     elif action == "limit_save":
         save_user_limits(chat_id, limits)
-        await callback.answer(f"✅ Сохранено!", show_alert=True)
+        await callback.answer(f"✅ Сохранено!", show_alert=False)
         await update_limits_message(callback.message, chat_id, limits)
         return
-    
+
     elif action == "limit_cancel":
         await callback.message.delete()
         await state.clear()
         return
-    
+
     elif action == "limit_info":
         param = data[1]
         if param == "duration":
@@ -242,7 +242,7 @@ async def handle_limit_callback(callback: types.CallbackQuery, state: FSMContext
             )
         await callback.answer(info, show_alert=True)
         return
-    
+
     elif action == "limit_set":
         param = data[1]
         if param == "duration":
@@ -252,34 +252,48 @@ async def handle_limit_callback(callback: types.CallbackQuery, state: FSMContext
             await callback.answer("Введите размер в MB:\nПример: 50", show_alert=True)
             await state.set_state(LimitStates.waiting_for_size)
         return
-    
+
+    # Для кнопок изменения (-1 мин, +5 мин и т.д.)
+    await callback.answer()  # Убираем лоадер
     await update_limits_message(callback.message, chat_id, limits)
 
 
 async def update_limits_message(message, chat_id, limits):
     """Обновление сообщения с настройками"""
+    from aiogram.exceptions import TelegramBadRequest
+
     duration = limits.get("duration", 1800)
     size = limits.get("size", 50)
-    
+
     dur_color, dur_speed = get_limit_status(duration, size)
     size_color, size_speed = get_limit_status(duration, size)[0], get_limit_status(duration, size)[1]
-    
+
     dur_bar = create_progress_bar(duration, MIN_DURATION, MAX_DURATION)
     size_bar = create_progress_bar(size, MIN_SIZE, MAX_SIZE)
-    
-    await message.edit_text(
-        f"🎛 *Настройки загрузки аудио*\n\n"
-        f"⏱ *Длительность:* {dur_bar} {format_duration(duration)}\n"
-        f"   {dur_color} {dur_speed}\n\n"
-        f"📦 *Размер:* {size_bar} {size} MB\n"
-        f"   {size_color} {size_speed}\n\n"
-        f"💡 *Нажми на кнопки для настройки:*\n"
-        f"• -1/-5 мин или -5/-20 MB — точная настройка\n"
-        f"• Значение — ввести своё число\n"
-        f"• Прогресс — информация",
-        reply_markup=create_limits_keyboard(chat_id),
-        parse_mode="Markdown"
-    )
+
+    try:
+        await message.edit_text(
+            f"🎛 *Настройки загрузки аудио*\n\n"
+            f"⏱ *Длительность:* {dur_bar} {format_duration(duration)}\n"
+            f"   {dur_color} {dur_speed}\n\n"
+            f"📦 *Размер:* {size_bar} {size} MB\n"
+            f"   {size_color} {size_speed}\n\n"
+            f"💡 *Нажми на кнопки для настройки:*\n"
+            f"• -1/-5 мин или -5/-20 MB — точная настройка\n"
+            f"• Значение — ввести своё число\n"
+            f"• Прогресс — информация",
+            reply_markup=create_limits_keyboard(chat_id),
+            parse_mode="Markdown"
+        )
+    except TelegramBadRequest as e:
+        # Игнорируем ошибку "контент не изменился"
+        if "message is not modified" not in str(e):
+            logger.error(f"Failed to edit message: {e}")
+        # В любом случае отправляем callback answer чтобы убрать лоадер
+        await message.bot.answer_callback_query(
+            callback_query_id=message.message_id,
+            text="Настройки обновлены"
+        )
 
 
 @router.message(LimitStates.waiting_for_duration)

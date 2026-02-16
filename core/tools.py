@@ -76,6 +76,7 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
     count: количество результатов (по умолчанию 5)
     chat_id: ID чата для загрузки пользовательских лимитов
     """
+    import os
     import random
     import json
 
