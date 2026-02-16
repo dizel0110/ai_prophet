@@ -11,3 +11,4 @@ mcp
 huggingface-hub
 yt-dlp
 ffmpeg-python
+ytmusicapi

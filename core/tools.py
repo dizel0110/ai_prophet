@@ -203,12 +203,13 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
 def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, max_filesize_mb: int = None):
     """
     Скачивает аудио из YouTube видео (m4a/mp3) во временную папку.
-    Возвращает (путь_к_файлу, название_трека).
+    Возвращает (путь_к_файлу, название_трека, длительность).
 
     Алгоритм (Февраль 2026):
-    1. Cobalt API (стабильно, без блокировок)
-    2. Invidious API (fallback)
-    3. yt-dlp (локально, где нет блокировок)
+    1. ytmusicapi (YouTube Music — работает стабильнее на серверах)
+    2. Cobalt API (стабильно, без блокировок)
+    3. Invidious API (fallback)
+    4. yt-dlp (локально, где нет блокировок)
 
     chat_id: ID чата для загрузки пользовательских лимитов
     max_duration_sec: максимальная длительность (по умолчанию из настроек пользователя или 1800 сек = 30 мин)
@@ -254,7 +255,57 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     start_time = time.time()
     logger.info(f"⬇️ Скачиваю аудио: {url} (video_id: {video_id})")
 
-    # === ПОПЫТКА 1: Cobalt API (стабильно, Февраль 2026) ===
+    # === ПОПЫТКА 1: ytmusicapi (YouTube Music API) ===
+    try:
+        logger.info("🎵 ytmusicapi: попытка...")
+        from ytmusicapi import YTMusic
+
+        ytmusic = YTMusic()
+        # Получаем информацию о треке
+        stream_url = ytmusic.get_song(video_id)
+
+        if stream_url and 'streamingData' in stream_url:
+            formats = stream_url.get('streamingData', {}).get('formats', [])
+            adaptive_formats = stream_url.get('streamingData', {}).get('adaptiveFormats', [])
+
+            # Ищем аудио формат
+            audio_format = None
+            for fmt in adaptive_formats:
+                if 'audio' in fmt.get('mimeType', ''):
+                    audio_format = fmt
+                    break
+
+            if not audio_format and formats:
+                for fmt in formats:
+                    if 'audio' in fmt.get('mimeType', ''):
+                        audio_format = fmt
+                        break
+
+            if audio_format and 'url' in audio_format:
+                audio_url = audio_format['url']
+                duration = audio_format.get('approxDurationMs', 0) // 1000
+                title = stream_url.get('videoDetails', {}).get('title', 'Audio Track')
+
+                # Скачиваем
+                output_path = os.path.join(TEMP_DIR, f"{sys_filename}.m4a")
+                audio_response = requests.get(audio_url, timeout=120)
+
+                if audio_response.status_code == 200:
+                    with open(output_path, 'wb') as f:
+                        f.write(audio_response.content)
+
+                    download_time = time.time() - start_time
+                    logger.info(f"✅ ytmusicapi: {title} ({duration} сек) за {download_time:.1f} сек")
+                    return output_path, title, duration
+
+        logger.warning("⚠️ ytmusicapi: нет доступных потоков")
+
+    except ImportError:
+        logger.warning("⚠️ ytmusicapi: не установлен")
+    except Exception as e:
+        logger.warning(f"⚠️ ytmusicapi failed: {e}")
+
+    # === ПОПЫТКА 2: Cobalt API ===
     try:
         logger.info("📡 Cobalt API: запрос...")
         cobalt_url = "https://api.cobalt.tools/api/json"
@@ -277,9 +328,8 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
             if status == "stream" or status == "redirect":
                 download_url = data.get("url")
                 if download_url:
-                    logger.info(f"🎵 Cobalt: найден поток {download_url[:50]}...")
+                    logger.info(f"🎵 Cobalt: найден поток")
 
-                    # Скачиваем аудио
                     output_path = os.path.join(TEMP_DIR, f"{sys_filename}.mp3")
                     audio_response = requests.get(download_url, timeout=120)
 
@@ -289,7 +339,7 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
 
                         download_time = time.time() - start_time
                         logger.info(f"✅ Cobalt: скачано за {download_time:.1f} сек")
-                        return output_path, f"Audio_{video_id}"
+                        return output_path, f"Audio_{video_id}", 0
                     else:
                         logger.warning(f"⚠️ Cobalt: ошибка скачивания {audio_response.status_code}")
             elif status == "error":
@@ -302,7 +352,7 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     except Exception as e:
         logger.warning(f"⚠️ Cobalt API failed: {e}")
 
-    # === ПОПЫТКА 2: Invidious API (fallback) ===
+    # === ПОПЫТКА 3: Invidious API ===
     invidious_instances = [
         "https://inv.tux.pizza",
         "https://invidious.io.lol",
@@ -336,16 +386,15 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
                         with open(output_path, 'wb') as f:
                             f.write(audio_response.content)
 
-                        clean_title = title.replace('(Official Video)', '').strip()
                         download_time = time.time() - start_time
-                        logger.info(f"✅ Invidious: {clean_title} за {download_time:.1f} сек")
-                        return output_path, clean_title
+                        logger.info(f"✅ Invidious: {title} ({duration} сек) за {download_time:.1f} сек")
+                        return output_path, title, duration
 
         except Exception as inst_error:
             logger.warning(f"⚠️ Invidious failed: {inst_error}")
             continue
 
-    # === ПОПЫТКА 3: yt-dlp (локально) ===
+    # === ПОПЫТКА 4: yt-dlp (локально) ===
     logger.warning("⚠️ Online сервисы не сработали, пробуем yt-dlp...")
 
     output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
@@ -363,15 +412,16 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             title = info.get('title', 'Audio Track')
+            duration = info.get('duration', 0)
             clean_title = title.replace('(Official Video)', '').strip()
 
             download_time = time.time() - start_time
-            logger.info(f"✅ yt-dlp: {clean_title} за {download_time:.1f} сек")
-            return filename, clean_title
+            logger.info(f"✅ yt-dlp: {clean_title} ({duration} сек) за {download_time:.1f} сек")
+            return filename, clean_title, duration
 
     except Exception as e:
         logger.error(f"❌ Все методы не сработали: {e}")
-        return None, None
+        return None, None, None
 
 def get_prophet_tools_spec():
     """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""
