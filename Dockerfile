@@ -4,6 +4,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     ffmpeg \
+    dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -13,5 +14,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Команда для запуска бота
-CMD ["python", "bot.py"]
+# Команда для запуска бота (модульная система)
+CMD ["python", "main.py"]

@@ -1,9 +1,10 @@
 venv/
 .env
 __pycache__/
+*.pyc
 *.jpg
 *.ogg
-*.pyc
+*.wav
 .DS_Store
 temp/
 internal/

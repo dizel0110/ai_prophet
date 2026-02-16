@@ -510,35 +510,77 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
-    # Не чистим всё подряд, только файлы этого же типа если нужно
-    
     audio = message.voice or message.audio
     file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
     file_path = os.path.join(TEMP_DIR, file_name)
-    
+
+    # Скачиваем файл
     await bot.download(audio, destination=file_path)
+
+    # Проверяем, что файл скачался успешно
+    if not os.path.exists(file_path):
+        logger.error(f"❌ Не удалось скачать аудио: {file_path}")
+        await message.answer("😔 Не удалось сохранить аудио. Попробуй ещё раз.")
+        return
+
+    file_size = os.path.getsize(file_path)
+    if file_size == 0:
+        logger.error(f"❌ Пустой аудио файл: {file_path}")
+        await message.answer("😔 Аудио файл пуст. Попробуй ещё раз.")
+        cleanup_file(file_path)
+        return
+
+    logger.info(f"📥 Аудио скачано: {file_path}, {file_size / 1024:.1f} KB")
+
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
-    
+
     logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
-    
+
+    # Таймаут зависит от типа аудио: voice (до 60 сек) или audio (файл, может быть длиннее)
+    audio_duration = 60 if message.voice else 90
+
+    text = None
+
+    # === ЛОГИКА С FALLBACK ДЛЯ ЛЮБОГО ДВИЖКА ===
     if engine == "hf":
+        # Пробуем HF сначала
         text = get_hf_response(image_path=file_path, task="audio")
-    else:
-        text = transcribe_with_gemini(file_path)
+        logger.info(f"🧿 HF Transcription result: {text[:50] if text else 'None'}...")
+
+        # Если HF не справился, пробуем Gemini как бэкап
+        if not text:
+            logger.info("♻️ HF failed, falling back to Gemini.")
+            text = transcribe_with_gemini(file_path, timeout_sec=audio_duration)
+            logger.info(f"💎 Gemini Fallback result: {text[:50] if text else 'None'}...")
+
+    elif engine == "gemini":
+        # Пробуем Gemini сначала
+        text = transcribe_with_gemini(file_path, timeout_sec=audio_duration)
+        logger.info(f"💎 Gemini Transcription result: {text[:50] if text else 'None'}...")
+
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
-            logger.info("♻️ Gemini Transcription failed, falling back to HF.")
+            logger.info("♻️ Gemini failed, falling back to HF.")
             text = get_hf_response(image_path=file_path, task="audio")
-    
+            logger.info(f"🧿 HF Fallback result: {text[:50] if text else 'None'}...")
+
+    else:  # engine == "auto"
+        # Auto: сначала Gemini (быстрее), потом HF
+        text = transcribe_with_gemini(file_path, timeout_sec=audio_duration)
+        logger.info(f"💎 Gemini (auto) result: {text[:50] if text else 'None'}...")
+
+        if not text:
+            logger.info("♻️ Gemini failed, falling back to HF.")
+            text = get_hf_response(image_path=file_path, task="audio")
+            logger.info(f"🧿 HF Fallback result: {text[:50] if text else 'None'}...")
+
     cleanup_file(file_path)
-    
+
     if text:
         logger.info(f"✅ Audio transcribed: {text[:50]}...")
-        # Отправляем транскрипцию как отдельное сообщение, чтобы она не стерлась в истории
         await message.answer(f"👤 *Прочитал в эфире:* \n\n_{text}_", parse_mode="Markdown")
-        # Создаем новый статус для процесса раздумий
         status_msg = await message.answer("🧿 *Медитирую над смыслом...*")
         await conduct_ai_ritual(message, bot, text, status_msg)
     else:
-        await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова...")
+        await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова... Попробуй ещё раз или напиши текстом.")

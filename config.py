@@ -24,10 +24,10 @@ FALLBACK_MODELS = [
 # Модели для HF Router (OpenAI Compatible)
 # Qwen2.5-7B-Instruct подтвержден как рабочий на роутере
 HF_TASKS = {
-    "text": "Qwen/Qwen2.5-7B-Instruct",            
+    "text": "Qwen/Qwen2.5-7B-Instruct",
     "vision": "meta-llama/Llama-3.2-11B-Vision-Instruct", # Классика вижена для роутера
-    "audio": "openai/whisper-large-v3", 
-    "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" 
+    "audio": "openai/whisper-large-v3",
+    "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 }
 
 SYSTEM_PROMPT = (
