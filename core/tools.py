@@ -394,10 +394,12 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
             logger.warning(f"⚠️ Invidious failed: {inst_error}")
             continue
 
-    # === ПОПЫТКА 4: yt-dlp (локально) ===
-    logger.warning("⚠️ Online сервисы не сработали, пробуем yt-dlp...")
+    # === ПОПЫТКА 4: yt-dlp с эмуляцией браузера ===
+    logger.warning("⚠️ Online сервисы не сработали, пробуем yt-dlp с эмуляцией...")
 
     output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
+
+    # Заголовки реального браузера для обхода блокировок
     ydl_opts = {
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'outtmpl': output_template,
@@ -405,6 +407,18 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
         'quiet': True,
         'no_warnings': True,
         'max_filesize': max_filesize_mb * 1024 * 1024,
+
+        # Эмуляция браузера
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.youtube.com/',
+
+        # Обход блокировок
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web', 'web_embedded'],
+                'player_skip': ['webpage'],
+            }
+        },
     }
 
     try:
