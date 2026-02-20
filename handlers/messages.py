@@ -179,8 +179,25 @@ def get_adaptive_greeting(username):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
     username = message.from_user.first_name or "путник"
+    greeting = get_adaptive_greeting(username)
+    
+    welcome_text = (
+        f"{greeting}\n\n"
+        f"Я AI Prophet — твой мультимодальный ИИ-компаньон.\n\n"
+        f"🎯 *Что я умею:*\n"
+        f"• 🖼 Анализировать фото и изображения\n"
+        f"• 🎙 Распознавать голосовые сообщения\n"
+        f"• 🎵 Искать и скачивать музыку (плейлисты!)\n"
+        f"• 🔮 Отвечать на вопросы и давать предсказания\n"
+        f"• 🌐 Искать свежую информацию в сети\n\n"
+        f"🎹 *Быстрые команды:*\n"
+        f"• `/playlist Pink Floyd 5` — создать плейлист\n"
+        f"• `/help` — полная справка по всем командам\n\n"
+        f"👇 *Выбери действие в меню ниже или просто напиши мне!*"
+    )
+    
     await message.answer(
-        f"{get_adaptive_greeting(username)}\n\nЯ AI Prophet. Пришли фото или спроси о чем угодно.",
+        welcome_text,
         reply_markup=get_main_menu(),
         parse_mode="Markdown"
     )
