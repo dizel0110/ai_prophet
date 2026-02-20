@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import asyncio
 import random
@@ -9,11 +10,12 @@ from aiogram import Router, types, Bot, F
 from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini
 from core.tools import web_search, search_media_content, AVAILABLE_FUNCTIONS
+from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
-from handlers.limits import load_user_limits, create_limits_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -61,9 +63,7 @@ def get_main_menu():
     kb = [
         [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
         [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
-        [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="🎵 Музыка")],
-        [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="🎛 Лимиты")],
-        [KeyboardButton(text="ℹ️ Помощь")]
+        [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -104,29 +104,27 @@ def parse_steps_and_create_kb(text, chat_id):
     remaining_text = "\n".join(new_text_lines).strip()
     return remaining_text, InlineKeyboardMarkup(inline_keyboard=kb)
 
-def parse_and_execute_tools(text, chat_id: str = None):
+def parse_and_execute_tools(text):
     """
     Парсит текст на наличие маркеров инструментов и выполняет их.
     Поддерживает: [MEDIA: query, type, count] и [PLAYLIST: genre, mood, count]
-
-    chat_id: ID чата для загрузки пользовательских лимитов
     """
     import re
-
+    
     # 1. Сначала ищем новый маркер [MEDIA: ...]
     media_pattern = r'\[MEDIA:\s*([^,]+),\s*([^,]+)(?:,\s*(\d+))?\]'
     match_media = re.search(media_pattern, text, re.IGNORECASE)
-
+    
     if match_media:
         query = match_media.group(1).strip()
         m_type = match_media.group(2).strip().lower() # 'audio' или 'video'
         count = int(match_media.group(3)) if match_media.group(3) else 5
-
+        
         logger.info(f"📹 Обнаружен маркер MEDIA: query={query}, type={m_type}, count={count}")
-
-        # Вызываем универсальный поиск медиа с chat_id
-        result = search_media_content(query=query, media_type=m_type, count=count, chat_id=chat_id)
-
+        
+        # Вызываем универсальный поиск медиа
+        result = search_media_content(query=query, media_type=m_type, count=count)
+        
         # Убираем маркер
         clean_text = re.sub(media_pattern, '', text, flags=re.IGNORECASE).strip()
         return clean_text, result
@@ -134,21 +132,21 @@ def parse_and_execute_tools(text, chat_id: str = None):
     # 2. Ищем старый маркер [PLAYLIST: ...] для совместимости
     playlist_pattern = r'\[PLAYLIST:\s*([^,]+),\s*([^,\]]+)(?:,\s*(\d+))?\]'
     match_playlist = re.search(playlist_pattern, text, re.IGNORECASE)
-
+    
     if match_playlist:
         genre = match_playlist.group(1).strip()
         mood = match_playlist.group(2).strip()
         count = int(match_playlist.group(3)) if match_playlist.group(3) else 5
-
+        
         logger.info(f"🎵 Обнаружен маркер PLAYLIST (legacy): genre={genre}, mood={mood}")
-
+        
         # Преобразуем в MEDIA запрос
         query = f"Best {genre} songs {mood} vibe"
-        result = search_media_content(query=query, media_type='audio', count=count, chat_id=chat_id)
-
+        result = search_media_content(query=query, media_type='audio', count=count)
+        
         clean_text = re.sub(playlist_pattern, '', text, flags=re.IGNORECASE).strip()
         return clean_text, result
-
+    
     return text, None
 
 def get_adaptive_greeting(username):
@@ -303,62 +301,14 @@ async def handle_text(message: types.Message, bot: Bot):
 
     if text == "⚙️ Настройки":
         engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:",
+        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:", 
                            reply_markup=get_settings_menu(engine), parse_mode="Markdown")
-        return
-
-    if text == "🎛 Лимиты":
-        limits = load_user_limits(chat_id)
-        await message.answer(
-            f"🎛 *Настройки загрузки аудио*\n\n"
-            f"⏱ Длительность: {limits.get('duration', 1800) // 60} мин\n"
-            f"📦 Размер: {limits.get('size', 50)} MB\n\n"
-            f"Нажми на кнопки ниже для настройки:",
-            reply_markup=create_limits_keyboard(chat_id),
-            parse_mode="Markdown"
-        )
-        return
-
-    if text == "ℹ️ Помощь":
-        help_text = (
-            "📖 *Инструкция AI Prophet*\n\n"
-            "🎙 *Голос Судьбы* — отправь голосовое сообщение, бот распознает и ответит.\n"
-            "🖼 *Видение* — отправь фото, бот проанализирует его.\n"
-            "🎵 *Музыка* — напиши жанр/настроение, бот найдёт трек.\n"
-            "🔮 *Предсказание* — задай вопрос, получи ответ.\n\n"
-            "⚙️ *Настройки* — выбери движок (Gemini/HF/Auto).\n\n"
-            "💡 *Советы:*\n"
-            "• Голосовые до 60 сек — быстрое распознавание\n"
-            "• Для музыки пиши: 'найти Pink Floyd', 'рок 80х', 'ambient для сна'\n"
-            "• ⏱️ Короткие треки (<5 мин) скачиваются за секунды\n"
-            "• 🕐 Длинные треки (30+ мин) могут загружаться несколько минут"
-        )
-        await message.answer(help_text, parse_mode="Markdown")
-        return
-
-    if text == "🎵 Музыка":
-        await message.answer(
-            "🎶 *Поиск музыки*\n\n"
-            "Напиши жанр, исполнителя или настроение:\n"
-            "• 'найти Pink Floyd'\n"
-            "• 'рок 80х'\n"
-            "• 'ambient для сна'\n"
-            "• 'лучшие хиты 2024'\n\n"
-            "⏱️ *Время загрузки:*\n"
-            "• Короткие треки (<5 мин) — ~10-30 сек\n"
-            "• Средние треки (5-30 мин) — ~1-3 мин\n"
-            "• Длинные треки (30+ мин) — ~3-10 мин\n\n"
-            "📦 *Лимиты:*\n"
-            "• Макс. длительность: 30 мин\n"
-            "• Макс. размер: 100 MB",
-            parse_mode="Markdown"
-        )
         return
 
     if "🤖 Авто" in text: user_settings.setdefault(chat_id, {})['engine'] = 'auto'
     elif "💎 Только Gemini" in text: user_settings.setdefault(chat_id, {})['engine'] = 'gemini'
     elif "🧿 Только Hugging Face" in text: user_settings.setdefault(chat_id, {})['engine'] = 'hf'
-
+    
     if any(x in text for x in ["🤖 Авто", "💎 Только Gemini", "🧿 Только Hugging Face"]):
         save_settings(user_settings) # Сохраняем при изменении
         await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(), parse_mode="Markdown")
@@ -366,13 +316,6 @@ async def handle_text(message: types.Message, bot: Bot):
 
     if text == "⬅️ Назад":
         await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu())
-        return
-
-    # Проверка на музыкальные запросы
-    music_triggers = ["найти музыку", "найди песню", "скачай трек", "включи музыку"]
-    if any(trigger in text.lower() for trigger in music_triggers):
-        status_msg = await message.answer("🎵 *Ищу музыку...*")
-        await conduct_ai_ritual(message, bot, text, status_msg)
         return
 
     # Остальная логика handle_text...
@@ -397,9 +340,9 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         hf_res = get_hf_response(text=input_text, task="text")
         if hf_res:
             logger.info(f"✅ HF Response received for user {chat_id}")
-
-            # Parse and execute tools с chat_id
-            clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
+            
+            # Parse and execute tools
+            clean_text, tool_result = parse_and_execute_tools(hf_res)
             
             await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
             await message.answer(f"🧿 {clean_text}")
@@ -455,6 +398,10 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
                 clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
                 await status_msg.edit_text(clean_text)
                 await message.answer("Мои прозрения верны?", reply_markup=kb)
+                if response.text:
+                    clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
+                    await status_msg.edit_text(clean_text)
+                    await message.answer("Мои прозрения верны?", reply_markup=kb)
                 return
             except Exception:
                 reset_chat(chat_id, model)
@@ -506,11 +453,11 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
             continue
     
     if status_msg: await status_msg.edit_text("🌀 *Эфир Google зашумлен, открываю канал Hugging Face...*")
-
+    
     hf_res = get_hf_response(text=input_text, task="text")
     if hf_res:
-        # Парсим и выполняем инструменты с chat_id
-        clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
+        # Парсим и выполняем инструменты
+        clean_text, tool_result = parse_and_execute_tools(hf_res)
         
         if status_msg: 
             await status_msg.edit_text("🧿 *Поток данных из облака HF сформирован:*")
@@ -539,27 +486,23 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
 
     video_id = callback.data.split(":")[1]
     url = f"https://www.youtube.com/watch?v={video_id}"
-    chat_id = str(callback.message.chat.id)
-
+    
     await callback.answer("⏳ Начинаю магию конвертации...")
-    status_msg = await bot.send_message(chat_id, f"⬇️ Скачиваю и конвертирую: {url}")
-
-    # Передаём chat_id для загрузки пользовательских лимитов
-    # download_audio возвращает 3 значения: (file_path, title, duration)
-    file_path, title, duration = download_audio(url, chat_id=chat_id)
-
+    status_msg = await bot.send_message(callback.message.chat.id, f"⬇️ Скачиваю и конвертирую: {url}")
+    
+    file_path, title = download_audio(url)
+    
     if file_path and os.path.exists(file_path):
         try:
-            duration_text = f" ({duration} сек)" if duration else ""
-            await status_msg.edit_text(f"📤 Отправляю: {title}{duration_text}...")
+            await status_msg.edit_text(f"📤 Отправляю: {title}...")
             audio_file = FSInputFile(file_path)
             # Отправляем с реальным названием
             await bot.send_audio(
-                callback.message.chat.id,
-                audio_file,
-                title=title,
+                callback.message.chat.id, 
+                audio_file, 
+                title=title, 
                 performer="AI Prophet Media",
-                caption=f"🎧 *{title}*{duration_text}\n🔗 [Источник]({url})"
+                caption=f"🎧 *{title}*\n🔗 [Источник]({url})"
             )
             await status_msg.delete()
         except Exception as e:
@@ -568,83 +511,42 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
             # Чистим файл
             if os.path.exists(file_path):
                 os.remove(file_path)
+            cleanup_file(file_path)
     else:
-        await status_msg.edit_text("❌ Не удалось скачать аудио. Попробуй другой трек или напиши текстом.")
+        await status_msg.edit_text("❌ Не удалось скачать аудио. Возможно, видео слишком длинное или недоступно.")
 
 @router.message(F.voice | F.audio)
 async def handle_audio(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
+    # Не чистим всё подряд, только файлы этого же типа если нужно
+    
     audio = message.voice or message.audio
     file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
     file_path = os.path.join(TEMP_DIR, file_name)
-
-    # Скачиваем файл
+    
     await bot.download(audio, destination=file_path)
-
-    # Проверяем, что файл скачался успешно
-    if not os.path.exists(file_path):
-        logger.error(f"❌ Не удалось скачать аудио: {file_path}")
-        await message.answer("😔 Не удалось сохранить аудио. Попробуй ещё раз.")
-        return
-
-    file_size = os.path.getsize(file_path)
-    if file_size == 0:
-        logger.error(f"❌ Пустой аудио файл: {file_path}")
-        await message.answer("😔 Аудио файл пуст. Попробуй ещё раз.")
-        cleanup_file(file_path)
-        return
-
-    logger.info(f"📥 Аудио скачано: {file_path}, {file_size / 1024:.1f} KB")
-
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
-
+    
     logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
-
-    # Таймаут зависит от типа аудио: voice (до 60 сек) или audio (файл, может быть длиннее)
-    audio_duration = 60 if message.voice else 90
-
-    text = None
-
-    # === ЛОГИКА С FALLBACK ДЛЯ ЛЮБОГО ДВИЖКА ===
+    
     if engine == "hf":
-        # Пробуем HF сначала
         text = get_hf_response(image_path=file_path, task="audio")
-        logger.info(f"🧿 HF Transcription result: {text[:50] if text else 'None'}...")
-
-        # Если HF не справился, пробуем Gemini как бэкап
-        if not text:
-            logger.info("♻️ HF failed, falling back to Gemini.")
-            text = transcribe_with_gemini(file_path, timeout_sec=audio_duration)
-            logger.info(f"💎 Gemini Fallback result: {text[:50] if text else 'None'}...")
-
-    elif engine == "gemini":
-        # Пробуем Gemini сначала
-        text = transcribe_with_gemini(file_path, timeout_sec=audio_duration)
-        logger.info(f"💎 Gemini Transcription result: {text[:50] if text else 'None'}...")
-
+    else:
+        text = transcribe_with_gemini(file_path)
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
-            logger.info("♻️ Gemini failed, falling back to HF.")
+            logger.info("♻️ Gemini Transcription failed, falling back to HF.")
             text = get_hf_response(image_path=file_path, task="audio")
-            logger.info(f"🧿 HF Fallback result: {text[:50] if text else 'None'}...")
-
-    else:  # engine == "auto"
-        # Auto: сначала Gemini (быстрее), потом HF
-        text = transcribe_with_gemini(file_path, timeout_sec=audio_duration)
-        logger.info(f"💎 Gemini (auto) result: {text[:50] if text else 'None'}...")
-
-        if not text:
-            logger.info("♻️ Gemini failed, falling back to HF.")
-            text = get_hf_response(image_path=file_path, task="audio")
-            logger.info(f"🧿 HF Fallback result: {text[:50] if text else 'None'}...")
-
+    
     cleanup_file(file_path)
-
+    
     if text:
         logger.info(f"✅ Audio transcribed: {text[:50]}...")
+        # Отправляем транскрипцию как отдельное сообщение, чтобы она не стерлась в истории
         await message.answer(f"👤 *Прочитал в эфире:* \n\n_{text}_", parse_mode="Markdown")
+        # Создаем новый статус для процесса раздумий
         status_msg = await message.answer("🧿 *Медитирую над смыслом...*")
         await conduct_ai_ritual(message, bot, text, status_msg)
     else:
-        await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова... Попробуй ещё раз или напиши текстом.")
+        await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова...")
