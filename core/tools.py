@@ -75,10 +75,20 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
     media_type: 'audio' (музыка) или 'video' (клипы/видео)
     count: количество результатов (по умолчанию 5)
     chat_id: ID чата для загрузки пользовательских лимитов
+    
+    Returns:
+        dict: {
+            "query": str,
+            "media_type": str,
+            "tracks": List[dict],  # каждый dict: {title, url, duration, thumbnail}
+            "count": int,
+            "text": str  # отформатированный текст для отправки пользователю
+        }
     """
     import os
     import random
     import json
+    from urllib.parse import parse_qs, urlparse
 
     # Загрузка лимитов пользователя
     limits_file = "temp/user_limits.json"
@@ -116,10 +126,10 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
     if media_type not in ['audio', 'video']: media_type = 'audio'
 
     logger.info(f"📹 Поиск медиа: query='{query}', type={media_type}, count={count}")
-    
+
     all_videos = []
     queries = []
-    
+
     # 1. Формируем умные запросы
     if media_type == 'audio':
         # Для музыки ищем треки с текстом или аудио (чтобы не клипы)
@@ -135,10 +145,10 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
             f"{query} music video",
             f"{query} hd",
         ]
-    
+
     # Если просили 1 трек, берем самый точный запрос
     if count == 1:
-        queries = [queries[0]] 
+        queries = [queries[0]]
     else:
         # Иначе миксуем для разнообразия
         queries = random.sample(queries, min(2, len(queries)))
@@ -152,51 +162,176 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
                     all_videos.extend(results)
         except Exception as e:
             logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
-            
+
     # 3. Дедупликация и рандом
-    unique_videos = {} 
+    unique_videos = {}
     for v in all_videos:
         # DDG возвращает 'content' как ссылку
         url = v.get('content') or v.get('click_url')
         if url and 'youtube.com' in url: # Фильтруем только YouTube
             unique_videos[url] = v
-            
+
     final_playlist = list(unique_videos.values())
-    
+
     # Если это плейлист (>1), перемешиваем
     if count > 1:
         random.shuffle(final_playlist)
-    
+
     # Обрезаем
     final_playlist = final_playlist[:count]
-    
-    # 4. Формируем ответ
+
+    # 4. Формируем структурированный результат
     tracks = []
-    if final_playlist:
-        for i, video in enumerate(final_playlist, 1):
-            title = video.get('title', 'Unknown Track')
-            url = video.get('content') or video.get('click_url')
-            
-            # Иконка зависит от типа
+    for i, video in enumerate(final_playlist, 1):
+        title = video.get('title', 'Unknown Track')
+        url = video.get('content') or video.get('click_url')
+        
+        # Пытаемся извлечь duration из URL или ставим 0
+        duration = 0
+        thumbnail = ""
+        
+        # Извлекаем video_id для thumbnail
+        parsed = urlparse(url)
+        video_id = parse_qs(parsed.query).get('v', [None])[0]
+        if not video_id:
+            # Пробуем из короткой ссылки youtu.be
+            video_id = parsed.path.strip('/')
+        
+        if video_id:
+            thumbnail = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+        tracks.append({
+            "title": title,
+            "url": url,
+            "duration": duration,
+            "thumbnail": thumbnail,
+            "index": i
+        })
+
+    # Формируем текстовое представление
+    tracks_text = []
+    if tracks:
+        for track in tracks:
             icon = "🎵" if media_type == 'audio' else "🎬"
-            tracks.append(f"{i}. {icon} [{title}]({url})")
-            
+            tracks_text.append(f"{track['index']}. {icon} [{track['title']}]({track['url']})")
         status_line = f"✨ Найдено {len(tracks)} рез. по запросу: {query}"
     else:
         # Fallback (DDG ссылки на поиск)
         status_line = "⚠️ Прямой поток недоступен, вот поисковая выдача:"
         search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
-        tracks.append(f"1. 🔍 [Найти '{query}' на YouTube]({search_url})")
+        tracks_text.append(f"1. 🔍 [Найти '{query}' на YouTube]({search_url})")
+        # Добавляем fallback трек
+        tracks.append({
+            "title": f"Search: {query}",
+            "url": search_url,
+            "duration": 0,
+            "thumbnail": "",
+            "index": 1,
+            "is_fallback": True
+        })
 
-    tracks_list = "\n".join(tracks)
-    
     header = f"🎧 *Аудио-поток: {query}*" if media_type == 'audio' else f"📺 *Видео-поток: {query}*"
-    
-    result = (
+
+    tracks_joined = '\n'.join(tracks_text)
+    text_result = (
         f"{header}\n\n"
-        f"{tracks_list}\n\n"
+        f"{tracks_joined}\n\n"
         f"{status_line}"
     )
+
+    return {
+        "query": query,
+        "media_type": media_type,
+        "tracks": tracks,
+        "count": len(tracks),
+        "text": text_result
+    }
+
+async def send_playlist(
+    bot,
+    chat_id: int,
+    tracks: list,
+    status_msg=None,
+    chat_id_str: str = None
+):
+    """
+    Последовательно скачивает и отправляет треки в Telegram.
+    
+    bot: Bot instance
+    chat_id: ID чата
+    tracks: Список словарей [{title, url, duration, thumbnail}, ...]
+    status_msg: Сообщение для обновления статуса
+    chat_id_str: строковое представление chat_id для лимитов
+    
+    Returns:
+        dict: {
+            "sent": int,  # количество отправленных треков
+            "failed": int,  # количество неудач
+            "tracks": list  # отправленные треки
+        }
+    """
+    import os
+    from aiogram.types import FSInputFile
+    
+    result = {
+        "sent": 0,
+        "failed": 0,
+        "tracks": []
+    }
+    
+    total = len(tracks)
+    
+    for i, track in enumerate(tracks, 1):
+        # Пропускаем fallback треки (это просто ссылки на поиск)
+        if track.get("is_fallback"):
+            logger.warning(f"⚠️ Пропуск fallback трека: {track['title']}")
+            result["failed"] += 1
+            continue
+        
+        # Обновляем статус
+        if status_msg:
+            try:
+                await status_msg.edit_text(
+                    f"⬇️ Трек {i}/{total}: {track['title']}..."
+                )
+            except Exception:
+                pass  # Игнорируем ошибки обновления сообщения
+        
+        logger.info(f"🎵 Скачивание трека {i}/{total}: {track['title']}")
+        
+        try:
+            # Скачиваем аудио
+            file_path, title, duration = download_audio(
+                track['url'], 
+                chat_id=chat_id_str
+            )
+            
+            if file_path and os.path.exists(file_path):
+                # Отправляем аудио
+                audio_file = FSInputFile(file_path)
+                duration_text = f" ({duration} сек)" if duration else ""
+                
+                await bot.send_audio(
+                    chat_id=chat_id,
+                    audio=audio_file,
+                    title=title or track['title'],
+                    performer="AI Prophet",
+                    caption=f"🎧 {track['title']}{duration_text}"
+                )
+                
+                # Удаляем файл
+                os.remove(file_path)
+                logger.info(f"✅ Отправлен трек: {track['title']}")
+                
+                result["sent"] += 1
+                result["tracks"].append(track)
+            else:
+                logger.error(f"❌ Не удалось скачать трек: {track['title']}")
+                result["failed"] += 1
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки трека {track['title']}: {e}")
+            result["failed"] += 1
     
     return result
 
