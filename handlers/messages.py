@@ -247,6 +247,42 @@ async def cmd_playlist(message: types.Message, bot: Bot):
     else:
         await status_msg.edit_text("😔 Не удалось найти музыку по этому запросу. Попробуй другой жанр или исполнителя.")
 
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    """
+    Команда /help — описание всех возможностей бота.
+    """
+    help_text = (
+        "📖 *Полный список команд AI Prophet*\n\n"
+        "🔮 *Основные команды:*\n"
+        "`/start` — Запустить бота и показать главное меню\n"
+        "`/help` — Показать эту справку\n"
+        "`/playlist` — Создать плейлист музыки\n\n"
+        "🎵 *Музыкальные команды:*\n"
+        "`/playlist <жанр/исполнитель> [кол-во]` — Создать плейлист\n"
+        "Примеры:\n"
+        "• `/playlist Pink Floyd 5`\n"
+        "• `/playlist рок 80х`\n"
+        "• `/playlist ambient для сна 3`\n\n"
+        "🎛 *Кнопки меню:*\n"
+        "• 🔮 *Предсказание* — задать вопрос оракулу\n"
+        "• 🎙 *Голос Судьбы* — отправить голосовое сообщение\n"
+        "• 🖼 *Видение* — отправить фото для анализа\n"
+        "• 🎵 *Музыка* — найти музыку по запросу\n"
+        "• ⚙️ *Настройки* — выбрать движок (Gemini/HF/Auto)\n"
+        "• 🎛 *Лимиты* — настроить лимиты на аудио\n"
+        "• ℹ️ *Помощь* — краткая инструкция\n\n"
+        "💡 *Советы:*\n"
+        "• Голосовые до 60 сек — быстрое распознавание\n"
+        "• Для музыки пиши: 'найти Pink Floyd', 'рок 80х', 'ambient для сна'\n"
+        "• ⏱️ Короткие треки (<5 мин) скачиваются за секунды\n"
+        "• 🕐 Длинные треки (30+ мин) могут загружаться несколько минут\n\n"
+        "🔧 *Технические команды:*\n"
+        "`/dizel0110` — VIP меню (для разработчика)\n\n"
+        "_Бот использует Gemini 2.5 Flash и Hugging Face (Qwen/Whisper)_"
+    )
+    await message.answer(help_text, parse_mode="Markdown")
+
 @router.message(F.photo)
 async def handle_photo(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
@@ -383,8 +419,13 @@ async def handle_text(message: types.Message, bot: Bot):
 
     if text == "⚙️ Настройки":
         engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:", 
+        await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:",
                            reply_markup=get_settings_menu(engine), parse_mode="Markdown")
+        return
+
+    if text == "ℹ️ Помощь":
+        # Перенаправляем на команду /help
+        await cmd_help(message)
         return
 
     if "🤖 Авто" in text: user_settings.setdefault(chat_id, {})['engine'] = 'auto'
