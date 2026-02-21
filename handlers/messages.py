@@ -482,13 +482,18 @@ async def handle_audio(message: types.Message, bot: Bot):
         transcribe_path = file_path
 
     if engine == "hf":
+        logger.info("🔄 Запуск HF Whisper транскрибации...")
         text = get_hf_response(image_path=transcribe_path, task="audio")
+        logger.info(f"📥 HF Whisper результат: {text[:50] if text else 'None'}...")
     else:
+        logger.info("🔄 Запуск Gemini транскрибации...")
         text = transcribe_with_gemini(transcribe_path)
+        logger.info(f"📥 Gemini результат: {text[:50] if text else 'None'}...")
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
             logger.info("♻️ Gemini Transcription failed, falling back to HF.")
             text = get_hf_response(image_path=transcribe_path, task="audio")
+            logger.info(f"📥 HF Whisper результат (fallback): {text[:50] if text else 'None'}...")
 
     cleanup_file(file_path)
     if transcribe_path != file_path:

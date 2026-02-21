@@ -52,15 +52,19 @@ def get_hf_response(text=None, image_path=None, task="text"):
                 audio_data = f.read()
 
             logger.info(f"🎵 HF Whisper: отправка {len(audio_data)} байт на {api_url}")
+            logger.info(f"📁 Файл: {image_path}")
 
             # Whisper принимает аудио напрямую (binary data), без Content-Type
             headers = {"Authorization": f"Bearer {CLEAN_HF_TOKEN}"}
+            logger.info(f"📤 Отправка запроса к HF Whisper...")
             response = requests.post(api_url, headers=headers, data=audio_data, timeout=120)
 
             logger.info(f"📥 HF Whisper response status: {response.status_code}")
+            logger.info(f"📄 HF Whisper response headers: {dict(response.headers)}")
 
             if response.status_code == 200:
                 result = response.json()
+                logger.info(f"📦 HF Whisper response JSON: {result}")
                 logger.info(f"✅ Whisper результат: {result.get('text', '')[:100]}...")
                 return result.get("text", "").strip()
             else:
@@ -146,8 +150,8 @@ def transcribe_with_gemini(file_path, timeout_sec=60):
                 bytes_data = f.read()
 
             # Пробуем разные MIME types для совместимости
-            # Telegram voice = OGG Opus
-            mime_types_to_try = ['audio/opus', 'audio/ogg', 'audio/webm']
+            # WAV после конвертации или OGG из Telegram
+            mime_types_to_try = ['audio/wav', 'audio/wave', 'audio/opus', 'audio/ogg', 'audio/webm']
 
             for mime_type in mime_types_to_try:
                 try:
@@ -165,7 +169,7 @@ def transcribe_with_gemini(file_path, timeout_sec=60):
                     )
 
                     if response and response.text:
-                        logger.info(f"✅ Gemini ответил с MIME={mime_type}")
+                        logger.info(f"✅ Gemini ответил с MIME={mime_type}: {response.text[:50]}...")
                         result["response"] = response
                         return
                     else:
