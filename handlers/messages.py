@@ -58,13 +58,27 @@ def cleanup_user_temp(chat_id):
     for f in glob.glob(pattern_audio):
         cleanup_file(f)
 
-def get_main_menu():
+def get_main_menu(vip_mode: bool = False):
+    """Главное меню: обычное или VIP"""
     web_app_url = "https://dizel0110.github.io/ai_prophet/"
-    kb = [
-        [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
-        [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
-        [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
-    ]
+    
+    if vip_mode:
+        # VIP меню
+        kb = [
+            [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
+            [KeyboardButton(text="🔮 VIP Предсказание"), KeyboardButton(text="🎙 VIP Голос")],
+            [KeyboardButton(text="🖼 VIP Видение"), KeyboardButton(text="🌐 VIP Поиск")],
+            [KeyboardButton(text="🎵 VIP Музыка")],
+            [KeyboardButton(text="🔓 Выйти из VIP")]
+        ]
+    else:
+        # Обычное HF меню
+        kb = [
+            [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
+            [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
+            [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
+        ]
+    
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 def get_settings_menu(current_engine):
@@ -202,6 +216,10 @@ async def cmd_start(message: types.Message):
     username = message.from_user.first_name or "путник"
     greeting = get_adaptive_greeting(username)
     
+    # Проверяем VIP режим
+    chat_id = str(message.chat.id)
+    is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
+
     welcome_text = (
         f"{greeting}\n\n"
         f"Я AI Prophet — твой мультимодальный ИИ-компаньон.\n\n"
@@ -216,10 +234,10 @@ async def cmd_start(message: types.Message):
         f"• `/help` — полная справка по всем командам\n\n"
         f"👇 *Выбери действие в меню ниже или просто напиши мне!*"
     )
-    
+
     await message.answer(
         welcome_text,
-        reply_markup=get_main_menu(),
+        reply_markup=get_main_menu(vip_mode=is_vip),
         parse_mode="Markdown"
     )
 
@@ -579,11 +597,15 @@ async def handle_text(message: types.Message, bot: Bot):
     
     if any(x in text for x in ["🤖 Авто", "💎 Только Gemini", "🧿 Только Hugging Face"]):
         save_settings(user_settings) # Сохраняем при изменении
-        await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(), parse_mode="Markdown")
+        chat_id = str(message.chat.id)
+        is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
+        await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(vip_mode=is_vip), parse_mode="Markdown")
         return
 
     if text == "⬅️ Назад":
-        await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu())
+        chat_id = str(message.chat.id)
+        is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
+        await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu(vip_mode=is_vip))
         return
 
     # Остальная логика handle_text...
@@ -809,11 +831,13 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
             await message.answer(tool_result, parse_mode="Markdown")
     else:
         final_text = "😔 Сегодня звезды не отвечают мне... Попробуй позже."
-        if status_msg: 
+        chat_id = str(message.chat.id)
+        is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
+        if status_msg:
             await status_msg.edit_text(final_text)
-            await message.answer("Вернись, когда эфир очистится.", reply_markup=get_main_menu())
-        else: 
-            await message.answer(final_text, reply_markup=get_main_menu())
+            await message.answer("Вернись, когда эфир очистится.", reply_markup=get_main_menu(vip_mode=is_vip))
+        else:
+            await message.answer(final_text, reply_markup=get_main_menu(vip_mode=is_vip))
 
 @router.callback_query(F.data.startswith("dl_audio:"))
 async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):

@@ -393,16 +393,20 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
         'max_filesize': max_filesize_mb * 1024 * 1024,
 
         # Эмуляция браузера для обхода блокировок
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'referer': 'https://www.youtube.com/',
 
-        # Обход блокировок YouTube
+        # Обход блокировок YouTube - используем все доступные клиенты
         'extractor_args': {
             'youtube': {
-                'player_client': ['web', 'web_embedded'],
+                'player_client': ['ios', 'web', 'web_embedded', 'tv_embedded'],
                 'player_skip': ['webpage'],
             }
         },
+        
+        # Пробуем разные экстракторы
+        'extract_flat': False,
+        'ignoreerrors': True,
     }
 
     try:

@@ -97,16 +97,14 @@ async def exit_vip(message: types.Message):
         user_settings[chat_id]['vip_mode'] = False
         save_settings(user_settings)
         
+        from handlers.messages import get_main_menu
+        
         await message.answer(
             "🔓 *Выход из VIP режима*\n\n"
             "Теперь вы используете обычный режим (Hugging Face).\n\n"
             "Для возврата используйте `/dizel0110 <пароль>`",
             parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(keyboard=[
-                [KeyboardButton(text="📱 Открыть Mini App")],
-                [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
-                [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
-            ], resize_keyboard=True)
+            reply_markup=get_main_menu(vip_mode=False)
         )
     else:
         await message.answer("ℹ️ Вы не в VIP режиме.")
