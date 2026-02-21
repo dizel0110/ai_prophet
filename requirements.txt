@@ -11,6 +11,3 @@ mcp
 huggingface-hub
 yt-dlp
 ffmpeg-python
-librosa
-transformers
-torch
