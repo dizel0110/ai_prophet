@@ -26,7 +26,7 @@ FALLBACK_MODELS = [
 HF_TASKS = {
     "text": "Qwen/Qwen2.5-7B-Instruct",
     "vision": "meta-llama/Llama-3.2-11B-Vision-Instruct", # Классика вижена для роутера
-    "audio": "openai/whisper-large-v3-turbo",  # Быстрая и точная (v3 удалена)
+    "audio": "distil-whisper/distil-large-v3",  # Быстрая и точная distil модель
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 }
 
