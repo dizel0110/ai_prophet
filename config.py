@@ -7,6 +7,7 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 VIP_PASSWORD = os.getenv("VIP_PASSWORD", "prophet2026")  # Пароль для VIP режима
+VIP_RESET_PASSWORD = os.getenv("VIP_RESET_PASSWORD", "reset2026")  # Пароль сброса блокировки
 
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = "dizel0110"

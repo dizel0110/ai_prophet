@@ -569,6 +569,13 @@ async def handle_text(message: types.Message, bot: Bot):
         await exit_vip(message)
         return
 
+    # Проверка на команду сброса блокировки (если ввели текстом)
+    if text.startswith("/resetvip"):
+        from handlers.vip import reset_vip_lock
+        message.text = text  # Сохраняем команду
+        await reset_vip_lock(message)
+        return
+
     # Проверка на редактирование голосового сообщения
     if user_settings.get(chat_id, {}).get('pending_voice_edit'):
         # Пользователь ввёл текст для редактирования распознанного голоса
