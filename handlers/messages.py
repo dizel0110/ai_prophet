@@ -647,66 +647,66 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         # Send tool result if any
         if tool_result:
             if tool_result.get("type") == "playlist":
-                    # Плейлист — отправляем через send_playlist
-                    from core.tools import send_playlist
-                    playlist_data = tool_result.get("data", {})
-                    tracks = playlist_data.get("tracks", [])
-                    
-                    await message.answer(f"🎵 {playlist_data.get('text', 'Загрузка плейлиста...')}")
-                    
-                    # Запускаем отправку плейлиста
-                    result = await send_playlist(
-                        bot=bot,
-                        chat_id=message.chat.id,
-                        tracks=tracks,
-                        status_msg=None,
-                        chat_id_str=chat_id
-                    )
-                    
-                    if result["sent"] > 0:
-                        await message.answer(f"✅ Отправлено {result['sent']} из {len(tracks)} треков")
-                    elif result["failed"] > 0:
-                        await message.answer(f"⚠️ Не удалось скачать {result['failed']} треков")
-                        
-                elif tool_result.get("type") == "single_audio":
-                    # Одиночный трек — показываем кнопки
-                    playlist_data = tool_result.get("data", {})
-                    text_result = playlist_data.get("text", "")
-                    tracks = playlist_data.get("tracks", [])
-                    query = playlist_data.get("query", "")
+                # Плейлист — отправляем через send_playlist
+                from core.tools import send_playlist
+                playlist_data = tool_result.get("data", {})
+                tracks = playlist_data.get("tracks", [])
 
-                    # Пытаемся найти ВСЕ ссылки YouTube для кнопок
-                    import re
-                    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                await message.answer(f"🎵 {playlist_data.get('text', 'Загрузка плейлиста...')}")
 
-                    # Ищем ссылки (youtu.be или youtube.com)
-                    links = re.findall(r'https://(?:www\.)?youtu(?:be\.com/watch\?v=|\.be/)([\w-]+)', text_result)
-                    buttons = []
+                # Запускаем отправку плейлиста
+                result = await send_playlist(
+                    bot=bot,
+                    chat_id=message.chat.id,
+                    tracks=tracks,
+                    status_msg=None,
+                    chat_id_str=chat_id
+                )
 
-                    if links:
-                        # Создаем ряд кнопок: [⬇️ 1] [⬇️ 2] ...
-                        buttons_row = []
-                        for i, video_id in enumerate(links, 1):
-                            # Лимит 5 кнопок в ряд, чтобы не засорять
-                            if i > 5: break
-                            buttons_row.append(
-                                InlineKeyboardButton(text=f"⬇️ {i}", callback_data=f"dl_audio:{video_id}")
-                            )
-                        buttons.append(buttons_row)
-                    
-                    # Добавляем кнопку "Скачать всё" для плейлистов
-                    if len(tracks) > 1 and query:
-                        # Кнопка "Скачать всё" с данными для плейлиста
-                        buttons.append([
-                            InlineKeyboardButton(
-                                text=f"🎧 Скачать всё ({len(tracks)} тр.)",
-                                callback_data=f"dl_playlist:{query}:{len(tracks)}"
-                            )
-                        ])
+                if result["sent"] > 0:
+                    await message.answer(f"✅ Отправлено {result['sent']} из {len(tracks)} треков")
+                elif result["failed"] > 0:
+                    await message.answer(f"⚠️ Не удалось скачать {result['failed']} треков")
 
-                    kb = InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
+            elif tool_result.get("type") == "single_audio":
+                # Одиночный трек — показываем кнопки
+                playlist_data = tool_result.get("data", {})
+                text_result = playlist_data.get("text", "")
+                tracks = playlist_data.get("tracks", [])
+                query = playlist_data.get("query", "")
 
-                    await message.answer(f"🎵 {text_result}", reply_markup=kb, disable_web_page_preview=True)
+                # Пытаемся найти ВСЕ ссылки YouTube для кнопок
+                import re
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+                # Ищем ссылки (youtu.be или youtube.com)
+                links = re.findall(r'https://(?:www\.)?youtu(?:be\.com/watch\?v=|\.be/)([\w-]+)', text_result)
+                buttons = []
+
+                if links:
+                    # Создаем ряд кнопок: [⬇️ 1] [⬇️ 2] ...
+                    buttons_row = []
+                    for i, video_id in enumerate(links, 1):
+                        # Лимит 5 кнопок в ряд, чтобы не засорять
+                        if i > 5: break
+                        buttons_row.append(
+                            InlineKeyboardButton(text=f"⬇️ {i}", callback_data=f"dl_audio:{video_id}")
+                        )
+                    buttons.append(buttons_row)
+
+                # Добавляем кнопку "Скачать всё" для плейлистов
+                if len(tracks) > 1 and query:
+                    # Кнопка "Скачать всё" с данными для плейлиста
+                    buttons.append([
+                        InlineKeyboardButton(
+                            text=f"🎧 Скачать всё ({len(tracks)} тр.)",
+                            callback_data=f"dl_playlist:{query}:{len(tracks)}"
+                        )
+                    ])
+
+                kb = InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
+
+                await message.answer(f"🎵 {text_result}", reply_markup=kb, disable_web_page_preview=True)
             return
         else:
             logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
