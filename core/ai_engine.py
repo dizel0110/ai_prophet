@@ -37,7 +37,7 @@ def get_ai_chat(chat_id, model_name=None):
             return None
     return _chats[session_key]
 
-def transcribe_local(audio_path, model_name="openai/whisper-tiny"):
+def transcribe_local(audio_path, model_name="openai/whisper-base"):
     """
     Локальная транскрибация через transformers
     model_name: "openai/whisper-tiny" (~100MB) или "openai/whisper-base" (~150MB)
@@ -63,13 +63,19 @@ def transcribe_local(audio_path, model_name="openai/whisper-tiny"):
         input_features = inputs.input_features if hasattr(inputs, 'input_features') else inputs['input_features']
         logger.info(f"📦 Input features shape: {input_features.shape}")
         
+        # Создаём attention mask для надёжности
+        attention_mask = torch.ones_like(input_features)
+        
         logger.info("🧠 Инференс...")
         with torch.no_grad():
-            # Whisper требует явного указания языка и задачи
+            # Whisper transcribe с указанием языка (русский + английский)
+            # language=None позволяет модели автоматически определять язык
             predicted_ids = model.generate(
                 input_features,
+                attention_mask=attention_mask,
+                task="transcribe",
                 language="russian",
-                task="transcribe"
+                suppress_tokens=[-1]  # Подавляем специальные токены
             )
         logger.info(f"📝 Predicted IDs shape: {predicted_ids.shape}")
 

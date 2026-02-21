@@ -856,25 +856,31 @@ async def handle_voice_callback(callback: types.CallbackQuery, bot: Bot):
     data = callback.data.split(":")
     action = data[0]
     chat_id = data[1] if len(data) > 1 else str(callback.message.chat.id)
-    
+
     if action == "voice_confirm":
         # Получаем сохранённый текст и выполняем
         pending_text = user_settings.get(chat_id, {}).get('pending_voice_text')
-        
+
         if pending_text:
             await callback.answer("✅ Выполняю...")
             await callback.message.answer("🧿 *Медитирую над смыслом...*")
             await conduct_ai_ritual(callback.message, bot, pending_text, None)
-            
+
             # Очищаем сохранённый текст
             user_settings.get(chat_id, {}).pop('pending_voice_text', None)
         else:
             await callback.answer("❌ Текст не найден. Отправьте голосовое ещё раз.")
-    
+
     elif action == "voice_edit":
-        await callback.answer("✏️ Введите ваш текст:")
+        await callback.answer("✏️ Введите новый текст:")
+        # Сохраняем флаг и ждём следующее сообщение
         user_settings.setdefault(chat_id, {})['pending_voice_edit'] = True
-    
+        # Отправляем инструкцию
+        await callback.message.answer(
+            "✏️ *Введите исправленный текст:*\n\n"
+            "_Просто отправьте сообщение с правильным текстом, и я выполню его._"
+        )
+
     elif action == "voice_cancel":
         await callback.answer("❌ Отменено")
         # Очищаем сохранённый текст
