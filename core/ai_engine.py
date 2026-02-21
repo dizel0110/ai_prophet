@@ -37,6 +37,42 @@ def get_ai_chat(chat_id, model_name=None):
             return None
     return _chats[session_key]
 
+def transcribe_local(audio_path, model_name="jonatasgrosman/wav2vec2-large-xlsr-53-russian"):
+    """
+    Локальная транскрибация через transformers
+    """
+    try:
+        from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+        import torch
+        import librosa
+
+        logger.info(f"🏠 Загрузка локальной модели: {model_name}")
+        
+        processor = Wav2Vec2Processor.from_pretrained(model_name)
+        model = Wav2Vec2ForCTC.from_pretrained(model_name)
+
+        logger.info("📥 Загрузка аудио (16kHz)...")
+        speech_array, sr = librosa.load(audio_path, sr=16000)
+        
+        logger.info("🔄 Обработка процессором...")
+        inputs = processor(speech_array, sampling_rate=16000, return_tensors="pt")
+
+        logger.info("🧠 Инференс...")
+        with torch.no_grad():
+            logits = model(inputs.input_values).logits
+
+        predicted_ids = torch.argmax(logits, dim=-1)
+        transcription = processor.batch_decode(predicted_ids)
+
+        result = transcription[0] if transcription else ""
+        logger.info(f"✅ Локальная транскрибация: {result[:50]}...")
+        return result.strip()
+
+    except Exception as e:
+        logger.error(f"❌ Локальная транскрибация ошибка: {e}")
+        return None
+
+
 def get_hf_response(text=None, image_path=None, task="text"):
     if not CLEAN_HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
 
