@@ -46,7 +46,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
     try:
         # === АУДИО (Whisper) ===
         if task == "audio" and image_path:
-            api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+            api_url = f"https://router.huggingface.co/models/{model_id}"
 
             with open(image_path, "rb") as f:
                 audio_data = f.read()
