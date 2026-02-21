@@ -58,11 +58,14 @@ def transcribe_local(audio_path, model_name="openai/whisper-tiny"):
         
         logger.info("🔄 Обработка процессором...")
         inputs = processor(speech_array, sampling_rate=16000, return_tensors="pt")
-        logger.info(f"📦 Input shape: {inputs.input_values.shape}")
+        
+        # Whisper использует input_features, а не input_values
+        input_features = inputs.input_features if hasattr(inputs, 'input_features') else inputs['input_features']
+        logger.info(f"📦 Input features shape: {input_features.shape}")
         
         logger.info("🧠 Инференс...")
         with torch.no_grad():
-            predicted_ids = model.generate(inputs.input_values)
+            predicted_ids = model.generate(input_features)
         logger.info(f"📝 Predicted IDs shape: {predicted_ids.shape}")
 
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
