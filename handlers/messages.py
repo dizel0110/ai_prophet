@@ -80,6 +80,27 @@ def get_settings_menu(current_engine):
     kb.append([KeyboardButton(text="⬅️ Назад")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
+def get_voice_confirmation_keyboard(chat_id, text):
+    """
+    Создает inline-клавиатуру для подтверждения голосового сообщения.
+    """
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    # Сохраняем текст в user_settings для последующего выполнения
+    voice_confirm_key = f"voice_confirm_{chat_id}"
+    user_settings.setdefault(chat_id, {})['pending_voice_text'] = text
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Выполнить", callback_data=f"voice_confirm:{chat_id}"),
+            InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"voice_edit:{chat_id}")
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отмена", callback_data=f"voice_cancel:{chat_id}")
+        ]
+    ])
+    return kb
+
 def parse_steps_and_create_kb(text, chat_id):
     """Парсит текст на наличие 'ШАГ:' и создает клавиатуру"""
     kb = []
@@ -434,6 +455,20 @@ async def handle_text(message: types.Message, bot: Bot):
     text = message.text
     if not text: return
 
+    # Проверка на редактирование голосового сообщения
+    if user_settings.get(chat_id, {}).get('pending_voice_edit'):
+        # Пользователь ввёл текст для редактирования распознанного голоса
+        user_settings.setdefault(chat_id, {})['pending_voice_text'] = text
+        user_settings[chat_id].pop('pending_voice_edit', None)
+        
+        await message.answer(
+            f"✏️ *Текст изменён:* \n\n_{text}_\n\n"
+            f"🔮 *Выполнить?*",
+            reply_markup=get_voice_confirmation_keyboard(chat_id, text),
+            parse_mode="Markdown"
+        )
+        return
+
     if text == "⚙️ Настройки":
         engine = user_settings.get(chat_id, {}).get('engine', 'auto')
         await message.answer("🛠 *Настройки Оракула*\n\nВыбери основной источник мудрости:",
@@ -752,17 +787,17 @@ async def handle_playlist_callback(callback: types.CallbackQuery, bot: Bot):
 async def handle_audio(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
     # Не чистим всё подряд, только файлы этого же типа если нужно
-    
+
     audio = message.voice or message.audio
     file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
     file_path = os.path.join(TEMP_DIR, file_name)
-    
+
     await bot.download(audio, destination=file_path)
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
-    
+
     logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
-    
+
     if engine == "hf":
         text = get_hf_response(image_path=file_path, task="audio")
     else:
@@ -771,15 +806,51 @@ async def handle_audio(message: types.Message, bot: Bot):
         if not text:
             logger.info("♻️ Gemini Transcription failed, falling back to HF.")
             text = get_hf_response(image_path=file_path, task="audio")
-    
+
     cleanup_file(file_path)
-    
+
     if text:
         logger.info(f"✅ Audio transcribed: {text[:50]}...")
-        # Отправляем транскрипцию как отдельное сообщение, чтобы она не стерлась в истории
-        await message.answer(f"👤 *Прочитал в эфире:* \n\n_{text}_", parse_mode="Markdown")
-        # Создаем новый статус для процесса раздумий
-        status_msg = await message.answer("🧿 *Медитирую над смыслом...*")
-        await conduct_ai_ritual(message, bot, text, status_msg)
+        
+        # Показываем распознанный текст с кнопками подтверждения
+        await message.answer(
+            f"👤 *Распознано:* \n\n_{text}_\n\n"
+            f"🔮 *Подтвердите выполнение:*",
+            reply_markup=get_voice_confirmation_keyboard(chat_id, text),
+            parse_mode="Markdown"
+        )
     else:
         await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова...")
+
+
+@router.callback_query(F.data.startswith("voice_"))
+async def handle_voice_callback(callback: types.CallbackQuery, bot: Bot):
+    """
+    Обработка кнопок подтверждения голосовых сообщений.
+    """
+    data = callback.data.split(":")
+    action = data[0]
+    chat_id = data[1] if len(data) > 1 else str(callback.message.chat.id)
+    
+    if action == "voice_confirm":
+        # Получаем сохранённый текст и выполняем
+        pending_text = user_settings.get(chat_id, {}).get('pending_voice_text')
+        
+        if pending_text:
+            await callback.answer("✅ Выполняю...")
+            await callback.message.answer("🧿 *Медитирую над смыслом...*")
+            await conduct_ai_ritual(callback.message, bot, pending_text, None)
+            
+            # Очищаем сохранённый текст
+            user_settings.get(chat_id, {}).pop('pending_voice_text', None)
+        else:
+            await callback.answer("❌ Текст не найден. Отправьте голосовое ещё раз.")
+    
+    elif action == "voice_edit":
+        await callback.answer("✏️ Введите ваш текст:")
+        user_settings.setdefault(chat_id, {})['pending_voice_edit'] = True
+    
+    elif action == "voice_cancel":
+        await callback.answer("❌ Отменено")
+        # Очищаем сохранённый текст
+        user_settings.get(chat_id, {}).pop('pending_voice_text', None)
