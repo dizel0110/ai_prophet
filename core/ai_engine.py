@@ -65,7 +65,12 @@ def transcribe_local(audio_path, model_name="openai/whisper-tiny"):
         
         logger.info("🧠 Инференс...")
         with torch.no_grad():
-            predicted_ids = model.generate(input_features)
+            # Whisper требует явного указания языка и задачи
+            predicted_ids = model.generate(
+                input_features,
+                language="russian",
+                task="transcribe"
+            )
         logger.info(f"📝 Predicted IDs shape: {predicted_ids.shape}")
 
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
