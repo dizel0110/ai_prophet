@@ -54,22 +54,28 @@ def transcribe_local(audio_path, model_name="openai/whisper-tiny"):
 
         logger.info("📥 Загрузка аудио (16kHz)...")
         speech_array, sr = librosa.load(audio_path, sr=16000)
+        logger.info(f"📊 Аудио: {len(speech_array)} сэмплов, {sr}Hz")
         
         logger.info("🔄 Обработка процессором...")
         inputs = processor(speech_array, sampling_rate=16000, return_tensors="pt")
-
+        logger.info(f"📦 Input shape: {inputs.input_values.shape}")
+        
         logger.info("🧠 Инференс...")
         with torch.no_grad():
             predicted_ids = model.generate(inputs.input_values)
+        logger.info(f"📝 Predicted IDs shape: {predicted_ids.shape}")
 
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        logger.info(f"📝 Raw transcription: {transcription}")
 
         result = transcription[0] if transcription else ""
         logger.info(f"✅ Локальная транскрибация: {result[:50]}...")
         return result.strip()
 
     except Exception as e:
+        import traceback
         logger.error(f"❌ Локальная транскрибация ошибка: {e}")
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return None
 
 
