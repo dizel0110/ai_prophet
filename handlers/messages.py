@@ -449,6 +449,46 @@ async def vision_task_callback(callback: types.CallbackQuery, bot: Bot):
         
     await handle_vision_action(callback.message, bot, callback.message.chat.id, user_text)
 
+
+@router.message(F.voice | F.audio)
+async def handle_audio(message: types.Message, bot: Bot):
+    chat_id = str(message.chat.id)
+
+    audio = message.voice or message.audio
+    file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
+    file_path = os.path.join(TEMP_DIR, file_name)
+
+    await bot.download(audio, destination=file_path)
+    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
+    status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
+
+    logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
+
+    if engine == "hf":
+        text = get_hf_response(image_path=file_path, task="audio")
+    else:
+        text = transcribe_with_gemini(file_path)
+        # Если Gemini не справился, пробуем HF как бэкап
+        if not text:
+            logger.info("♻️ Gemini Transcription failed, falling back to HF.")
+            text = get_hf_response(image_path=file_path, task="audio")
+
+    cleanup_file(file_path)
+
+    if text:
+        logger.info(f"✅ Audio transcribed: {text[:50]}...")
+
+        # Показываем распознанный текст с кнопками подтверждения
+        await message.answer(
+            f"👤 *Распознано:* \n\n_{text}_\n\n"
+            f"🔮 *Подтвердите выполнение:*",
+            reply_markup=get_voice_confirmation_keyboard(chat_id, text),
+            parse_mode="Markdown"
+        )
+    else:
+        await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова...")
+
+
 @router.message()
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
@@ -782,45 +822,6 @@ async def handle_playlist_callback(callback: types.CallbackQuery, bot: Bot):
             await callback.message.answer(f"⚠️ Не удалось скачать {playlist_result['failed']} треков. Попробуй другой запрос.", parse_mode="Markdown")
     else:
         await status_msg.edit_text("😔 Не удалось найти музыку по этому запросу.")
-
-@router.message(F.voice | F.audio)
-async def handle_audio(message: types.Message, bot: Bot):
-    chat_id = str(message.chat.id)
-    # Не чистим всё подряд, только файлы этого же типа если нужно
-
-    audio = message.voice or message.audio
-    file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
-    file_path = os.path.join(TEMP_DIR, file_name)
-
-    await bot.download(audio, destination=file_path)
-    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-    status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
-
-    logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
-
-    if engine == "hf":
-        text = get_hf_response(image_path=file_path, task="audio")
-    else:
-        text = transcribe_with_gemini(file_path)
-        # Если Gemini не справился, пробуем HF как бэкап
-        if not text:
-            logger.info("♻️ Gemini Transcription failed, falling back to HF.")
-            text = get_hf_response(image_path=file_path, task="audio")
-
-    cleanup_file(file_path)
-
-    if text:
-        logger.info(f"✅ Audio transcribed: {text[:50]}...")
-        
-        # Показываем распознанный текст с кнопками подтверждения
-        await message.answer(
-            f"👤 *Распознано:* \n\n_{text}_\n\n"
-            f"🔮 *Подтвердите выполнение:*",
-            reply_markup=get_voice_confirmation_keyboard(chat_id, text),
-            parse_mode="Markdown"
-        )
-    else:
-        await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова...")
 
 
 @router.callback_query(F.data.startswith("voice_"))
