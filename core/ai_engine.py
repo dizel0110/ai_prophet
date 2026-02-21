@@ -37,6 +37,41 @@ def get_ai_chat(chat_id, model_name=None):
             return None
     return _chats[session_key]
 
+def transcribe_local(audio_path, model_name="openai/whisper-tiny"):
+    """
+    Локальная транскрибация через transformers
+    model_name: "openai/whisper-tiny" (~100MB) или "openai/whisper-base" (~150MB)
+    """
+    try:
+        from transformers import WhisperForConditionalGeneration, WhisperProcessor
+        import torch
+        import librosa
+
+        logger.info(f"🏠 Загрузка локальной модели: {model_name}")
+        
+        processor = WhisperProcessor.from_pretrained(model_name)
+        model = WhisperForConditionalGeneration.from_pretrained(model_name)
+
+        logger.info("📥 Загрузка аудио (16kHz)...")
+        speech_array, sr = librosa.load(audio_path, sr=16000)
+        
+        logger.info("🔄 Обработка процессором...")
+        inputs = processor(speech_array, sampling_rate=16000, return_tensors="pt")
+
+        logger.info("🧠 Инференс...")
+        with torch.no_grad():
+            predicted_ids = model.generate(inputs.input_values)
+
+        transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+
+        result = transcription[0] if transcription else ""
+        logger.info(f"✅ Локальная транскрибация: {result[:50]}...")
+        return result.strip()
+
+    except Exception as e:
+        logger.error(f"❌ Локальная транскрибация ошибка: {e}")
+        return None
+
 
 def get_hf_response(text=None, image_path=None, task="text"):
     if not CLEAN_HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."

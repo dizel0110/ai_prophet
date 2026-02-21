@@ -11,7 +11,7 @@ from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
-from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini
+from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
 from core.tools import web_search, search_media_content, AVAILABLE_FUNCTIONS
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
 from config import FALLBACK_MODELS, TEMP_DIR
@@ -482,9 +482,9 @@ async def handle_audio(message: types.Message, bot: Bot):
         transcribe_path = file_path
 
     if engine == "hf":
-        logger.info("🔄 Запуск HF Whisper транскрибации...")
-        text = get_hf_response(image_path=transcribe_path, task="audio")
-        logger.info(f"📥 HF Whisper результат: {text[:50] if text else 'None'}...")
+        logger.info("🔄 Запуск локальной транскрибации (whisper-tiny)...")
+        text = transcribe_local(transcribe_path)
+        logger.info(f"📥 Локальная транскрибация результат: {text[:50] if text else 'None'}...")
     else:
         logger.info("🔄 Запуск Gemini транскрибации...")
         text = transcribe_with_gemini(transcribe_path)
