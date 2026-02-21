@@ -6,6 +6,7 @@ load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
+VIP_PASSWORD = os.getenv("VIP_PASSWORD", "prophet2026")  # Пароль для VIP режима
 
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = "dizel0110"

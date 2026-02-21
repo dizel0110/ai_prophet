@@ -324,46 +324,54 @@ async def cmd_help(message: types.Message):
 @router.message(F.photo)
 async def handle_photo(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
-    
+
     photo = message.photo[-1]
     file_name = f"task_{chat_id}_{int(datetime.now().timestamp())}.jpg"
     file_path = os.path.join(TEMP_DIR, file_name)
-    
+
     await bot.download(photo, destination=file_path)
     user_settings[chat_id] = {'pending_photo': file_path}
-    
+
+    # Проверяем VIP режим
+    is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-    status_msg = await message.answer("🌀 *Вхожу в транс прозрения...*")
     
-    if engine != "hf":
-        logger.info(f"🔮 User {chat_id} uses {engine} for initial vision.")
+    # VIP использует Gemini, обычный режим — только HF
+    use_gemini = is_vip or engine == 'gemini'
+    
+    status_msg = await message.answer("🌀 *Вхожу в транс прозрения...*")
+
+    if use_gemini:
+        logger.info(f"🔮 VIP/User {chat_id} uses Gemini for vision.")
         for model_name in FALLBACK_MODELS:
             try:
                 chat = get_ai_chat(chat_id, model_name)
                 if not chat: continue
-                
+
                 with open(file_path, 'rb') as f: bytes_data = f.read()
                 prompt = "Ты — AI Prophet. Кратко опиши фото и предложи 3 варианта: текст, детали, предсказание."
                 response = chat.send_message(
                     message=[prompt, genai_types.Part.from_bytes(data=bytes_data, mime_type='image/jpeg')]
                 )
-                
+
                 if response.text:
                     clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
-                    icon = "🤖" if engine == "auto" else "💎"
+                    icon = "💎" if is_vip else "🤖"
                     try:
                         await status_msg.edit_text(f"{icon} *Мой взор запечатлел:* \n\n{clean_text}", parse_mode="Markdown")
                     except Exception:
                         await status_msg.edit_text(f"{icon} Мой взор запечатлел:\n\n{clean_text}")
-                    
+
                     await message.answer("Следующий шаг?", reply_markup=kb)
+                    cleanup_file(file_path)
                     return
             except Exception as e:
                 logger.warning(f"Vision failure on {model_name}: {e}")
                 reset_chat(chat_id, model_name)
                 continue
-    else:
-        logger.info(f"🧿 User {chat_id} forced HF for initial vision.")
+    
+    # HF режим (обычный пользователь)
+    logger.info(f"🧿 User {chat_id} uses HF for vision.")
     
     # HF FALLBACK: Ритуал интерпретации туманных образов
     hf_caption = get_hf_response(image_path=file_path, task="vision")
@@ -460,10 +468,17 @@ async def handle_audio(message: types.Message, bot: Bot):
     wav_path = file_path.replace('.ogg', '.wav')
 
     await bot.download(audio, destination=file_path)
+    
+    # Проверяем VIP режим
+    is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-    status_msg = await message.answer(f"👂 *Слушаю ({engine})...*")
+    
+    # VIP режим всегда использует Gemini, обычный — только HF (локально)
+    use_gemini = is_vip or engine == 'gemini'
+    
+    status_msg = await message.answer(f"👂 *Слушаю ({'VIP' if is_vip else engine})...*")
 
-    logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
+    logger.info(f"🎙 Processing audio for {chat_id} via {'Gemini (VIP)' if use_gemini else 'HF Local'}")
 
     # Конвертация OGG → WAV для совместимости
     try:
@@ -481,19 +496,19 @@ async def handle_audio(message: types.Message, bot: Bot):
         logger.warning(f"⚠️ ffmpeg не доступен, используем OGG: {e}")
         transcribe_path = file_path
 
-    if engine == "hf":
-        logger.info("🔄 Запуск локальной транскрибации (whisper-tiny)...")
-        text = transcribe_local(transcribe_path)
-        logger.info(f"📥 Локальная транскрибация результат: {text[:50] if text else 'None'}...")
-    else:
+    if use_gemini:
         logger.info("🔄 Запуск Gemini транскрибации...")
         text = transcribe_with_gemini(transcribe_path)
         logger.info(f"📥 Gemini результат: {text[:50] if text else 'None'}...")
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
             logger.info("♻️ Gemini Transcription failed, falling back to HF.")
-            text = get_hf_response(image_path=transcribe_path, task="audio")
+            text = transcribe_local(transcribe_path)
             logger.info(f"📥 HF Whisper результат (fallback): {text[:50] if text else 'None'}...")
+    else:
+        logger.info("🔄 Запуск локальной транскрибации (whisper-base)...")
+        text = transcribe_local(transcribe_path)
+        logger.info(f"📥 Локальная транскрибация результат: {text[:50] if text else 'None'}...")
 
     cleanup_file(file_path)
     if transcribe_path != file_path:
@@ -518,6 +533,20 @@ async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
     text = message.text
     if not text: return
+
+    # Проверка на ввод VIP пароля
+    if user_settings.get(chat_id, {}).get('waiting_vip_password'):
+        from handlers.vip import admin_cmd
+        # Создаём фейковое сообщение с паролем
+        message.text = f"/dizel0110 {text}"
+        await admin_cmd(message)
+        return
+
+    # Кнопка "Выйти из VIP"
+    if text == "🔓 Выйти из VIP":
+        from handlers.vip import exit_vip
+        await exit_vip(message)
+        return
 
     # Проверка на редактирование голосового сообщения
     if user_settings.get(chat_id, {}).get('pending_voice_edit'):
@@ -563,32 +592,61 @@ async def handle_text(message: types.Message, bot: Bot):
 
 async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, status_msg=None):
     chat_id = str(message.chat.id)
+    
+    # Проверяем VIP режим
+    is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
     
+    # VIP использует Gemini, обычный — только HF
+    use_gemini = is_vip or engine == 'gemini'
+
     if not input_text: return
     await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-    
+
     if user_settings.get(chat_id, {}).get('pending_photo'):
         await handle_vision_action(message, bot, chat_id, input_text)
         return
 
-    if engine == "hf":
-        if status_msg: await status_msg.edit_text("🧿 *Прямое подключение к каналу Hugging Face...*")
-        else: status_msg = await message.answer("🧿 *Прямое подключение к каналу Hugging Face...*")
+    if use_gemini:
+        # VIP режим — Gemini
+        if status_msg: await status_msg.edit_text("💎 *Подключение к Gemini 2.5 Flash...*")
+        else: status_msg = await message.answer("💎 *Подключение к Gemini 2.5 Flash...*")
 
-        hf_res = get_hf_response(text=input_text, task="text")
-        if hf_res:
-            logger.info(f"✅ HF Response received for user {chat_id}")
+        for model_name in FALLBACK_MODELS:
+            try:
+                chat = get_ai_chat(chat_id, model_name)
+                if not chat: continue
 
-            # Parse and execute tools с chat_id
-            clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
+                response = chat.send_message(input_text)
+                if response.text:
+                    clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
 
-            await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
-            await message.answer(f"🧿 {clean_text}")
+                    icon = "💎" if is_vip else "🤖"
+                    await status_msg.edit_text(f"{icon} *Ответ получен через поток Gemini:*")
+                    await message.answer(f"{icon} {clean_text}", reply_markup=kb)
+                    return
+            except Exception as e:
+                logger.warning(f"Gemini failure on {model_name}: {e}")
+                reset_chat(chat_id, model_name)
+                continue
 
-            # Send tool result if any
-            if tool_result:
-                if tool_result.get("type") == "playlist":
+    # HF режим (обычный пользователь)
+    if status_msg: await status_msg.edit_text("🧿 *Прямое подключение к каналу Hugging Face...*")
+    else: status_msg = await message.answer("🧿 *Прямое подключение к каналу Hugging Face...*")
+
+    hf_res = get_hf_response(text=input_text, task="text")
+    if hf_res:
+        logger.info(f"✅ HF Response received for user {chat_id}")
+
+        # Parse and execute tools с chat_id
+        clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
+
+        await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
+        await message.answer(f"🧿 {clean_text}")
+
+        # Send tool result if any
+        if tool_result:
+            if tool_result.get("type") == "playlist":
                     # Плейлист — отправляем через send_playlist
                     from core.tools import send_playlist
                     playlist_data = tool_result.get("data", {})
