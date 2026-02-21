@@ -44,28 +44,44 @@ def get_hf_response(text=None, image_path=None, task="text"):
     headers = {"Authorization": f"Bearer {CLEAN_HF_TOKEN}"}
 
     try:
-        # === АУДИО (Whisper) ===
+        # === АУДИО (Whisper/wav2vec2) ===
         if task == "audio" and image_path:
             api_url = f"https://router.huggingface.co/models/{model_id}"
 
             with open(image_path, "rb") as f:
                 audio_data = f.read()
 
-            logger.info(f"🎵 HF Whisper: отправка {len(audio_data)} байт на {api_url}")
+            logger.info(f"🎵 HF ASR: отправка {len(audio_data)} байт на {api_url}")
             logger.info(f"📁 Файл: {image_path}")
+            logger.info(f"📦 Модель: {model_id}")
 
-            # Whisper принимает аудио напрямую (binary data), без Content-Type
-            headers = {"Authorization": f"Bearer {CLEAN_HF_TOKEN}"}
-            logger.info(f"📤 Отправка запроса к HF Whisper...")
-            response = requests.post(api_url, headers=headers, data=audio_data, timeout=120)
+            # wav2vec2 требует JSON с base64, Whisper принимает raw bytes
+            # Пробуем оба формата
+            if "wav2vec2" in model_id or "xlsr" in model_id:
+                # wav2vec2 формат: JSON с base64
+                import base64
+                headers = {
+                    "Authorization": f"Bearer {CLEAN_HF_TOKEN}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "inputs": base64.b64encode(audio_data).decode('utf-8')
+                }
+                logger.info(f"📤 Отправка wav2vec2 запроса (JSON base64)...")
+                response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            else:
+                # Whisper формат: raw bytes
+                headers = {"Authorization": f"Bearer {CLEAN_HF_TOKEN}"}
+                logger.info(f"📤 Отправка Whisper запроса (raw bytes)...")
+                response = requests.post(api_url, headers=headers, data=audio_data, timeout=120)
 
-            logger.info(f"📥 HF Whisper response status: {response.status_code}")
-            logger.info(f"📄 HF Whisper response headers: {dict(response.headers)}")
+            logger.info(f"📥 HF ASR response status: {response.status_code}")
+            logger.info(f"📄 HF ASR response headers: {dict(response.headers)}")
 
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"📦 HF Whisper response JSON: {result}")
-                logger.info(f"✅ Whisper результат: {result.get('text', '')[:100]}...")
+                logger.info(f"📦 HF ASR response JSON: {result}")
+                logger.info(f"✅ ASR результат: {result.get('text', '')[:100]}...")
                 return result.get("text", "").strip()
             else:
                 logger.error(f"❌ HF Audio Error {response.status_code}: {response.text[:500]}")
