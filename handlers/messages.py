@@ -558,6 +558,9 @@ async def handle_text(message: types.Message, bot: Bot):
         # Создаём фейковое сообщение с паролем
         message.text = f"/dizel0110 {text}"
         await admin_cmd(message)
+        # Сбрасываем флаг после попытки
+        user_settings.get(chat_id, {}).pop('waiting_vip_password', None)
+        save_settings(user_settings)
         return
 
     # Кнопка "Выйти из VIP"
