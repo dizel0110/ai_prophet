@@ -457,6 +457,7 @@ async def handle_audio(message: types.Message, bot: Bot):
     audio = message.voice or message.audio
     file_name = f"audio_{chat_id}_{int(datetime.now().timestamp())}.ogg"
     file_path = os.path.join(TEMP_DIR, file_name)
+    wav_path = file_path.replace('.ogg', '.wav')
 
     await bot.download(audio, destination=file_path)
     engine = user_settings.get(chat_id, {}).get('engine', 'auto')
@@ -464,16 +465,34 @@ async def handle_audio(message: types.Message, bot: Bot):
 
     logger.info(f"🎙 Processing audio for {chat_id} via {engine}")
 
+    # Конвертация OGG → WAV для совместимости
+    try:
+        import ffmpeg
+        logger.info("🔄 Конвертация OGG → WAV...")
+        ffmpeg.input(file_path).output(
+            wav_path,
+            acodec='pcm_s16le',
+            ac=1,
+            ar='16000'
+        ).run(quiet=True, overwrite_output=True)
+        logger.info(f"✅ WAV создан: {wav_path}")
+        transcribe_path = wav_path
+    except Exception as e:
+        logger.warning(f"⚠️ ffmpeg не доступен, используем OGG: {e}")
+        transcribe_path = file_path
+
     if engine == "hf":
-        text = get_hf_response(image_path=file_path, task="audio")
+        text = get_hf_response(image_path=transcribe_path, task="audio")
     else:
-        text = transcribe_with_gemini(file_path)
+        text = transcribe_with_gemini(transcribe_path)
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
             logger.info("♻️ Gemini Transcription failed, falling back to HF.")
-            text = get_hf_response(image_path=file_path, task="audio")
+            text = get_hf_response(image_path=transcribe_path, task="audio")
 
     cleanup_file(file_path)
+    if transcribe_path != file_path:
+        cleanup_file(transcribe_path)
 
     if text:
         logger.info(f"✅ Audio transcribed: {text[:50]}...")
