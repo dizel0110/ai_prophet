@@ -272,10 +272,10 @@ async def cmd_playlist(message: types.Message, bot: Bot):
     query_parts = args[1:-1] if len(args) > 2 and args[-1].isdigit() else args[1:]
     count = int(args[-1]) if len(args) > 1 and args[-1].isdigit() else 5
     query = " ".join(query_parts)
-    
-    # Ограничиваем количество
-    count = min(count, 10)  # Максимум 10 треков
-    
+
+    # Ограничиваем количество: максимум 15 треков
+    count = min(count, 15)
+
     status_msg = await message.answer(f"🎵 *Ищу плейлист: {query}* ({count} треков)...", parse_mode="Markdown")
     
     # Поиск музыки

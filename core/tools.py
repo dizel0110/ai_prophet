@@ -68,32 +68,54 @@ def search_youtube_videos(query: str, max_results: int = 5):
     return []
 
 def search_soundcloud(query: str, max_results: int = 5):
-    """Ищет треки на SoundCloud через yt-dlp"""
+    """
+    Ищет треки на SoundCloud через yt-dlp (scsearch:).
+    
+    SoundCloud официально поддерживается в yt-dlp:
+    - soundcloud:search (scsearch: префикс)
+    - Меньше блокируется, чем YouTube
+    - Прямые аудиопотоки
+    
+    Args:
+        query: Поисковый запрос
+        max_results: Максимум результатов
+    
+    Returns:
+        List[dict]: [{title, url, duration, thumbnail, source}, ...]
+    """
     try:
         import yt_dlp
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
             'quiet': True,
+            'no_warnings': True,
             'ignoreerrors': True,
-            'default_search': f'scsearch{max_results}',
-            'extract_flat': True,
+            'extract_flat': True,  # Быстрый поиск без деталей
         }
 
+        # scsearch: — официальный префикс для поиска SoundCloud
+        search_query = f"scsearch{max_results}:{query}"
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            res = ydl.extract_info(f"scsearch:{query}", download=False)
-            if 'entries' in res:
+            res = ydl.extract_info(search_query, download=False)
+            
+            if res and 'entries' in res:
                 entries = []
                 for e in res['entries']:
-                    if e:
+                    if e and e.get('url'):
                         entries.append({
                             'title': e.get('title', 'Unknown'),
                             'url': e.get('url', ''),
                             'duration': e.get('duration', 0),
                             'thumbnail': e.get('thumbnail', ''),
-                            'source': 'soundcloud'
+                            'source': 'soundcloud',
+                            'extractor': e.get('extractor', 'soundcloud')
                         })
+                
+                logger.info(f"🎵 SoundCloud: найдено {len(entries)} треков для '{query}'")
                 return entries[:max_results]
+                
     except Exception as e:
         logger.error(f"❌ SoundCloud Search Error: {e}")
     
@@ -136,15 +158,15 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
 
                 if duration <= 300 and size <= 10:
                     # Быстрый режим — можно больше результатов
-                    auto_count = min(count, 10)
+                    auto_count = min(count, 15)
                     speed_label = "⚡ быстро"
                 elif duration <= 1800 and size <= 50:
                     # Баланс
-                    auto_count = min(count, 5)
+                    auto_count = min(count, 10)
                     speed_label = "⚖️ нормально"
                 else:
                     # Максимум — меньше результатов (долгая загрузка)
-                    auto_count = min(count, 3)
+                    auto_count = min(count, 5)
                     speed_label = "🐢 долго"
 
                 logger.info(f"🎛 Лимиты: {duration} сек, {size} MB → {auto_count} рез. ({speed_label})")
@@ -185,27 +207,32 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
         # Иначе миксуем для разнообразия
         queries = random.sample(queries, min(2, len(queries)))
 
-    # 2. Ищем через DDG Video Search (он работает надежнее)
-    for q in queries:
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.videos(q, max_results=count))
-                if results:
-                    all_videos.extend(results)
-        except Exception as e:
-            logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
-
-    # 3. Если мало результатов, пробуем SoundCloud (для аудио)
-    if media_type == 'audio' and len(all_videos) < count:
-        logger.info(f"🎵 SoundCloud: поиск для '{query}'...")
-        sc_results = search_soundcloud(query, max_results=count - len(all_videos))
+    # 2. ПРИОРИТЕТ: SoundCloud для аудио (меньше блокируется в HF Spaces)
+    if media_type == 'audio':
+        logger.info(f"🎵 SoundCloud: приоритетный поиск для '{query}'...")
+        sc_results = search_soundcloud(query, max_results=count)
         all_videos.extend(sc_results)
+        logger.info(f"✅ SoundCloud: {len(sc_results)}/{count} треков найдено")
 
-    # 4. Если всё ещё мало, пробуем YouTube
+    # 3. Если SoundCloud мало, пробуем YouTube
     if len(all_videos) < count:
-        logger.info(f"📺 YouTube: поиск для '{query}'...")
+        logger.info(f"📺 YouTube: поиск для '{query}' ({count - len(all_videos)} треков)...")
         yt_results = search_youtube_videos(query, max_results=count - len(all_videos))
         all_videos.extend(yt_results)
+        logger.info(f"✅ YouTube: {len(yt_results)} треков найдено")
+
+    # 4. Если всё ещё мало, DuckDuckGo Video Search (fallback)
+    if len(all_videos) < count:
+        logger.info(f"🦆 DuckDuckGo: fallback поиск для '{query}'...")
+        for q in queries:
+            try:
+                with DDGS() as ddgs:
+                    results = list(ddgs.videos(q, max_results=count - len(all_videos)))
+                    if results:
+                        all_videos.extend(results)
+                        break  # Достаточно
+            except Exception as e:
+                logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
 
     # 3. Дедупликация и рандом
     unique_videos = {}
