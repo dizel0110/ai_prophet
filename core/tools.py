@@ -67,6 +67,108 @@ def search_youtube_videos(query: str, max_results: int = 5):
 
     return []
 
+def search_jamendo(query: str, max_results: int = 5):
+    """
+    Поиск бесплатной музыки на Jamendo (API v3.0).
+    
+    Jamendo — лицензионно чистая музыка от независимых артистов.
+    API: https://api.jamendo.com/v3.0/
+    
+    Args:
+        query: Поисковый запрос
+        max_results: Максимум результатов
+    
+    Returns:
+        List[dict]: [{title, url, duration, thumbnail, source}, ...]
+    """
+    try:
+        # Бесплатный API ключ (публичный для open-source проектов)
+        client_id = "b2c62f47"  # Jamendo public key
+        url = "https://api.jamendo.com/v3.0/tracks/"
+        params = {
+            "client_id": client_id,
+            "search": query,
+            "limit": max_results,
+            "audioformat": "mp32",  # MP3 128 kbps
+            "include": "musicinfo"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            
+            for track in data.get("results", []):
+                results.append({
+                    "title": track.get("name", "Unknown"),
+                    "url": track.get("audio", ""),
+                    "duration": track.get("duration", 0),
+                    "thumbnail": track.get("image", ""),
+                    "source": "jamendo",
+                    "audioformat": "mp32"
+                })
+            
+            logger.info(f"🎵 Jamendo: найдено {len(results)} треков для '{query}'")
+            return results[:max_results]
+    
+    except Exception as e:
+        logger.error(f"❌ Jamendo Search Error: {e}")
+    
+    return []
+
+
+def search_internet_archive(query: str, max_results: int = 5):
+    """
+    Поиск аудио в Internet Archive.
+    
+    Internet Archive — огромная библиотека свободного контента.
+    API: https://archive.org/help/advanced_search.php
+    
+    Args:
+        query: Поисковый запрос
+        max_results: Максимум результатов
+    
+    Returns:
+        List[dict]: [{title, url, duration, thumbnail, source}, ...]
+    """
+    try:
+        url = "https://archive.org/advancedsearch.php"
+        params = {
+            "q": f"(mediatype:audio OR collection:etree) AND ({query})",
+            "fl[]": ["identifier", "title", "creator", "duration"],
+            "rows": max_results,
+            "page": 1,
+            "output": "json",
+            "sort[]": ["downloads desc"]
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            results = []
+            
+            for doc in data.get("response", {}).get("docs", []):
+                identifier = doc.get("identifier", "")
+                results.append({
+                    "title": doc.get("title", "Unknown"),
+                    "url": f"https://archive.org/download/{identifier}",
+                    "duration": int(float(doc.get("duration", 0))) if doc.get("duration") else 0,
+                    "thumbnail": "",
+                    "source": "internet_archive",
+                    "creator": doc.get("creator", "")
+                })
+            
+            logger.info(f"🏛️ Internet Archive: найдено {len(results)} треков для '{query}'")
+            return results[:max_results]
+    
+    except Exception as e:
+        logger.error(f"❌ Internet Archive Search Error: {e}")
+    
+    return []
+
+
 def search_soundcloud(query: str, max_results: int = 5):
     """
     Ищет треки на SoundCloud через yt-dlp (scsearch:).
@@ -186,14 +288,12 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
 
     # 1. Формируем умные запросы
     if media_type == 'audio':
-        # Для музыки ищем треки с текстом или аудио (чтобы не клипы)
         queries = [
             f"{query} {media_type}",
             f"{query} lyrics",
             f"Best {query} songs",
         ]
     else:
-        # Для видео ищем клипы или официальные видео
         queries = [
             f"{query} official video",
             f"{query} music video",
@@ -204,35 +304,68 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
     if count == 1:
         queries = [queries[0]]
     else:
-        # Иначе миксуем для разнообразия
         queries = random.sample(queries, min(2, len(queries)))
 
-    # 2. ПРИОРИТЕТ: SoundCloud для аудио (меньше блокируется в HF Spaces)
+    # 2. ГИБРИДНЫЙ ПОИСК — все источники параллельно (максимальная надёжность)
+    logger.info(f"🔄 Запуск гибридного поиска ({count} треков)...")
+    
+    # SoundCloud — приоритет для аудио
     if media_type == 'audio':
-        logger.info(f"🎵 SoundCloud: приоритетный поиск для '{query}'...")
-        sc_results = search_soundcloud(query, max_results=count)
-        all_videos.extend(sc_results)
-        logger.info(f"✅ SoundCloud: {len(sc_results)}/{count} треков найдено")
-
-    # 3. Если SoundCloud мало, пробуем YouTube
+        try:
+            logger.info(f"🎵 SoundCloud: поиск для '{query}'...")
+            sc_results = search_soundcloud(query, max_results=count)
+            all_videos.extend(sc_results)
+            logger.info(f"✅ SoundCloud: {len(sc_results)}/{count} треков")
+        except Exception as e:
+            logger.error(f"❌ SoundCloud поиск прерван: {e}")
+    
+    # Jamendo — лицензионно чистая музыка
+    if media_type == 'audio' and len(all_videos) < count:
+        try:
+            logger.info(f"🎸 Jamendo: поиск для '{query}'...")
+            jam_results = search_jamendo(query, max_results=count - len(all_videos))
+            all_videos.extend(jam_results)
+            logger.info(f"✅ Jamendo: {len(jam_results)} треков")
+        except Exception as e:
+            logger.error(f"❌ Jamendo поиск прерван: {e}")
+    
+    # Internet Archive — свободный контент
+    if media_type == 'audio' and len(all_videos) < count:
+        try:
+            logger.info(f"🏛️ Internet Archive: поиск для '{query}'...")
+            ia_results = search_internet_archive(query, max_results=count - len(all_videos))
+            all_videos.extend(ia_results)
+            logger.info(f"✅ Internet Archive: {len(ia_results)} треков")
+        except Exception as e:
+            logger.error(f"❌ Internet Archive поиск прерван: {e}")
+    
+    # YouTube — если ещё мало
     if len(all_videos) < count:
-        logger.info(f"📺 YouTube: поиск для '{query}' ({count - len(all_videos)} треков)...")
-        yt_results = search_youtube_videos(query, max_results=count - len(all_videos))
-        all_videos.extend(yt_results)
-        logger.info(f"✅ YouTube: {len(yt_results)} треков найдено")
-
-    # 4. Если всё ещё мало, DuckDuckGo Video Search (fallback)
+        try:
+            logger.info(f"📺 YouTube: поиск для '{query}' ({count - len(all_videos)} треков)...")
+            yt_results = search_youtube_videos(query, max_results=count - len(all_videos))
+            all_videos.extend(yt_results)
+            logger.info(f"✅ YouTube: {len(yt_results)} треков")
+        except Exception as e:
+            logger.error(f"❌ YouTube поиск прерван: {e}")
+    
+    # DuckDuckGo — fallback
     if len(all_videos) < count:
-        logger.info(f"🦆 DuckDuckGo: fallback поиск для '{query}'...")
-        for q in queries:
-            try:
-                with DDGS() as ddgs:
-                    results = list(ddgs.videos(q, max_results=count - len(all_videos)))
-                    if results:
-                        all_videos.extend(results)
-                        break  # Достаточно
-            except Exception as e:
-                logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
+        try:
+            logger.info(f"🦆 DuckDuckGo: fallback поиск для '{query}'...")
+            for q in queries:
+                try:
+                    with DDGS() as ddgs:
+                        results = list(ddgs.videos(q, max_results=count - len(all_videos)))
+                        if results:
+                            all_videos.extend(results)
+                            break
+                except Exception as e:
+                    logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
+        except Exception as e:
+            logger.error(f"❌ DuckDuckGo поиск прерван: {e}")
+    
+    logger.info(f"📊 Всего найдено: {len(all_videos)} треков")
 
     # 3. Дедупликация и рандом
     unique_videos = {}
@@ -408,10 +541,10 @@ async def send_playlist(
 
 def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, max_filesize_mb: int = None):
     """
-    Скачивает аудио из YouTube/SoundCloud (m4a/mp3) во временную папку.
+    Скачивает аудио из YouTube/SoundCloud/Jamendo/Archive (mp3) во временную папку.
     Возвращает (путь_к_файлу, название_трека, длительность).
-
-    Использует yt-dlp с эмуляцией браузера для обхода блокировок.
+    
+    Максимальная защита от вылетов — все ошибки логгируются, не падаем.
 
     chat_id: ID чата для загрузки пользовательских лимитов
     max_duration_sec: максимальная длительность (по умолчанию 1800 сек = 30 мин)
@@ -422,6 +555,11 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     import yt_dlp
     import time
     import json
+
+    # Защита от None URL
+    if not url:
+        logger.error("❌ download_audio: пустой URL")
+        return None, None, None
 
     # Загрузка пользовательских лимитов
     limits_file = "temp/user_limits.json"
@@ -434,8 +572,8 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
                     max_duration_sec = user_limits.get("duration", 1800)
                 if max_filesize_mb is None:
                     max_filesize_mb = user_limits.get("size", 100)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load user limits: {e}")
 
     # Значения по умолчанию
     if max_duration_sec is None:
@@ -451,12 +589,25 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     sys_filename = f"audio_{uuid.uuid4().hex[:8]}"
     output_template = os.path.join(TEMP_DIR, f"{sys_filename}.%(ext)s")
 
-    start_time = time.time()
-    logger.info(f"⬇️ Скачиваю аудио: {url}")
-
     # Определяем источник
     is_soundcloud = 'soundcloud.com' in url
-    source_name = "SoundCloud" if is_soundcloud else "YouTube"
+    is_jamendo = 'jamendo.com' in url
+    is_archive = 'archive.org' in url
+    is_youtube = 'youtube.com' in url or 'youtu.be' in url
+    
+    if is_jamendo:
+        source_name = "Jamendo"
+    elif is_archive:
+        source_name = "Internet Archive"
+    elif is_soundcloud:
+        source_name = "SoundCloud"
+    elif is_youtube:
+        source_name = "YouTube"
+    else:
+        source_name = "Unknown"
+
+    start_time = time.time()
+    logger.info(f"⬇️ Скачиваю аудио: {url} ({source_name})")
 
     # === yt-dlp с эмуляцией браузера ===
     ydl_opts = {
@@ -489,6 +640,10 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
         # Пробуем разные экстракторы
         'extract_flat': False,
         'ignoreerrors': True,
+        
+        # Таймауты
+        'socket_timeout': 30,
+        'extractor_retries': 3,
     }
 
     try:
@@ -504,6 +659,11 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
                 # Меняем расширение на .mp3
                 filename = os.path.splitext(filename)[0] + '.mp3'
             
+            # Проверка существования файла
+            if not os.path.exists(filename):
+                logger.error(f"❌ Файл не создан: {filename}")
+                return None, None, None
+            
             title = info.get('title', 'Audio Track')
             duration = info.get('duration', 0)
             clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').strip()
@@ -518,17 +678,12 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
         # Анализ ошибки
         if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
             logger.error(f"❌ {source_name} требует авторизацию (блокировка серверных IP)")
-            if is_soundcloud:
-                logger.info("💡 SoundCloud обычно работает без блокировок. Проверьте URL.")
-            else:
-                logger.info("💡 Решение для YouTube:")
-                logger.info("   1. Локальный запуск (домашний IP работает)")
-                logger.info("   2. SoundCloud (не блокируется)")
-                logger.info("   3. Cookies файл: temp/youtube_cookies.txt")
         elif "HTTP Error 429" in error_msg:
             logger.warning(f"⚠️ {source_name} заблокировал запрос (слишком много запросов)")
         elif "ffmpeg" in error_msg.lower() or "ffmpeg not found" in error_msg.lower():
             logger.error("❌ ffmpeg не найден! Установите ffmpeg для конвертации аудио.")
+        elif "timeout" in error_msg.lower():
+            logger.error(f"⏱️ {source_name} timeout — трек слишком длинный")
         else:
             logger.error(f"❌ {source_name} Error: {e}")
 
