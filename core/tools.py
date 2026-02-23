@@ -35,7 +35,7 @@ def search_youtube_videos(query: str, max_results: int = 5):
             'default_search': f'ytsearch{max_results}',
             'extract_flat': True,
         }
-        
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             res = ydl.extract_info(query, download=False)
             if 'entries' in res:
@@ -45,7 +45,7 @@ def search_youtube_videos(query: str, max_results: int = 5):
         return []
     except Exception as e:
         logger.error(f"❌ YouTube Search Error: {e}")
-    
+
     # Fallback: DuckDuckGo Video Search
     try:
         logger.info(f"🦆 Пробуем DDG Video Search для: {query}")
@@ -65,6 +65,38 @@ def search_youtube_videos(query: str, max_results: int = 5):
     except Exception as e:
         logger.error(f"❌ DDG Video Search Error: {e}")
 
+    return []
+
+def search_soundcloud(query: str, max_results: int = 5):
+    """Ищет треки на SoundCloud через yt-dlp"""
+    try:
+        import yt_dlp
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'ignoreerrors': True,
+            'default_search': f'scsearch{max_results}',
+            'extract_flat': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            res = ydl.extract_info(f"scsearch:{query}", download=False)
+            if 'entries' in res:
+                entries = []
+                for e in res['entries']:
+                    if e:
+                        entries.append({
+                            'title': e.get('title', 'Unknown'),
+                            'url': e.get('url', ''),
+                            'duration': e.get('duration', 0),
+                            'thumbnail': e.get('thumbnail', ''),
+                            'source': 'soundcloud'
+                        })
+                return entries[:max_results]
+    except Exception as e:
+        logger.error(f"❌ SoundCloud Search Error: {e}")
+    
     return []
 
 def search_media_content(query: str, media_type: str = 'audio', count: int = 5, chat_id: str = None):
@@ -162,6 +194,18 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
                     all_videos.extend(results)
         except Exception as e:
             logger.error(f"❌ DDG Video Search Error for '{q}': {e}")
+
+    # 3. Если мало результатов, пробуем SoundCloud (для аудио)
+    if media_type == 'audio' and len(all_videos) < count:
+        logger.info(f"🎵 SoundCloud: поиск для '{query}'...")
+        sc_results = search_soundcloud(query, max_results=count - len(all_videos))
+        all_videos.extend(sc_results)
+
+    # 4. Если всё ещё мало, пробуем YouTube
+    if len(all_videos) < count:
+        logger.info(f"📺 YouTube: поиск для '{query}'...")
+        yt_results = search_youtube_videos(query, max_results=count - len(all_videos))
+        all_videos.extend(yt_results)
 
     # 3. Дедупликация и рандом
     unique_videos = {}
@@ -383,7 +427,11 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     start_time = time.time()
     logger.info(f"⬇️ Скачиваю аудио: {url}")
 
-    # === yt-dlp с эмуляцией браузера (как локально) ===
+    # Определяем источник
+    is_soundcloud = 'soundcloud.com' in url
+    source_name = "SoundCloud" if is_soundcloud else "YouTube"
+
+    # === yt-dlp с эмуляцией браузера ===
     ydl_opts = {
         'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'outtmpl': output_template,
@@ -396,14 +444,21 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'referer': 'https://www.youtube.com/',
 
-        # Обход блокировок YouTube - используем все доступные клиенты
+        # Обход блокировок - используем все доступные клиенты
         'extractor_args': {
             'youtube': {
                 'player_client': ['ios', 'web', 'web_embedded', 'tv_embedded'],
                 'player_skip': ['webpage'],
             }
         },
-        
+
+        # Post-processing: конвертация в mp3 через ffmpeg
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+
         # Пробуем разные экстракторы
         'extract_flat': False,
         'ignoreerrors': True,
@@ -412,13 +467,22 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+            
+            # После конвертации файл будет .mp3
+            filename = output_template.replace('.%(ext)s', '.mp3')
+            
+            # Если файл не найден, пробуем оригинальное имя
+            if not os.path.exists(filename):
+                filename = ydl.prepare_filename(info)
+                # Меняем расширение на .mp3
+                filename = os.path.splitext(filename)[0] + '.mp3'
+            
             title = info.get('title', 'Audio Track')
             duration = info.get('duration', 0)
             clean_title = title.replace('(Official Video)', '').replace('[Official Audio]', '').strip()
 
             download_time = time.time() - start_time
-            logger.info(f"✅ Скачано: {clean_title} ({duration} сек) за {download_time:.1f} сек")
+            logger.info(f"✅ {source_name}: Скачано {clean_title} ({duration} сек) за {download_time:.1f} сек")
             return filename, clean_title, duration
 
     except Exception as e:
@@ -426,15 +490,20 @@ def download_audio(url: str, chat_id: str = None, max_duration_sec: int = None, 
 
         # Анализ ошибки
         if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-            logger.error("❌ YouTube требует авторизацию (блокировка серверных IP)")
-            logger.info("💡 Решение:")
-            logger.info("   1. Локальный запуск (домашний IP работает)")
-            logger.info("   2. SoundCloud (не блокируется)")
-            logger.info("   3. Cookies файл: temp/youtube_cookies.txt")
+            logger.error(f"❌ {source_name} требует авторизацию (блокировка серверных IP)")
+            if is_soundcloud:
+                logger.info("💡 SoundCloud обычно работает без блокировок. Проверьте URL.")
+            else:
+                logger.info("💡 Решение для YouTube:")
+                logger.info("   1. Локальный запуск (домашний IP работает)")
+                logger.info("   2. SoundCloud (не блокируется)")
+                logger.info("   3. Cookies файл: temp/youtube_cookies.txt")
         elif "HTTP Error 429" in error_msg:
-            logger.warning("⚠️ YouTube заблокировал запрос (слишком много запросов)")
+            logger.warning(f"⚠️ {source_name} заблокировал запрос (слишком много запросов)")
+        elif "ffmpeg" in error_msg.lower() or "ffmpeg not found" in error_msg.lower():
+            logger.error("❌ ffmpeg не найден! Установите ffmpeg для конвертации аудио.")
         else:
-            logger.error(f"❌ Ошибка: {e}")
+            logger.error(f"❌ {source_name} Error: {e}")
 
         return None, None, None
 
