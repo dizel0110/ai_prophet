@@ -1,0 +1,55 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!--defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4c1d95;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs-->
+  
+  <!-- Фон -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGradient)"/>
+  
+  <!-- Внешнее кольцо -->
+  <circle cx="256" cy="256" r="200" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+  
+  <!-- Центральный элемент - глаз/оракул -->
+  <ellipse cx="256" cy="256" rx="80" ry="60" fill="rgba(255,255,255,0.1)" filter="url(#glow)"/>
+  <ellipse cx="256" cy="256" rx="50" ry="35" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="256" cy="256" r="15" fill="rgba(255,255,255,0.9)"/>
+  
+  <!-- Лучи от центра -->
+  <g stroke="rgba(255,255,255,0.4)" stroke-width="2" filter="url(#glow)">
+    <line x1="256" y1="100" x2="256" y2="150"/>
+    <line x1="256" y1="362" x2="256" y2="412"/>
+    <line x1="100" y1="256" x2="150" y2="256"/>
+    <line x1="362" y1="256" x2="412" y2="256"/>
+    <line x1="156" y1="156" x2="190" y2="190"/>
+    <line x1="322" y1="322" x2="356" y2="356"/>
+    <line x1="156" y1="356" x2="190" y2="322"/>
+    <line x1="322" y1="190" x2="356" y2="156"/>
+  </g>
+  
+  <!-- Звёзды/искры -->
+  <g fill="rgba(255,255,255,0.8)">
+    <circle cx="180" cy="120" r="3"/>
+    <circle cx="332" cy="140" r="2"/>
+    <circle cx="140" cy="332" r="2"/>
+    <circle cx="372" cy="300" r="3"/>
+    <circle cx="256" cy="80" r="2"/>
+    <circle cx="256" cy="432" r="2"/>
+    <circle cx="80" cy="256" r="2"/>
+    <circle cx="432" cy="256" r="2"/>
+  </g>
+  
+  <!-- Glassmorphism эффект -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#glassOverlay)"/>
+</svg>
