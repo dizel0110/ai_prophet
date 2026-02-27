@@ -13,6 +13,11 @@ _youtube_dns_cache = None
 def apply_dns_patch():
     global _youtube_dns_cache
 
+    # Пропускаем патч на Hugging Face Spaces
+    if os.getenv("SPACE_ID"):
+        logger.info("☁️ Hugging Face Spaces detected: Skipping DNS patch (using native cloud DNS)")
+        return True
+
     # Патч DNS для всех платформ (на Windows используем с осторожностью)
     if sys.platform == 'win32':
         logger.info("ℹ️ Windows detected: DNS patch will be applied only as fallback")
