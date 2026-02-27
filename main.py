@@ -29,6 +29,12 @@ IS_HF_SPACE = os.getenv("SPACE_ID") is not None
 
 # FastAPI приложение
 app = FastAPI()
+
+# НА HF SPACES: регистрируем webhook routes ДО запуска сервера
+if IS_HF_SPACE:
+    from webhook_only import setup_webhook_routes
+    setup_webhook_routes(app)
+
 @app.get("/")
 async def root():
     mode = "Webhook (HF)" if IS_HF_SPACE else "Polling (Local)"
@@ -98,13 +104,7 @@ if __name__ == "__main__":
 
     if IS_HF_SPACE:
         # НА HF SPACES: используем webhook режим
-        logger.info("📡 HF Spaces detected: setting up webhook routes")
-
-        # Регистрируем webhook routes в основном FastAPI приложении
-        from webhook_only import setup_webhook_routes
-        setup_webhook_routes(app)
-
-        logger.info("✅ Webhook готов к обработке сообщений")
+        logger.info("📡 HF Spaces: Webhook endpoint активен")
 
         # Держим процесс запущенным
         try:
