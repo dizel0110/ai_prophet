@@ -1,60 +1,53 @@
 # -*- coding: utf-8 -*-
 """
 Telegram Webhook для Hugging Face Spaces
-Использует webhook response для отправки ответов без исходящих запросов
+
+КРИТИЧЕСКАЯ ПРОБЛЕМА: HF Spaces блокирует исходящие запросы к api.telegram.org
+Решение: Использовать HTTP прокси или запустить бота на другой платформе
+
+Варианты решения:
+1. Запустить бота на VPS/Railway/Render (рекомендуется)
+2. Использовать HTTP прокси для обхода блокировки
+3. Использовать polling режим локально
+
+Этот файл оставлен для совместимости, но на HF Spaces бот не сможет
+отправлять ответы без прокси.
 """
 
 import os
 import logging
-import json
-from contextvars import ContextVar
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
 from aiogram import Bot, Dispatcher, types
-from aiogram.methods.base import TelegramMethod
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiohttp import ClientSession
 from config import TOKEN
 from handlers import messages, vip, limits
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
 logger = logging.getLogger(__name__)
 
-# Context var для хранения webhook response
-_webhook_response: ContextVar[TelegramMethod | None] = ContextVar('_webhook_response', default=None)
+# Проверяем наличие прокси
+PROXY_URL = os.getenv("PROXY_URL")  # Например: http://proxy.example.com:8080
 
-# Инициализация бота с кастомной сессией
-bot = Bot(token=TOKEN)
+# Инициализация бота
+if PROXY_URL:
+    logger.info(f"🔄 Используем прокси: {PROXY_URL}")
+    # Создаём сессию с прокси
+    session = AiohttpSession(
+        session=ClientSession(trust_env=True)
+    )
+    bot = Bot(token=TOKEN, session=session)
+else:
+    logger.warning("⚠️ PROXY_URL не настроен. Бот не сможет отправлять сообщения на HF Spaces.")
+    logger.warning("📝 Настройте PROXY_URL в секретах HF Spaces или используйте другую платформу.")
+    bot = Bot(token=TOKEN)
+
 dp = Dispatcher()
 
 # Регистрация роутеров
 dp.include_router(vip.router)
 dp.include_router(limits.router)
 dp.include_router(messages.router)
-
-
-@dp.update.middleware()
-async def capture_webhook_response(handler, event, data):
-    """
-    Middleware перехватывает вызовы bot() и сохраняет их для webhook response
-    """
-    # Сохраняем оригинальный метод __call__ бота
-    original_call = bot.__call__
-
-    async def capture_call(method, *args, **kwargs):
-        """Перехватывает вызов бота и сохраняет метод"""
-        result = await original_call(method)
-        # Сохраняем метод для webhook response
-        _webhook_response.set(method)
-        return result
-
-    # Временно заменяем __call__
-    bot.__call__ = capture_call
-
-    try:
-        # Вызываем хендлер
-        return await handler(event, data)
-    finally:
-        # Восстанавливаем оригинальный метод
-        bot.__call__ = original_call
 
 # НЕ создаём новое FastAPI приложение!
 # Используем то, которое импортируется из main.py
@@ -72,10 +65,7 @@ def setup_webhook_routes(fastapi_app: FastAPI):
     @fastapi_app.post("/webhook")
     async def webhook_handler(request: Request):
         """
-        Обработка обновлений от Telegram с webhook response
-
-        Telegram позволяет вернуть метод API прямо в HTTP response webhook'а.
-        Это избегает необходимости делать исходящий запрос к api.telegram.org.
+        Обработка обновлений от Telegram
         """
         try:
             # Получаем JSON от Telegram
@@ -84,23 +74,8 @@ def setup_webhook_routes(fastapi_app: FastAPI):
 
             logger.info(f"📥 Получено обновление: id={update.update_id}, type={update.event_type}")
 
-            # Сбрасываем webhook response перед обработкой
-            _webhook_response.set(None)
-
-            # Обрабатываем обновление
+            # Обрабатываем через Dispatcher
             await dp.feed_update(bot, update)
-
-            # Проверяем, был ли сохранён webhook response
-            response_method = _webhook_response.get()
-
-            if response_method:
-                logger.info(f"📤 Webhook response: {response_method.__class__.__name__}")
-                # Сериализуем в JSON для Telegram
-                response_data = response_method.model_dump(mode="json", by_alias=True)
-                return Response(
-                    content=json.dumps(response_data),
-                    media_type="application/json"
-                )
 
             logger.info(f"✅ Обновление обработано: id={update.update_id}")
             return {"status": "ok"}
