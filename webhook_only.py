@@ -76,10 +76,10 @@ def setup_webhook_routes(fastapi_app: FastAPI):
 
             logger.info(f"📡 HF Spaces detected: {space_id}")
             logger.info(f"📡 Webhook URL: {webhook_url}")
-            logger.info("📝 Webhook должен быть установлен вручную через API Telegram")
-            logger.info("📝 Проверьте: https://api.telegram.org/bot<TOKEN>/getWebhookInfo")
+            logger.info("📝 HF Spaces блокирует исходящие запросы — webhook должен быть установлен вручную")
+            logger.info(f"📝 URL для установки: https://api.telegram.org/bot<TOKEN>/setWebhook?url={webhook_url}")
         else:
-            logger.warning("⚠️ SPACE_ID не найден. Запустите на HF Spaces для webhook.")
+            logger.info("📡 Локальный режим — используется polling (main.py)")
 
     @fastapi_app.on_event("shutdown")
     async def on_shutdown():
