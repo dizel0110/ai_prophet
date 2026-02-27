@@ -126,8 +126,7 @@ def create_limits_keyboard(chat_id):
     duration = limits.get("duration", 1800)
     size = limits.get("size", 50)
     
-    dur_color, dur_speed = get_limit_status(duration, size)[0], get_limit_status(duration, size)[1]
-    size_color, size_speed = get_limit_status(duration, size)[0], get_limit_status(duration, size)[1]
+    (dur_emoji, dur_desc), (size_emoji, size_desc) = get_limit_status(duration, size)
     
     # Прогресс-бары
     dur_bar = create_progress_bar(duration, MIN_DURATION, MAX_DURATION)
@@ -265,35 +264,35 @@ async def update_limits_message(message, chat_id, limits):
     duration = limits.get("duration", 1800)
     size = limits.get("size", 50)
 
-    dur_color, dur_speed = get_limit_status(duration, size)
-    size_color, size_speed = get_limit_status(duration, size)[0], get_limit_status(duration, size)[1]
+    (dur_emoji, dur_desc), (size_emoji, size_desc) = get_limit_status(duration, size)
 
     dur_bar = create_progress_bar(duration, MIN_DURATION, MAX_DURATION)
     size_bar = create_progress_bar(size, MIN_SIZE, MAX_SIZE)
 
+    text = (
+        f"🎛 *Настройки загрузки аудио*\n\n"
+        f"⏱ *Длительность:* {dur_bar} {format_duration(duration)}\n"
+        f"   {dur_emoji} {dur_desc}\n\n"
+        f"📦 *Размер:* {size_bar} {size} MB\n"
+        f"   {size_emoji} {size_desc}\n\n"
+        f"💡 *Нажми на кнопки для настройки:*\n"
+        f"• -1/-5 мин или -5/-20 MB — точная настройка\n"
+        f"• Значение — ввести своё число\n"
+        f"• Прогресс — информация"
+    )
+    reply_markup = create_limits_keyboard(chat_id)
+
     try:
-        await message.edit_text(
-            f"🎛 *Настройки загрузки аудио*\n\n"
-            f"⏱ *Длительность:* {dur_bar} {format_duration(duration)}\n"
-            f"   {dur_color} {dur_speed}\n\n"
-            f"📦 *Размер:* {size_bar} {size} MB\n"
-            f"   {size_color} {size_speed}\n\n"
-            f"💡 *Нажми на кнопки для настройки:*\n"
-            f"• -1/-5 мин или -5/-20 MB — точная настройка\n"
-            f"• Значение — ввести своё число\n"
-            f"• Прогресс — информация",
-            reply_markup=create_limits_keyboard(chat_id),
-            parse_mode="Markdown"
-        )
+        # Пытаемся редактировать (если это сообщение бота или callback)
+        await message.edit_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     except TelegramBadRequest as e:
-        # Игнорируем ошибку "контент не изменился"
-        if "message is not modified" not in str(e):
-            logger.error(f"Failed to edit message: {e}")
-        # В любом случае отправляем callback answer чтобы убрать лоадер
-        await message.bot.answer_callback_query(
-            callback_query_id=message.message_id,
-            text="Настройки обновлены"
-        )
+        if "message is not modified" in str(e):
+            return
+        # Если не можем редактировать (например, сообщение пользователя), отправляем новое
+        await message.answer(text, reply_markup=reply_markup, parse_mode="Markdown")
+    except Exception as e:
+        # Резервный вариант
+        await message.answer(text, reply_markup=reply_markup, parse_mode="Markdown")
 
 
 @router.message(LimitStates.waiting_for_duration)

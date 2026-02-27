@@ -13,7 +13,11 @@ _youtube_dns_cache = None
 def apply_dns_patch():
     global _youtube_dns_cache
 
-    # Патч DNS для всех платформ (включая Windows)
+    # Патч DNS для всех платформ (на Windows используем с осторожностью)
+    if sys.platform == 'win32':
+        logger.info("ℹ️ Windows detected: DNS patch will be applied only as fallback")
+        # На Windows часто лучше оставить системный резолвер, если нет ошибок
+    
     logger.info("🔧 Applying DNS patch for YouTube/Telegram...")
 
     # Попытка настроить DNS резолвер

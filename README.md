@@ -11,8 +11,8 @@ pinned: false
 
 [![GitHub Stars](https://img.shields.io/github/stars/dizel0110/ai_prophet?style=for-the-badge&color=8b5cf6)](https://github.com/dizel0110/ai_prophet/stargazers)
 [![Telegram](https://img.shields.io/badge/Telegram-Mini_App-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/ai_prophet_io_bot)
-[![Engine](https://img.shields.io/badge/Engine-Gemini_2.5_Flash-orange?style=for-the-badge&logo=google-cloud)](https://aistudio.google.com/)
-[![Secondary Engine](https://img.shields.io/badge/Fallback-Qwen_&_Llama_4-green?style=for-the-badge&logo=huggingface)](https://huggingface.co/)
+[![Engine](https://img.shields.io/badge/Engine-Gemini_3.1_Flash-orange?style=for-the-badge&logo=google-cloud)](https://aistudio.google.com/)
+[![Secondary Engine](https://img.shields.io/badge/Fallback-DeepSeek_&_Qwen_2.5-green?style=for-the-badge&logo=huggingface)](https://huggingface.co/)
 
 **AI Prophet** — это не просто чат-бот, а мультимодальный ИИ-агент нового поколения. Он объединяет пророческую мудрость с мощью передовых нейросетей Google и Hugging Face.
 
@@ -21,10 +21,11 @@ pinned: false
 ## ✨ Ключевые возможности
 
 *   🧠 **Adaptive Context**: Пророк помнит историю общения и адаптирует приветствия под время суток и ваш характер.
-*   👁️ **Multimodal Vision**: Анализ фото и скриншотов с использованием `Gemini 2.5` и `Phi-3 Vision`. Извлечение текста, кода и глубинных смыслов.
-*   🎙️ **Audio Resonance**: Полная поддержка голосовых сообщений. Распознавание через `Whisper` и мгновенный ответ.
-*   🛡️ **Unstoppable Logic**: Трехуровневая система Fallback. Если Google перегружен, на помощь приходят облачные мощности Hugging Face (Qwen & Llama 4).
-*   💎 **Premium TMA**: Telegram Mini App в стиле Glassmorphism — ваш пульт управления будущим.
+*   👁️ **Multimodal Vision**: Глубинный анализ фото с использованием `Gemini 3.1` и `Llama 3.2 Vision`.
+*   🎙️ **Audio Resonance**: Полная поддержка голосовых команд и транскрибация через `Whisper Turbo`.
+*   🎵 **Prophet Music Engine**: Создание именных плейлистов через AI, мгновенная загрузка и управление личной библиотекой.
+*   📦 **Portable JSON Backups**: Система переносимых бэкапов. Сохраняйте свои плейлисты в файлы и импортируйте их в один клик.
+*   💎 **Premium TMA 4.1**: Telegram Mini App с обновленным дизайном «Glassmorphism» — ваш пульт управления будущим.
 
 ---
 

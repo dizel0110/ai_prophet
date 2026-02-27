@@ -9,10 +9,8 @@ from datetime import datetime
 from aiogram import Router, types, Bot, F
 from aiogram.enums import ChatAction
 from aiogram.filters import Command, CommandStart
-from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
-from core.tools import web_search, search_media_content, AVAILABLE_FUNCTIONS
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
 from config import FALLBACK_MODELS, TEMP_DIR
 from google.genai import types as genai_types
@@ -38,7 +36,39 @@ def save_settings(settings):
     except Exception as e:
         logger.error(f"Failed to save settings: {e}")
 
+# Глобальные состояния
 user_settings = load_settings()
+_chats = {} 
+active_cancellations = set()
+
+# Глобальные примеры плейлистов для обучения
+GLOBAL_EXAMPLES = [
+    {
+        "name": "🎸 Рок-Легенды",
+        "items": [
+            {"query": "Deep Purple", "count": 2},
+            {"query": "Led Zeppelin", "count": 2}
+        ],
+        "desc": "Хиты классического рока, подобранные AI."
+    },
+    {
+        "name": "🌊 Ночной Chill",
+        "items": [
+            {"query": "Lo-fi Hip Hop", "count": 3},
+            {"query": "Ambient Rain", "count": 2}
+        ],
+        "desc": "Спокойная музыка для работы или сна."
+    },
+    {
+        "name": "🎯 Коллекция Хитов",
+        "items": [
+            {"query": "Queen - Bohemian Rhapsody", "count": 1},
+            {"query": "ABBA - Dancing Queen", "count": 1},
+            {"query": "Nirvana - Smells Like Teen Spirit", "count": 1}
+        ],
+        "desc": "Пример точечного поиска конкретных песен."
+    }
+]
 
 def cleanup_file(path):
     """Безопасное удаление файла"""
@@ -68,15 +98,17 @@ def get_main_menu(vip_mode: bool = False):
             [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
             [KeyboardButton(text="🔮 VIP Предсказание"), KeyboardButton(text="🎙 VIP Голос")],
             [KeyboardButton(text="🖼 VIP Видение"), KeyboardButton(text="🌐 VIP Поиск")],
-            [KeyboardButton(text="🎵 VIP Музыка")],
-            [KeyboardButton(text="🔓 Выйти из VIP")]
+            [KeyboardButton(text="🎵 VIP Музыка"), KeyboardButton(text="📚 Библиотека")],
+            [KeyboardButton(text="🎛 Лимиты"), KeyboardButton(text="🔓 Выйти из VIP")]
         ]
     else:
         # Обычное HF меню
         kb = [
             [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
             [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
-            [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")]
+            [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="📚 Библиотека"), KeyboardButton(text="📥 Импорт")],
+            [KeyboardButton(text="ℹ️ Помощь")]
         ]
     
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -218,6 +250,8 @@ async def cmd_start(message: types.Message):
     
     # Проверяем VIP режим
     chat_id = str(message.chat.id)
+    # Очищаем старые временные файлы пользователя перед началом сессии
+    cleanup_user_temp(chat_id)
     is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
 
     welcome_text = (
@@ -243,99 +277,113 @@ async def cmd_start(message: types.Message):
 
 @router.message(Command("playlist"))
 async def cmd_playlist(message: types.Message, bot: Bot):
-    """
-    Команда /playlist для явного запроса плейлиста.
-    Использование: /playlist <жанр/исполнитель> [количество]
-    Примеры:
-        /playlist Pink Floyd 5
-        /playlist рок 80х
-        /playlist ambient для сна 3
-    """
-    from core.tools import search_media_content, send_playlist
-    
+    """Начало интерактивного мастера плейлистов"""
     chat_id = str(message.chat.id)
-    args = message.text.split()
+    text = message.text.strip()
+    
+    # Регулярка для быстрого ввода: /playlist Имя Группы 10
+    match = re.match(r'/playlist\s+(.+?)\s+(\d+)$', text, re.IGNORECASE)
+    
+    if match:
+        query = match.group(1)
+        count = int(match.group(2))
+        await message.answer(f"🎵 *Быстрый поиск:* {query} ({count} треков)...", parse_mode="Markdown")
+        from core.tools import search_media_content, send_playlist
+        result = search_media_content(query=query, media_type='audio', count=count, chat_id=chat_id)
+        
+        # Показываем описание (Пророчество)
+        if result.get("text"):
+            await message.answer(f"🔮 *Пророчество о подборке:*\n_{result['text']}_", parse_mode="Markdown")
+            
+        await send_playlist(bot, message.chat.id, result.get("tracks", []), chat_id_str=chat_id)
+        return
+
+    # Если просто /playlist или /playlist Группа (без числа)
+    args = text.split(maxsplit=1)
+    user_settings.setdefault(chat_id, {})
     
     if len(args) < 2:
+        # Инициализируем мастер
+        user_settings[chat_id]['playlist_step'] = 'artist'
+        user_settings[chat_id]['playlist_draft'] = {'items': []}
+        save_settings(user_settings)
         await message.answer(
-            "🎵 *Использование:*\n"
-            "`/playlist <жанр/исполнитель> [количество]`\n\n"
-            "Примеры:\n"
-            "`/playlist Pink Floyd 5`\n"
-            "`/playlist рок 80х`\n"
-            "`/playlist ambient для сна 3`",
+            "🎸 *Мастер Плейлистов* (Шаг 1/3)\n\n"
+            "Что добавим в подборку?\n\n"
+            "• *Имя группы* — найду популярные хиты.\n"
+            "• *Группа - Трек* — найду конкретную песню.\n"
+            "• *Жанр/Настроение* — сделаю тематический микс.\n\n"
+            "_💡 Вы сможете добавить несколько разных запросов, а я объединю их в один плейлист!_",
             parse_mode="Markdown"
         )
-        return
-    
-    # Парсим аргументы
-    query_parts = args[1:-1] if len(args) > 2 and args[-1].isdigit() else args[1:]
-    count = int(args[-1]) if len(args) > 1 and args[-1].isdigit() else 5
-    query = " ".join(query_parts)
-
-    # Ограничиваем количество: максимум 15 треков
-    count = min(count, 15)
-
-    status_msg = await message.answer(f"🎵 *Ищу плейлист: {query}* ({count} треков)...", parse_mode="Markdown")
-    
-    # Поиск музыки
-    result = search_media_content(query=query, media_type='audio', count=count, chat_id=chat_id)
-    
-    if result.get("count", 0) > 0:
-        # Отправляем текст плейлиста
-        await message.answer(result.get("text", "🎵 Плейлист найден"), parse_mode="Markdown")
-        
-        # Отправляем треки
-        tracks = result.get("tracks", [])
-        playlist_result = await send_playlist(
-            bot=bot,
-            chat_id=message.chat.id,
-            tracks=tracks,
-            status_msg=status_msg,
-            chat_id_str=chat_id
-        )
-        
-        # Итоговый отчет
-        if playlist_result["sent"] > 0:
-            await message.answer(f"✅ *Плейлист готов!* Отправлено {playlist_result['sent']} из {len(tracks)} треков", parse_mode="Markdown")
-        elif playlist_result["failed"] > 0:
-            await message.answer(f"⚠️ Не удалось скачать {playlist_result['failed']} треков. Попробуй другой запрос.", parse_mode="Markdown")
     else:
-        await status_msg.edit_text("😔 Не удалось найти музыку по этому запросу. Попробуй другой жанр или исполнителя.")
+        # Сразу переходим к шагу 2 для этого артиста
+        query = args[1]
+        user_settings[chat_id]['playlist_step'] = 'count'
+        user_settings[chat_id]['playlist_draft'] = {'items': []}
+        user_settings[chat_id]['pending_artist'] = query
+        save_settings(user_settings)
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="5", callback_data="pl_count:5"), 
+             InlineKeyboardButton(text="10", callback_data="pl_count:10")],
+            [InlineKeyboardButton(text="15", callback_data="pl_count:15"),
+             InlineKeyboardButton(text="⌨️ Своё число", callback_data="pl_count:custom")]
+        ])
+        await message.answer(
+            f"✅ Артист: *{query}*\n\n"
+            "Сколько треков этого исполнителя добавим в микс?",
+            parse_mode="Markdown",
+            reply_markup=kb
+        )
+@router.message(Command("playlist_example"))
+async def cmd_playlist_example(message: types.Message):
+    """Показывает примеры плейлистов для обучения"""
+    text = (
+        "🎓 *Академия Плейлистов*\n\n"
+        "Я подготовил несколько примеров, чтобы показать, как можно комбинировать артистов и треки.\n\n"
+        "Выбери один, чтобы мгновенно увидеть его состав:"
+    )
+    
+    kb_list = []
+    for i, ex in enumerate(GLOBAL_EXAMPLES):
+        kb_list.append([InlineKeyboardButton(text=ex['name'], callback_data=f"pl_ex_view:{i}")])
+    
+    await message.answer(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_list))
+
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """
-    Команда /help — описание всех возможностей бота.
+    Команда /help — полное руководство пользователя.
     """
     help_text = (
-        "📖 *Полный список команд AI Prophet*\n\n"
-        "🔮 *Основные команды:*\n"
-        "`/start` — Запустить бота и показать главное меню\n"
-        "`/help` — Показать эту справку\n"
-        "`/playlist` — Создать плейлист музыки\n\n"
-        "🎵 *Музыкальные команды:*\n"
-        "`/playlist <жанр/исполнитель> [кол-во]` — Создать плейлист\n"
-        "Примеры:\n"
-        "• `/playlist Pink Floyd 5`\n"
-        "• `/playlist рок 80х`\n"
-        "• `/playlist ambient для сна 3`\n\n"
-        "🎛 *Кнопки меню:*\n"
-        "• 🔮 *Предсказание* — задать вопрос оракулу\n"
-        "• 🎙 *Голос Судьбы* — отправить голосовое сообщение\n"
-        "• 🖼 *Видение* — отправить фото для анализа\n"
-        "• 🎵 *Музыка* — найти музыку по запросу\n"
-        "• ⚙️ *Настройки* — выбрать движок (Gemini/HF/Auto)\n"
-        "• 🎛 *Лимиты* — настроить лимиты на аудио\n"
-        "• ℹ️ *Помощь* — краткая инструкция\n\n"
-        "💡 *Советы:*\n"
-        "• Голосовые до 60 сек — быстрое распознавание\n"
-        "• Для музыки пиши: 'найти Pink Floyd', 'рок 80х', 'ambient для сна'\n"
-        "• ⏱️ Короткие треки (<5 мин) скачиваются за секунды\n"
-        "• 🕐 Длинные треки (30+ мин) могут загружаться несколько минут\n\n"
-        "🔧 *Технические команды:*\n"
-        "`/dizel0110` — VIP меню (для разработчика)\n\n"
-        "_Бот использует Gemini 2.5 Flash и Hugging Face (Qwen/Whisper)_"
+        "🔮 *AI Prophet: Твое музыкальное пророчество*\n\n"
+        "✨ *Главная фишка: /playlist (Мастер Плейлистов)*\n"
+        "Теперь ты можешь собирать сложные музыкальные миксы:\n"
+        "1️⃣ Напиши `/playlist` для запуска мастера.\n"
+        "2️⃣ Добавляй запросы (группы, жанры или `Группа - Трек`).\n"
+        "3️⃣ Выбирай количество треков для каждого элемента.\n"
+        "4️⃣ *Интерактивный список:* перед скачиванием ты можешь:\n"
+        "   • 🔝 Поднять любимый трек на 1-е место.\n"
+        "   • 🔀 Микс — перемешать порядок.\n"
+        "   • 🔃 Реверс — перевернуть список.\n"
+        "   • ✅/❌ Выбрать только нужные треки.\n\n"
+        "🚀 *Быстрые команды:*\n"
+        "• `/playlist Pink Floyd 5` — мгновенная подборка.\n"
+        "• `/playlist_example` — обучение на примерах.\n\n"
+        "🎹 *Другие возможности:*\n"
+        "• 🔮 *Предсказание* — задай вопрос, получи мудрость AI.\n"
+        "• 🎙 *Голос Судьбы* — отправь голосовое, я его пойму.\n"
+        "• 🖼 *Видение* — пришли фото для анализа.\n"
+        "• ⚙️ *Настройки* — переключай движки (Gemini / HF).\n\n"
+        "💡 *Советы и лимиты:*\n"
+        "• Все файлы скачиваются с реальными названиями.\n"
+        "• В режиме загрузки ты увидишь живой *прогресс-бар*.\n"
+        "• ⏱ *Стандартные лимиты:* до 30 мин и до 50 MB на файл.\n"
+        "• ⚙️ Настрой свои правила через кнопку *🎛 Лимиты* в меню.\n"
+        "• В конце каждого плейлиста я раскрою его *Ауру*.\n\n"
+        "🧘 *Приятного погружения в звук!*"
     )
     await message.answer(help_text, parse_mode="Markdown")
 
@@ -546,6 +594,91 @@ async def handle_audio(message: types.Message, bot: Bot):
         await status_msg.edit_text("😔 Эфир слишком зашумлен, не смог разобрать ни слова...")
 
 
+@router.message(F.document)
+async def handle_document(message: types.Message, bot: Bot):
+    """Обработка входящих документов (для импорта бэкапа JSON)"""
+    chat_id = str(message.chat.id)
+    doc = message.document
+    
+    if doc.file_name.endswith('.json'):
+        status_msg = await message.answer("📥 *Обнаружил JSON файл. Проверяю структуру бэкапа...*")
+        
+        # Скачиваем файл во временную папку
+        file_name = f"import_{chat_id}.json"
+        file_path = os.path.join(TEMP_DIR, file_name)
+        await bot.download(doc, destination=file_path)
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Универсальный поиск данных библиотеки в JSON
+            def find_library_data(obj):
+                if isinstance(obj, dict):
+                    if 'library' in obj and isinstance(obj['library'], list):
+                        return obj['library']
+                    for v in obj.values():
+                        res = find_library_data(v)
+                        if res: return res
+                elif isinstance(obj, list):
+                    # Если это просто список словарей, похожих на плейлисты
+                    if obj and isinstance(obj[0], dict) and 'items' in obj[0]:
+                        return obj
+                return None
+
+            new_lib = find_library_data(data)
+
+            if new_lib:
+                # Мержим библиотеку
+                user_settings.setdefault(chat_id, {})
+                old_lib = user_settings[chat_id].get('library', [])
+                
+                # Дедупликация и подсчет
+                existing_names = {pl['name'] for pl in old_lib}
+                added_count = 0
+                skipped_count = 0
+                
+                for pl in new_lib:
+                    if not isinstance(pl, dict) or 'name' not in pl or 'items' not in pl:
+                        continue
+                        
+                    if pl['name'] not in existing_names:
+                        old_lib.append(pl)
+                        added_count += 1
+                        existing_names.add(pl['name'])
+                    else:
+                        skipped_count += 1
+                
+                user_settings[chat_id]['library'] = old_lib
+                
+                # Попробуем также восстановить настройки если это полный бэкап
+                if isinstance(data, dict) and chat_id in data:
+                    for k, v in data[chat_id].items():
+                        if k != 'library': user_settings[chat_id][k] = v
+                elif isinstance(data, dict) and 'engine' in data:
+                    user_settings[chat_id]['engine'] = data['engine']
+                
+                save_settings(user_settings)
+                
+                msg = f"✅ *Импорт завершен!*\n\n"
+                msg += f"📥 Добавлено новых: `{added_count}`\n"
+                if skipped_count > 0:
+                    msg += f"⏩ Пропущено (уже есть): `{skipped_count}`\n"
+                msg += f"📚 Всего в библиотеке: `{len(old_lib)}`\n"
+                
+                await status_msg.edit_text(msg, parse_mode="Markdown")
+            else:
+                await status_msg.edit_text("❌ *Ошибка:* Не удалось найти структуру плейлистов в этом файле. Убедитесь, что это JSON, созданный мной.")
+                
+        except Exception as e:
+            logger.error(f"Import error: {e}")
+            await status_msg.edit_text(f"❌ *Ошибка при чтении файла:* {str(e)}")
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    else:
+        await message.answer("📁 *Файл получен.* К сожалению, я умею обрабатывать только `.json` бэкапы моей библиотеки музыки.")
+
 @router.message()
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
@@ -601,6 +734,31 @@ async def handle_text(message: types.Message, bot: Bot):
         await cmd_help(message)
         return
 
+    if text == "📚 Библиотека":
+        # Имитируем нажатие callback кнопки библиотеки
+        await handle_pl_library(types.CallbackQuery(id="0", from_user=message.from_user, chat_instance="0", message=message, data="pl_library"))
+        return
+
+    if text == "🎛 Лимиты":
+        from handlers.limits import load_user_limits, update_limits_message
+        limits = load_user_limits(chat_id)
+        await update_limits_message(message, chat_id, limits)
+        return
+
+    if text == "📥 Импорт" or text == "import_json":
+        await message.answer(
+            "📥 *Импорт Плейлистов По Проводу*\n\n"
+            "Просто **скинь мне JSON-файл** с плейлистом или бэкапом библиотеки прямо здесь в чат.\n\n"
+            "Я мигом всё расшифрую и добавлю в твой музыкальный арсенал!",
+            parse_mode="Markdown"
+        )
+        return
+
+    if text == "library":
+        # Имитируем нажатие callback кнопки библиотеки
+        await handle_pl_library(types.CallbackQuery(id="0", from_user=message.from_user, chat_instance="0", message=message, data="pl_library"))
+        return
+
     if "🤖 Авто" in text: user_settings.setdefault(chat_id, {})['engine'] = 'auto'
     elif "💎 Только Gemini" in text: user_settings.setdefault(chat_id, {})['engine'] = 'gemini'
     elif "🧿 Только Hugging Face" in text: user_settings.setdefault(chat_id, {})['engine'] = 'hf'
@@ -618,7 +776,120 @@ async def handle_text(message: types.Message, bot: Bot):
         await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu(vip_mode=is_vip))
         return
 
-    # Остальная логика handle_text...
+    # --- ЛОГИКА ШАГОВ ПЛЕЙЛИСТА ---
+    state = user_settings.get(chat_id, {})
+    step = state.get('playlist_step')
+
+    if step in ['count', 'confirm']:
+        # Блокируем случайный текст, когда нужно нажимать кнопки
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена / Выход", callback_data="pl_cancel")]
+        ])
+        await message.answer(
+            "⚠️ *Мастер Плейлистов активен!*\n\n"
+            "Пожалуйста, используйте кнопки выше для выбора или нажмите отмену, чтобы вернуться к обычному общению.",
+            parse_mode="Markdown",
+            reply_markup=kb
+        )
+        return
+
+    if step == 'artist':
+        if 'playlist_draft' not in state:
+            state['playlist_draft'] = {'items': []}
+            
+        artist = message.text.strip()
+        state['pending_artist'] = artist # Временно храним артиста пока не узнаем количество
+        state['playlist_step'] = 'count'
+        save_settings(user_settings)
+        
+        # Если есть дефис, вероятно это конкретный трек
+        is_specific = " - " in artist
+        
+        kb_rows = [
+            [InlineKeyboardButton(text="1 (Точно этот трек)" if is_specific else "1", callback_data="pl_count:1"),
+             InlineKeyboardButton(text="3", callback_data="pl_count:3")],
+            [InlineKeyboardButton(text="5", callback_data="pl_count:5"), 
+             InlineKeyboardButton(text="10", callback_data="pl_count:10")],
+            [InlineKeyboardButton(text="⌨️ Своё число", callback_data="pl_count:custom")]
+        ]
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+        
+        await message.answer(
+            f"✅ Запрос: *{artist}*\n\n"
+            "Сколько треков по этому запросу добавить в плейлист?",
+            parse_mode="Markdown",
+            reply_markup=kb
+        )
+        return
+
+    if step == 'playlist_naming':
+        name = message.text.strip()
+        draft = state.get('playlist_draft', {})
+        items = draft.get('items', [])
+        
+        user_settings[chat_id].setdefault('library', [])
+        new_playlist = {
+            'name': name,
+            'items': items,
+            'created_at': datetime.now().strftime("%Y-%m-%d %H:%M")
+        }
+        user_settings[chat_id]['library'].append(new_playlist)
+        state['playlist_step'] = 'confirm'
+        save_settings(user_settings)
+        await message.answer(f"✅ Плейлист *{name}* сохранен в библиотеку!", parse_mode="Markdown")
+        
+        # --- ФИНАЛЬНЫЙ ШТРИХ: Отправка файла плейлиста ---
+        try:
+            # Создаем временный файл для этого конкретного плейлиста
+            safe_name = re.sub(r'[^\w\-]', '_', name)
+            filename = f"playlist_{safe_name}_{int(datetime.now().timestamp())}.json"
+            filepath = os.path.join(TEMP_DIR, filename)
+            
+            # Структура бэкапа совместима с общим импортом
+            export_data = {
+                chat_id: {
+                    "library": [new_playlist]
+                }
+            }
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2)
+            
+            await message.answer_document(
+                FSInputFile(filepath),
+                caption=f"📋 *Портативный Плейлист:* `{name}`\n\n_Сохрани этот файл — это твой личный ключ к этой подборке. Его можно переслать другу или импортировать обратно в меня в любой момент._",
+                parse_mode="Markdown"
+            )
+            os.remove(filepath)
+        except Exception as e:
+            logger.error(f"Failed to send playlist file: {e}")
+            
+        await show_playlist_confirm(message, chat_id)
+        return
+
+    if step == 'count_input':
+        try:
+            count = int(message.text.strip())
+            if not (1 <= count <= 30):
+                await message.answer("⚠️ Пожалуйста, введите число от 1 до 30:")
+                return
+                
+            artist = state.pop('pending_artist', 'Неизвестный')
+            state.setdefault('playlist_draft', {}).setdefault('items', []).append({
+                'query': artist,
+                'count': count
+            })
+            state['playlist_step'] = 'confirm'
+            save_settings(user_settings)
+            
+            await show_playlist_confirm(message, chat_id)
+            return
+        except (ValueError, KeyError):
+            await message.answer("❌ Введите количество треков цифрами:")
+            return
+
+    # В противном случае - обычный ритуал
     status_msg = await message.answer("🧘 *Медитирую над твоими словами...*")
     await conduct_ai_ritual(message, bot, message.text, status_msg)
 
@@ -711,33 +982,38 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
                 import re
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-                # Ищем ссылки (youtu.be или youtube.com)
-                links = re.findall(r'https://(?:www\.)?youtu(?:be\.com/watch\?v=|\.be/)([\w-]+)', text_result)
+                # Пытаемся найти ссылки для кнопок
                 buttons = []
+                if tracks:
+                    # Сохраняем результаты поиска для пользователя, чтобы кнопки работали по индексу
+                    user_settings.setdefault(chat_id, {})['last_tracks'] = tracks
+                    save_settings(user_settings)
 
-                if links:
-                    # Создаем ряд кнопок: [⬇️ 1] [⬇️ 2] ...
                     buttons_row = []
-                    for i, video_id in enumerate(links, 1):
-                        # Лимит 5 кнопок в ряд, чтобы не засорять
-                        if i > 5: break
+                    for i, track in enumerate(tracks, 1):
+                        if i > 10: break # Максимум 10 кнопок
+                        
                         buttons_row.append(
-                            InlineKeyboardButton(text=f"⬇️ {i}", callback_data=f"dl_audio:{video_id}")
+                            InlineKeyboardButton(text=f"⬇️ {i}", callback_data=f"dl_track:{i-1}")
                         )
-                    buttons.append(buttons_row)
+                        
+                        if len(buttons_row) >= 5:
+                            buttons.append(buttons_row)
+                            buttons_row = []
+                    
+                    if buttons_row:
+                        buttons.append(buttons_row)
 
                 # Добавляем кнопку "Скачать всё" для плейлистов
                 if len(tracks) > 1 and query:
-                    # Кнопка "Скачать всё" с данными для плейлиста
                     buttons.append([
                         InlineKeyboardButton(
                             text=f"🎧 Скачать всё ({len(tracks)} тр.)",
-                            callback_data=f"dl_playlist:{query}:{len(tracks)}"
+                            callback_data=f"dl_playlist:{query[:30]}:{len(tracks)}"
                         )
                     ])
 
                 kb = InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
-
                 await message.answer(f"🎵 {text_result}", reply_markup=kb, disable_web_page_preview=True)
             return
         else:
@@ -849,7 +1125,113 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         else:
             await message.answer(final_text, reply_markup=get_main_menu(vip_mode=is_vip))
 
-@router.callback_query(F.data.startswith("dl_audio:"))
+@router.callback_query(F.data.startswith("dl_track:"))
+async def handle_track_callback(callback: types.CallbackQuery, bot: Bot):
+    """Скачивание трека по индексу из кэша поиска"""
+    import os
+    from aiogram.types import FSInputFile
+    from core.tools import download_audio
+
+    try:
+        idx = int(callback.data.split(":")[1])
+        chat_id = str(callback.message.chat.id)
+        
+        # Берем треки из кэша последнего поиска
+        tracks = user_settings.get(chat_id, {}).get('last_tracks', [])
+        
+        if not tracks or idx >= len(tracks):
+            await callback.answer("❌ Ссылка устарела, найдите музыку еще раз")
+            return
+            
+        track = tracks[idx]
+        url = track['url']
+        title = track['title']
+
+        await callback.answer(f"⏳ Начинаю загрузку: {title[:20]}...")
+        
+        # Кнопка отмены (пока просто для интерфейса, логику добавим следом)
+        cancel_kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="❌ Прервать", callback_data=f"cancel_dl:{chat_id}")
+        ]])
+        
+        status_msg = await bot.send_message(
+            chat_id, 
+            f"📥 *Подготовка к загрузке...*\n🎵 {title}", 
+            parse_mode="Markdown",
+            reply_markup=cancel_kb
+        )
+
+        import time
+        last_update = [0] # Используем список для замыкания
+
+        async def prog_cb(percent, speed, eta):
+            now = time.time()
+            if now - last_update[0] > 2.2: # Обновляем не чаще чем раз в 2.2 сек (лимиты TG)
+                last_update[0] = now
+                try:
+                    p_val = float(percent.strip('%'))
+                    bar_len = 10
+                    filled = int(p_val / 10)
+                    bar = "🔵" * filled + "⚪" * (bar_len - filled)
+                    
+                    text = (
+                        f"📥 *Загрузка:* {percent}\n"
+                        f"{bar}\n"
+                        f"🚀 *Скорость:* {speed}\n"
+                        f"⏳ *Осталось:* {eta}\n\n"
+                        f"🎵 _{title}_"
+                    )
+                    # Обновляем сообщение
+                    await status_msg.edit_text(text, parse_mode="Markdown", reply_markup=cancel_kb)
+                except Exception as e: 
+                    logger.debug(f"Progress update failed: {e}")
+                
+            # ПРОВЕРКА ОТМЕНЫ
+            if chat_id in active_cancellations:
+                return False
+            return True
+
+        # Обертка для синхронного вызова асинхронного колбека
+        def sync_prog_cb(p, s, t):
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.run_coroutine_threadsafe(prog_cb(p, s, t), loop)
+                else:
+                    loop.run_until_complete(prog_cb(p, s, t))
+            except: pass
+            return True if chat_id not in active_cancellations else False
+
+        # Скачиваем аудио с прогресс-баром
+        file_path, real_title, duration = download_audio(url, chat_id=chat_id, progress_callback=sync_prog_cb)
+        
+        # Убираем флаг отмены если он был
+        active_cancellations.discard(chat_id)
+
+        if file_path and os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+            size_mb = file_size / (1024 * 1024)
+            size_text = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{file_size/1024:.1f} KB"
+            
+            duration_text = f" ({duration} сек)" if duration else ""
+            await status_msg.edit_text(f"📤 *Отправляю:* {real_title or title}...")
+            
+            audio_file = FSInputFile(file_path)
+            await bot.send_audio(
+                callback.message.chat.id,
+                audio_file,
+                title=real_title or title,
+                performer="AI Prophet",
+                caption=f"🎧 *{real_title or title}*{duration_text}\n📦 `{size_text}` | 🔗 [Источник]({url})"
+            )
+            await status_msg.delete()
+            os.remove(file_path)
+        else:
+            await status_msg.edit_text("❌ Не удалось скачать файл. Попробуйте другой источник.")
+            
+    except Exception as e:
+        logger.error(f"Error in handle_track_callback: {e}")
+        await callback.answer("❌ Произошла ошибка при загрузке")
 async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
     import os
     from aiogram.types import FSInputFile
@@ -867,6 +1249,10 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
 
     if file_path and os.path.exists(file_path):
         try:
+            file_size = os.path.getsize(file_path)
+            size_mb = file_size / (1024 * 1024)
+            size_text = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{file_size/1024:.1f} KB"
+            
             duration_text = f" ({duration} сек)" if duration else ""
             await status_msg.edit_text(f"📤 Отправляю: {title}{duration_text}...")
             audio_file = FSInputFile(file_path)
@@ -876,7 +1262,7 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
                 audio_file,
                 title=title,
                 performer="AI Prophet Media",
-                caption=f"🎧 *{title}*{duration_text}\n🔗 [Источник]({url})"
+                caption=f"🎧 *{title}*{duration_text}\n📦 `{size_text}` | 🔗 [Источник]({url})"
             )
             await status_msg.delete()
         except Exception as e:
@@ -972,8 +1358,425 @@ async def handle_voice_callback(callback: types.CallbackQuery, bot: Bot):
             "✏️ *Введите исправленный текст:*\n\n"
             "_Просто отправьте сообщение с правильным текстом, и я выполню его._"
         )
+        # Очищаем сохранённый текст
+        user_settings.get(chat_id, {}).pop('pending_voice_text', None)
 
     elif action == "voice_cancel":
         await callback.answer("❌ Отменено")
-        # Очищаем сохранённый текст
         user_settings.get(chat_id, {}).pop('pending_voice_text', None)
+        await callback.message.delete()
+
+@router.callback_query(F.data.startswith("cancel_dl:"))
+async def handle_cancel_callback(callback: types.CallbackQuery):
+    chat_id = callback.data.split(":")[1]
+    active_cancellations.add(chat_id)
+    await callback.answer("🛑 Прерываю загрузку...")
+    await callback.message.edit_text("❌ *Загрузка отменена пользователем*", parse_mode="Markdown")
+
+@router.callback_query(F.data.startswith("pl_count:"))
+async def handle_playlist_wizard_count(callback: types.CallbackQuery, bot: Bot):
+    chat_id = str(callback.message.chat.id)
+    data = callback.data.split(":")[1]
+    
+    state = user_settings.get(chat_id, {})
+    
+    if data == "custom":
+        state['playlist_step'] = 'count_input'
+        save_settings(user_settings)
+        await callback.message.edit_text("⌨️ *Введите желаемое количество треков (от 1 до 30):*", parse_mode="Markdown")
+        return
+
+    count = int(data)
+    if 'playlist_draft' not in state:
+        await callback.answer("Ошибка сессии. Начни заново: /playlist")
+        return
+        
+    artist = state.pop('pending_artist', 'Неизвестный')
+    state['playlist_draft']['items'].append({
+        'query': artist,
+        'count': count
+    })
+    state['playlist_step'] = 'confirm'
+    save_settings(user_settings)
+    
+    await show_playlist_confirm(callback, chat_id)
+
+@router.callback_query(F.data == "pl_add_more")
+async def handle_pl_add_more(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    user_settings[chat_id]['playlist_step'] = 'artist'
+    save_settings(user_settings)
+    await callback.message.edit_text(
+        "📝 *Добавление элемента:*\n\n"
+        "• Введите *Название группы* для подбора хитов.\n"
+        "• Введите *Группа - Трек* для точного поиска.\n"
+        "• Введите *Жанр* для тематической выборки.",
+        parse_mode="Markdown"
+    )
+
+@router.callback_query(F.data == "pl_search")
+async def handle_pl_search(callback: types.CallbackQuery, bot: Bot):
+    chat_id = str(callback.message.chat.id)
+    state = user_settings.get(chat_id, {}).get('playlist_draft', {})
+    items = state.get('items', [])
+    
+    if not items:
+        await callback.answer("Список пуст!")
+        return
+
+    await callback.message.edit_text(f"🚀 Запускаю мега-поиск для {len(items)} запросов...")
+    
+    from core.tools import search_media_content
+    all_tracks = []
+    descriptions = []
+    
+    not_found = []
+    
+    for item in items:
+        query = item['query']
+        count = item['count']
+        res = search_media_content(query=query, media_type='audio', count=count, chat_id=chat_id)
+        
+        tracks = res.get("tracks", [])
+        if not tracks:
+            not_found.append(query)
+            continue
+
+        desc = res.get("text")
+        if desc: descriptions.append(desc)
+        
+        for t in tracks:
+            t['selected'] = True 
+            t['query_origin'] = query
+        all_tracks.extend(tracks)
+        
+    if not_found:
+        names = ", ".join(not_found)
+        await callback.message.answer(f"⚠️ *Не удалось найти:* {names}")
+
+    if not all_tracks:
+        await callback.message.answer("😔 Совсем ничего не нашлось. Попробуйте изменить запросы.")
+        return
+
+    # Сохраняем найденное и описание
+    user_settings[chat_id]['found_tracks'] = all_tracks
+    user_settings[chat_id]['search_desc'] = "\n\n".join(descriptions)
+    
+    # Сбрасываем стейт мастера
+    user_settings[chat_id].pop('playlist_step', None)
+    save_settings(user_settings)
+    
+    await show_selection_menu(callback, chat_id)
+
+async def show_selection_menu(callback: types.CallbackQuery, chat_id: str):
+    """Показывает список найденных треков с возможностью выбора"""
+    state = user_settings.get(chat_id, {})
+    tracks = state.get('found_tracks', [])
+    search_desc = state.get('search_desc', '')
+    
+    # Формируем текст списка
+    text = "🔮 *Пророчество о плейлисте:*\n"
+    if search_desc:
+        text += f"_{search_desc[:500]}..._\n\n" # Ограничиваем длину
+    
+    text += "📋 *Список треков (отметьте нужные):*\n"
+    kb_list = []
+    
+    for i, track in enumerate(tracks):
+        status = "✅" if track.get('selected', True) else "❌"
+        # Ещё короче название, чтобы влезло две кнопки
+        short_title = track['title'][:20] + ".." if len(track['title']) > 22 else track['title']
+        
+        text += f"{i+1}. {status} [{track['title']}]({track['url']})\n"
+        
+        kb_list.append([
+            InlineKeyboardButton(text=f"{status} {short_title}", callback_data=f"pl_toggle:{i}"),
+            InlineKeyboardButton(text="🔝", callback_data=f"pl_top:{i}")
+        ])
+    
+    kb_list.append([
+        InlineKeyboardButton(text="🔀 Микс", callback_data="pl_shuffle"),
+        InlineKeyboardButton(text="🔃 Реверс", callback_data="pl_reverse"),
+        InlineKeyboardButton(text="🚀 СКАЧАТЬ", callback_data="pl_dl_final")
+    ])
+    kb_list.append([InlineKeyboardButton(text="🔄 Сброс / Новый поиск", callback_data="pl_add_more")])
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+    except:
+        # Если текст слишком длинный, пробуем обновить только кнопки или отправить новое
+        await callback.message.answer("Список треков (слишком длинный для одного сообщения):", reply_markup=kb)
+
+@router.callback_query(F.data.startswith("pl_toggle:"))
+async def handle_pl_toggle(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    idx = int(callback.data.split(":")[1])
+    
+    state = user_settings.get(chat_id, {})
+    tracks = state.get('found_tracks', [])
+    
+    if 0 <= idx < len(tracks):
+        tracks[idx]['selected'] = not tracks[idx].get('selected', True)
+        save_settings(user_settings)
+        await show_selection_menu(callback, chat_id)
+    await callback.answer()
+
+@router.callback_query(F.data == "pl_shuffle")
+async def handle_pl_shuffle(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    state = user_settings.get(chat_id, {})
+    tracks = state.get('found_tracks', [])
+    
+    if tracks:
+        random.shuffle(tracks)
+        save_settings(user_settings)
+        await show_selection_menu(callback, chat_id)
+    await callback.answer("🔀 Перемешано!")
+
+@router.callback_query(F.data.startswith("pl_top:"))
+async def handle_pl_top(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    idx = int(callback.data.split(":")[1])
+    state = user_settings.get(chat_id, {})
+    tracks = state.get('found_tracks', [])
+    
+    if 0 < idx < len(tracks):
+        # Перемещаем трек в самое начало
+        track = tracks.pop(idx)
+        tracks.insert(0, track)
+        save_settings(user_settings)
+        await show_selection_menu(callback, chat_id)
+    await callback.answer("🔝 Поднято в начало!")
+
+@router.callback_query(F.data == "pl_reverse")
+async def handle_pl_reverse(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    state = user_settings.get(chat_id, {})
+    tracks = state.get('found_tracks', [])
+    
+    if tracks:
+        tracks.reverse()
+        save_settings(user_settings)
+        await show_selection_menu(callback, chat_id)
+    await callback.answer("🔃 Порядок изменен на обратный!")
+
+@router.callback_query(F.data == "pl_dl_final")
+async def handle_pl_download_selected(callback: types.CallbackQuery, bot: Bot):
+    chat_id = str(callback.message.chat.id)
+    state = user_settings.get(chat_id, {})
+    tracks = state.get('found_tracks', [])
+    
+    selected_tracks = [t for t in tracks if t.get('selected', True)]
+    
+    if not selected_tracks:
+        await callback.answer("❌ Ничего не выбрано!", show_alert=True)
+        return
+        
+    await callback.message.edit_text(f"⏳ Начинаю загрузку {len(selected_tracks)} треков...")
+    
+    from core.tools import send_playlist
+    # Очищаем стейт найденного чтобы не висело в памяти
+    user_settings[chat_id].pop('found_tracks', None)
+    save_settings(user_settings)
+    
+    await send_playlist(bot, callback.message.chat.id, selected_tracks, status_msg=callback.message, chat_id_str=chat_id)
+
+async def show_playlist_confirm(message_or_callback, chat_id):
+    """Общая функция для показа финального шага мастера"""
+    state = user_settings.get(chat_id, {})
+    draft = state.get('playlist_draft', {})
+    items = draft.get('items', [])
+    
+    summary = []
+    for i, item in enumerate(items, 1):
+        icon = "🎯" if " - " in item['query'] else "🎸"
+        summary.append(f"{i}. {icon} *{item['query']}* — {item['count']} шт.")
+    
+    summary_text = "\n".join(summary) if summary else "Пусто"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔍 Найти сейчас", callback_data="pl_search")],
+        [InlineKeyboardButton(text="➕ Добавить еще автора", callback_data="pl_add_more")],
+        [InlineKeyboardButton(text="💾 Сохранить как шаблон", callback_data="pl_save_tpl")]
+    ])
+    
+    text = (
+        f"📊 *Ваша подборка:*\n\n"
+        f"{summary_text}\n\n"
+        "💡 *Подсказка:* Вы можете добавлять и конкретные песни, и целые группы. Я соберу всё в один микс.\n\n"
+        "ℹ️ 🎯 — точный трек, 🎸 — подборка."
+    )
+    
+    if isinstance(message_or_callback, types.Message):
+        await message_or_callback.answer(text, parse_mode="Markdown", reply_markup=kb)
+    else:
+        await message_or_callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+@router.callback_query(F.data == "pl_save_tpl")
+async def handle_pl_save_tpl(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    state = user_settings.get(chat_id, {})
+    
+    # Переводим в состояние ввода имени
+    state['playlist_step'] = 'playlist_naming'
+    save_settings(user_settings)
+    
+    await callback.message.answer("📝 *Введите название для этого плейлиста:*", parse_mode="Markdown")
+    await callback.answer()
+
+@router.callback_query(F.data == "pl_library")
+async def handle_pl_library(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    lib = user_settings.get(chat_id, {}).get('library', [])
+    
+    if not lib:
+        if callback.id == "0":
+            await callback.message.answer("🛑 Ваша библиотека пока пуста.\n\n_Добавьте свой первый плейлист через Мастер или Импортируйте JSON-файл._", parse_mode="Markdown")
+        else:
+            await callback.answer("Библиотека пуста. Сохрани что-нибудь через /playlist!")
+        return
+        
+    text = "📚 *Ваша Музыкальная Библиотека*\n_Выбери ритуал для запуска:_\n\n"
+    kb_list = []
+    
+    total_tracks = 0
+    for i, pl in enumerate(lib):
+        items_count = len(pl.get('items', []))
+        total_tracks += items_count
+        text += f"{i+1}. 🎵 *{pl['name']}* (`{items_count}` треков)\n"
+        kb_list.append([
+            InlineKeyboardButton(text=f"▶️ {pl['name']}", callback_data=f"pl_launch:{i}"),
+            InlineKeyboardButton(text="🗑 Удалить", callback_data=f"pl_delete:{i}")
+        ])
+    
+    text += f"\n📊 Всего в хранилище: `{total_tracks}` записей."
+    
+    kb_list.append([
+        InlineKeyboardButton(text="📥 Импорт (JSON)", callback_data="pl_import_btn"),
+        InlineKeyboardButton(text="📤 Бэкап (JSON)", callback_data="pl_export")
+    ])
+    kb_list.append([
+        InlineKeyboardButton(text="➕ Новый", callback_data="pl_new"),
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="pl_cancel")
+    ])
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
+    try:
+        if callback.id == "0": # Наш "фейковый" вызов из меню
+            await callback.message.answer(text, parse_mode="Markdown", reply_markup=kb)
+        else:
+            await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+    except Exception:
+        await callback.message.answer(text, parse_mode="Markdown", reply_markup=kb)
+
+@router.callback_query(F.data.startswith("pl_delete:"))
+async def handle_pl_delete(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    idx = int(callback.data.split(":")[1])
+    lib = user_settings.get(chat_id, {}).get('library', [])
+    
+    if 0 <= idx < len(lib):
+        removed = lib.pop(idx)
+        save_settings(user_settings)
+        await callback.answer(f"🗑 Удалено: {removed['name']}")
+        await handle_pl_library(callback)
+    else:
+        await callback.answer("Ошибка удаления!")
+
+@router.callback_query(F.data == "pl_import_btn")
+async def handle_pl_import_click(callback: types.CallbackQuery):
+    await callback.answer()
+    await callback.message.answer(
+        "📥 *Для импорта просто отправь мне JSON-файл бэкапа или плейлиста.*",
+        parse_mode="Markdown"
+    )
+    await cmd_playlist(callback.message, bot)
+    await callback.answer()
+
+@router.callback_query(F.data == "pl_export")
+async def handle_pl_export(callback: types.CallbackQuery):
+    chat_id = str(callback.message.chat.id)
+    
+    # Создаем временный файл специально для пользователя
+    export_path = os.path.join(TEMP_DIR, f"backup_{chat_id}.json")
+    user_data = {chat_id: user_settings.get(chat_id, {})}
+    
+    with open(export_path, 'w', encoding='utf-8') as f:
+        json.dump(user_data, f, ensure_ascii=False, indent=2)
+    
+    await callback.message.answer_document(
+        FSInputFile(export_path),
+        caption="💾 *Твой переносной бэкап библиотеки.*\n\nЕсли бот «забудет» тебя (например, при переезде на новый сервер), просто перешли мне этот файл в будущем!",
+        parse_mode="Markdown"
+    )
+    os.remove(export_path)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("pl_launch:"))
+async def handle_pl_launch(callback: types.CallbackQuery, bot: Bot):
+    chat_id = str(callback.message.chat.id)
+    idx = int(callback.data.split(":")[1])
+    lib = user_settings.get(chat_id, {}).get('library', [])
+    
+    if 0 <= idx < len(lib):
+        pl = lib[idx]
+        user_settings[chat_id]['playlist_draft'] = {'items': pl['items']}
+        save_settings(user_settings)
+        await handle_pl_search(callback, bot)
+    else:
+        await callback.answer("Ошибка!")
+
+@router.callback_query(F.data.startswith("pl_ex_view:"))
+async def handle_pl_ex_view(callback: types.CallbackQuery):
+    idx = int(callback.data.split(":")[1])
+    if 0 <= idx < len(GLOBAL_EXAMPLES):
+        ex = GLOBAL_EXAMPLES[idx]
+        items_text = "\n".join([f"• {item['query']} ({item['count']} шт.)" for item in ex['items']])
+        
+        text = (
+            f"📋 *Пример: {ex['name']}*\n\n"
+            f"{ex['desc']}\n\n"
+            f"*Состав:*\n{items_text}\n\n"
+            "Запустить этот поиск?"
+        )
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 ЗАПУСТИТЬ", callback_data=f"pl_ex_run:{idx}")],
+            [InlineKeyboardButton(text="💾 ДОБАВИТЬ В БИБЛИОТЕКУ", callback_data=f"pl_ex_save:{idx}")],
+            [InlineKeyboardButton(text="⬅️ К примерам", callback_data="pl_ex_back")]
+        ])
+        await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+
+@router.callback_query(F.data == "pl_ex_back")
+async def handle_pl_ex_back(callback: types.CallbackQuery):
+    await cmd_playlist_example(callback.message)
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("pl_ex_save:"))
+async def handle_pl_ex_save(callback: types.CallbackQuery):
+    """Копирует пример из Академии в черновик плейлиста для редактирования/сохранения"""
+    chat_id = str(callback.message.chat.id)
+    idx = int(callback.data.split(":")[1])
+    
+    if 0 <= idx < len(GLOBAL_EXAMPLES):
+        ex = GLOBAL_EXAMPLES[idx]
+        user_settings.setdefault(chat_id, {})
+        # Копируем данные примера в черновик
+        user_settings[chat_id]['playlist_draft'] = {'items': ex['items']}
+        user_settings[chat_id]['playlist_step'] = 'confirm'
+        save_settings(user_settings)
+        
+        await callback.answer("📥 Копирую в мастер плейлистов...")
+        # Показываем финальный шаг мастера, где уже есть кнопка "Сохранить как шаблон"
+        await show_playlist_confirm(callback, chat_id)
+
+@router.callback_query(F.data.startswith("pl_ex_run:"))
+async def handle_pl_ex_run(callback: types.CallbackQuery, bot: Bot):
+    chat_id = str(callback.message.chat.id)
+    idx = int(callback.data.split(":")[1])
+    if 0 <= idx < len(GLOBAL_EXAMPLES):
+        ex = GLOBAL_EXAMPLES[idx]
+        user_settings.setdefault(chat_id, {})['playlist_draft'] = {'items': ex['items']}
+        save_settings(user_settings)
+        await handle_pl_search(callback, bot)
+    await callback.answer()

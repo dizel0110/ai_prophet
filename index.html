@@ -174,23 +174,23 @@
                 <div class="icon-circle">👁️</div>
                 <span>Vision AI</span>
             </div>
-            <div class="skill-item locked">
-                <div class="icon-circle">🎵</div>
+            <div class="skill-item" onclick="sendToBot('playlist_wizard')">
+                <div class="icon-circle">🎙️</div>
                 <span>Voice & Music</span>
             </div>
-            <div class="skill-item locked">
-                <div class="icon-circle">🧠</div>
-                <span>Memory</span>
+            <div class="skill-item" onclick="sendToBot('import_json')">
+                <div class="icon-circle">📥</div>
+                <span>Import JSON</span>
             </div>
-            <div class="skill-item locked">
-                <div class="icon-circle">🛠️</div>
-                <span>Toolbox</span>
+            <div class="skill-item" onclick="sendToBot('library')">
+                <div class="icon-circle">📚</div>
+                <span>Library</span>
             </div>
         </div>
     </div>
 
     <div class="footer-text">
-        Powered by Gemini 2.5 Flash & Prophet Engine v3.0
+        Powered by Gemini 3.1 & Prophet Engine v4.1 ✨
     </div>
 
     <script>
@@ -208,6 +208,7 @@
         function sendToBot(action) {
             tg.HapticFeedback.impactOccurred('medium');
             tg.sendData(action);
+            setTimeout(() => tg.close(), 100);
         }
     </script>
 </body>

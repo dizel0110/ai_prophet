@@ -4,6 +4,7 @@
 # Licensed under the Apache License, Version 2.0
 # -----------------------------------------------------------------------------
 
+import os
 import asyncio
 import logging
 import multiprocessing
@@ -33,11 +34,40 @@ def start_web():
 async def start_bot():
     apply_dns_patch()
     
+    # Очистка временной папки при старте
+    from config import TEMP_DIR
+    import shutil
+    if os.path.exists(TEMP_DIR):
+        try:
+            for item in os.listdir(TEMP_DIR):
+                item_path = os.path.join(TEMP_DIR, item)
+                if os.path.isfile(item_path): os.remove(item_path)
+                elif os.path.isdir(item_path): shutil.rmtree(item_path)
+            logger.info("🧹 Временная папка очищена")
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось полностью очистить temp: {e}")
+    else: os.makedirs(TEMP_DIR)
+    
+    from aiogram.types import BotCommand
     from config import HF_TOKEN, GEMINI_KEY
+    
+    bot = Bot(token=TOKEN)
+    
+    # Регистрация команд для подсказок (autocomplete)
+    commands = [
+        BotCommand(command="start", description="Запустить Пророка и открыть меню"),
+        BotCommand(command="help", description="Показать все возможности"),
+        BotCommand(command="playlist", description="Собрать свой плейлист"),
+        BotCommand(command="playlist_example", description="Примеры и обучение (Академия)"),
+        BotCommand(command="settings", description="Выбрать мозг бота (Gemini/HF)"),
+        BotCommand(command="dizel0110", description="Вход в VIP режим"),
+        BotCommand(command="stop", description="Остановить текущие действия")
+    ]
+    await bot.set_my_commands(commands)
+    
     if not HF_TOKEN: logger.warning("⚠️ HF_TOKEN is not set! Voice and WebSearch fallback will fail.")
     else: logger.info(f"✅ HF_TOKEN is loaded (prefix: {HF_TOKEN[:5]}...)")
     
-    bot = Bot(token=TOKEN)
     dp = Dispatcher()
     
     # Регистрация роутеров

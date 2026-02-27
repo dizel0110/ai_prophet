@@ -18,17 +18,17 @@ if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
 # АКТУАЛЬНЫЕ МОДЕЛИ (Февраль 2026)
 FALLBACK_MODELS = [
-    'gemini-3-flash-preview', # Флагман 2026 года
-    'gemini-2.5-flash',       # Основная стабильная база
+    'gemini-3.1-flash',       # Флагман февраля 2026 года
+    'gemini-3-flash-preview', 
+    'gemini-2.5-flash',       # Стабильная база
     'gemini-2.5-pro'
 ]
 
 # Модели для HF Router (OpenAI Compatible)
-# Qwen2.5-7B-Instruct подтвержден как рабочий на роутере
 HF_TASKS = {
     "text": "Qwen/Qwen2.5-7B-Instruct",
-    "vision": "meta-llama/Llama-3.2-11B-Vision-Instruct", # Классика вижена для роутера
-    "audio": "openai/whisper-large-v3-turbo",  # Доступна через HF Inference API
+    "vision": "meta-llama/Llama-3.2-11B-Vision-Instruct",
+    "audio": "openai/whisper-large-v3-turbo",
     "reasoning": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 }
 

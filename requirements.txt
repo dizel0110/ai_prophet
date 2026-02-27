@@ -1,16 +1,25 @@
+# Core
 aiogram
 google-genai
 python-dotenv
+
+# API & DNS
 fastapi
 uvicorn
 dnspython
-duckduckgo-search
-ddgs
 requests
 mcp
 huggingface-hub
+
+# Search
+duckduckgo-search
+
+# Media (Requires ffmpeg in system)
 yt-dlp
 ffmpeg-python
 librosa
+soundfile
+
+# AI Local (Optional but needed for local whisper)
 transformers
 torch

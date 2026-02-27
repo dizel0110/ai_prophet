@@ -118,6 +118,31 @@ python -c "import sys; print(sys.executable)"
 
 ---
 
+---
+
+## 🌍 Деплой на Hugging Face Spaces
+
+Для корректной работы на Hugging Face Spaces проект содержит:
+1.  **requirements.txt**: Все Python-библиотеки.
+2.  **packages.txt**: Системные зависимости (ffmpeg, dnsutils).
+3.  **Dockerfile**: Если вы используете Docker-инстанс.
+
+### 🎧 Установка FFMPEG (Критично)
+
+Без `ffmpeg` бот не сможет:
+- Скачивать музыку (через yt-dlp).
+- Распознавать голосовые сообщения.
+
+**Локально (Windows):**
+1. Скачай [ffmpeg-release-essentials.zip](https://www.gyan.dev/ffmpeg/builds/).
+2. Распакуй и добавь папку `bin` в переменную окружения **PATH**.
+3. Проверь командой в терминале: `ffmpeg -version`.
+
+**Hugging Face Spaces:**
+- Устанавливается автоматически через `packages.txt`.
+
+---
+
 ## 📚 Дополнительные Настройки (Опционально)
 
 Для улучшенной разработки добавь в `.vscode/settings.json`:

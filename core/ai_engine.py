@@ -23,15 +23,18 @@ def get_ai_chat(chat_id, model_name=None):
     
     if session_key not in _chats:
         try:
-            # ПОКА ОТКЛЮЧАЕМ ИНСТРУМЕНТЫ ДЛЯ СТАБИЛЬНОСТИ
+            from core.tools import get_prophet_tools_spec
+            
+            # ВКЛЮЧАЕМ ИНСТРУМЕНТЫ
             _chats[session_key] = gemini_client.chats.create(
                 model=model_name,
                 config=genai_types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
+                    tools=get_prophet_tools_spec(),
                     temperature=0.7
                 )
             )
-            logger.info(f"🆕 AI Session Created (Stable Mode): {session_key}")
+            logger.info(f"🆕 AI Session Created with Tools: {session_key}")
         except Exception as e:
             logger.warning(f"⚠️ Failed to init {model_name}: {e}")
             return None
