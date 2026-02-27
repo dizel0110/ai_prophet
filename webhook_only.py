@@ -74,14 +74,8 @@ def setup_webhook_routes(fastapi_app: FastAPI):
 
             logger.info(f"📡 HF Spaces detected: {space_id}")
             logger.info(f"📡 Webhook URL: {webhook_url}")
-
-            # Пытаемся установить webhook (может не сработать из-за блокировки HF)
-            try:
-                await bot.set_webhook(webhook_url, drop_pending_updates=True)
-                logger.info("✅ Webhook установлен автоматически")
-            except Exception as e:
-                logger.warning(f"⚠️ Не удалось установить webhook автоматически: {e}")
-                logger.info("📝 Webhook уже должен быть установлен через API Telegram")
+            logger.info("📝 Webhook должен быть установлен вручную через API Telegram")
+            logger.info("📝 Проверьте: https://api.telegram.org/bot<TOKEN>/getWebhookInfo")
         else:
             logger.warning("⚠️ SPACE_ID не найден. Запустите на HF Spaces для webhook.")
 

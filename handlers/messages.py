@@ -352,6 +352,50 @@ async def cmd_playlist_example(message: types.Message):
     await message.answer(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_list))
 
 
+@router.message(Command("webhook_status"))
+async def cmd_webhook_status(message: types.Message):
+    """Проверка статуса webhook"""
+    status_msg = await message.answer("📡 Проверяю статус webhook...")
+
+    try:
+        info = await bot.get_webhook_info()
+        url = info.url
+        pending = info.pending_update_count
+        last_error = info.last_error_message
+        last_error_date = info.last_error_date
+
+        text = f"📡 *Статус Webhook:*\n\n"
+        text += f"🔗 *URL:* `{url}`\n"
+        text += f"⏳ *В очереди:* {pending}\n"
+
+        if last_error:
+            text += f"❌ *Последняя ошибка:* {last_error}\n"
+            if last_error_date:
+                from datetime import datetime
+                error_time = datetime.fromtimestamp(last_error_date)
+                text += f"🕒 *Время ошибки:* {error_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        else:
+            text += f"✅ *Ошибок нет*\n"
+
+        # Проверка текущего URL
+        space_id = os.getenv("SPACE_ID")
+        if space_id:
+            space_slug = space_id.replace("/", "-").replace("_", "-")
+            expected_url = f"https://{space_slug}.hf.space/webhook"
+
+            if url == expected_url:
+                text += f"\n✅ *URL совпадает с ожидаемым!*"
+            else:
+                text += f"\n⚠️ *URL не совпадает!*\n"
+                text += f"Ожидался: `{expected_url}`\n"
+                text += f"\nИсправьте:\n"
+                text += f"`https://api.telegram.org/bot<TOKEN>/setWebhook?url={expected_url}`"
+
+        await status_msg.edit_text(text, parse_mode="Markdown")
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Ошибка проверки: {e}")
+
+
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """
@@ -377,6 +421,8 @@ async def cmd_help(message: types.Message):
         "• 🎙 *Голос Судьбы* — отправь голосовое, я его пойму.\n"
         "• 🖼 *Видение* — пришли фото для анализа.\n"
         "• ⚙️ *Настройки* — переключай движки (Gemini / HF).\n\n"
+        "🔧 *Админ команды:*\n"
+        "• `/webhook_status` — проверить статус webhook.\n\n"
         "💡 *Советы и лимиты:*\n"
         "• Все файлы скачиваются с реальными названиями.\n"
         "• В режиме загрузки ты увидишь живой *прогресс-бар*.\n"
@@ -1244,7 +1290,7 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
     await callback.answer("⏳ Начинаю магию конвертации...")
     status_msg = await bot.send_message(chat_id, f"⬇️ Скачиваю и конвертирую: {url}")
 
-    # Передаём chat_id для загрузки пользовательских лимитов
+    # Передаём chat_id для загрузки пользова��ельских лимитов
     file_path, title, duration = download_audio(url, chat_id=chat_id)
 
     if file_path and os.path.exists(file_path):
