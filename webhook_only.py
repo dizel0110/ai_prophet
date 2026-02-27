@@ -66,13 +66,20 @@ def setup_webhook_routes(fastapi_app: FastAPI):
         space_id = os.getenv("SPACE_ID")
 
         if space_id:
-            # Формируем URL текущего Space
-            webhook_url = f"https://{space_id}.hf.space/webhook"
+            # Формируем правильный URL: space_id может быть "username/space-name" или "username-space-name"
+            # Для HF Spaces URL формат: https://username-space-name.hf.space
+            if "/" in space_id:
+                # Преобразуем "username/space-name" → "username-space-name"
+                space_slug = space_id.replace("/", "-")
+            else:
+                space_slug = space_id
+
+            webhook_url = f"https://{space_slug}.hf.space/webhook"
 
             logger.info(f"📡 HF Spaces detected: {space_id}")
             logger.info(f"📡 Webhook URL: {webhook_url}")
 
-            # Пытаемся установить webhook (может не сработать из-за блокировки)
+            # Пытаемся установить webhook (может не сработать из-за блокировки HF)
             try:
                 await bot.set_webhook(webhook_url, drop_pending_updates=True)
                 logger.info("✅ Webhook установлен автоматически")
