@@ -89,8 +89,11 @@ async def start_bot_polling():
     dp.include_router(messages.router)
 
     logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
-    # Очищаем очередь старых сообщений, чтобы избежать конфликтов при перезапуске
-    await bot.delete_webhook(drop_pending_updates=True)
+
+    # На HF Spaces не удаляем webhook (блокируется исходящие)
+    if not IS_HF_SPACE:
+        await bot.delete_webhook(drop_pending_updates=True)
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
@@ -102,16 +105,20 @@ if __name__ == "__main__":
 
     logger.info("🛰️ Система авто-восстановления Пророка запущена (Бесконечный цикл)")
 
+    # НА HF SPACES: тоже используем polling (webhook блокируется HF)
+    # Polling работает стабильно на HF Spaces
     if IS_HF_SPACE:
-        # НА HF SPACES: используем webhook режим
-        logger.info("📡 HF Spaces: Webhook endpoint активен")
-
-        # Держим процесс запущенным
-        try:
-            while True:
-                time.sleep(60)
-        except (KeyboardInterrupt, SystemExit):
-            logger.info("🛑 Бот остановлен вручную.")
+        logger.info("📡 HF Spaces: Запуск polling режима (webhook заблокирован HF)")
+        while True:
+            try:
+                asyncio.run(start_bot_polling())
+            except (KeyboardInterrupt, SystemExit):
+                logger.info("🛑 Бот остановлен вручную.")
+                break
+            except Exception as e:
+                logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
+                logger.info("⏳ Попытка воскрешения через 15 секунд...")
+                time.sleep(15)
     else:
         # ЛОКАЛЬНО: используем polling режим
         logger.info("📡 Local mode: using POLLING mode")
