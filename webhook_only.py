@@ -53,12 +53,18 @@ def setup_webhook_routes(fastapi_app: FastAPI):
             update_dict = await request.json()
             update = types.Update(**update_dict)
 
+            logger.info(f"📥 Получено обновление: id={update.update_id}, type={update.event_type}")
+
             # Обрабатываем через Dispatcher
             await dp.feed_update(bot, update)
 
+            logger.info(f"✅ Обновление обработано: id={update.update_id}")
             return {"status": "ok"}
         except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
             logger.error(f"Webhook error: {e}")
+            logger.error(f"Traceback:\n{error_trace}")
             # Возвращаем 200 даже при ошибке, чтобы Telegram не спамил
             return {"status": "error", "message": str(e)}
 
