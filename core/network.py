@@ -1,75 +1,70 @@
 import socket
 import logging
 import dns.resolver
-import time
-import os
 import sys
+import os
 
 logger = logging.getLogger(__name__)
 
-# Кэширование DNS для YouTube
-_youtube_dns_cache = None
-
 def apply_dns_patch():
-    global _youtube_dns_cache
-
-    # Пропускаем патч на Hugging Face Spaces
-    if os.getenv("SPACE_ID"):
-        logger.info("☁️ Hugging Face Spaces detected: Skipping DNS patch (using native cloud DNS)")
-        return True
-
-    # Патч DNS для всех платформ (на Windows используем с осторожностью)
-    if sys.platform == 'win32':
-        logger.info("ℹ️ Windows detected: DNS patch will be applied only as fallback")
-        # На Windows часто лучше оставить системный резолвер, если нет ошибок
-    
-    logger.info("🔧 Applying DNS patch for YouTube/Telegram...")
-
-    # Попытка настроить DNS резолвер
+    """
+    Умный патч DNS: работает локально через обходные пути и 
+    адаптируется под ограничения Hugging Face Spaces.
+    """
     try:
+        # 1. Проверяем, нужна ли помощь (видит ли система Telegram)
+        try:
+            socket.getaddrinfo('api.telegram.org', 443)
+            # Если дошли сюда, системный DNS работает
+            if not os.getenv("SPACE_ID"): # Локально всё равно патчим для YouTube
+                 logger.info("✅ System DNS works for Telegram, but applying patch for YouTube/Stability")
+            else:
+                 logger.info("✅ System DNS is healthy on HF. Patching restricted.")
+                 return True
+        except Exception:
+            logger.info("⚠️ System DNS lookup failed. Activating Prophet DNS Recovery...")
+
+        # 2. Настраиваем альтернативный резолвер
         resolver = dns.resolver.Resolver()
         resolver.nameservers = ['8.8.8.8', '1.1.1.1', '1.0.0.1']
-        resolver.timeout = 5
-        resolver.lifetime = 5
-
-        # Кэшируем DNS для YouTube
-        try:
-            answer = resolver.resolve('www.youtube.com', 'A')
-            _youtube_dns_cache = answer[0].to_text()
-            logger.info(f"✅ YouTube DNS: {_youtube_dns_cache}")
-        except Exception as e:
-            logger.warning(f"⚠️ YouTube DNS failed: {e}")
-
-        # Кэшируем DNS для Telegram (если не Windows)
-        telegram_ip = None
-        if sys.platform != 'win32':
-            try:
-                answer = resolver.resolve('api.telegram.org', 'A')
-                telegram_ip = answer[0].to_text()
-                logger.info(f"✅ Telegram DNS: {telegram_ip}")
-            except Exception as e:
-                logger.warning(f"⚠️ Telegram DNS failed: {e}")
+        resolver.timeout = 2
+        resolver.lifetime = 2
 
         original_getaddrinfo = socket.getaddrinfo
 
         def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-            # YouTube DNS cache
-            if host == 'www.youtube.com' and _youtube_dns_cache:
-                return original_getaddrinfo(_youtube_dns_cache, port, family, type, proto, flags)
-            if host.endswith('.youtube.com') and _youtube_dns_cache:
-                return original_getaddrinfo(_youtube_dns_cache, port, family, type, proto, flags)
-
-            # Telegram DNS (только Linux)
-            if host == 'api.telegram.org' and telegram_ip:
-                return original_getaddrinfo(telegram_ip, port, family, type, proto, flags)
-
-            # Остальные хосты как обычно
+            # Список хостов, для которых мы будем искать обходные пути
+            target_hosts = ['api.telegram.org', 'www.youtube.com', 'youtube.com']
+            
+            is_target = any(host == h or host.endswith('.' + h) for h in target_hosts)
+            
+            if is_target:
+                try:
+                    # Пробуем оригинальный резолвер
+                    return original_getaddrinfo(host, port, family, type, proto, flags)
+                except Exception:
+                    # Если упало (как на HF), пробуем альтернативу через IP
+                    try:
+                        # Получаем IP через Public DNS
+                        ans = resolver.resolve(host, 'A')
+                        if ans:
+                            ip = ans[0].to_text()
+                            # Пытаемся подключиться по IP, но маскируем это под системный вызов
+                            try:
+                                return original_getaddrinfo(ip, port, socket.AF_INET, type, proto, flags)
+                            except PermissionError:
+                                # Если HF блокирует прямые IP (Operation not permitted)
+                                # То мы бессильны, пробрасываем ошибку выше
+                                raise
+                    except Exception:
+                        pass
+            
             return original_getaddrinfo(host, port, family, type, proto, flags)
 
         socket.getaddrinfo = patched_getaddrinfo
-        logger.info("✅ DNS Patch Active")
+        logger.info("🔮 Prophet Smart DNS Overlay Activated")
         return True
 
     except Exception as e:
-        logger.warning(f"❌ DNS patch failed: {e}")
+        logger.warning(f"❌ DNS patch setup failed: {e}")
         return False
