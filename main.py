@@ -24,23 +24,17 @@ logging.getLogger("google.genai").setLevel(logging.WARNING)
 import time
 logger = logging.getLogger(__name__)
 
-# Проверка: работаем на HF Spaces?
-IS_HF_SPACE = os.getenv("SPACE_ID") is not None
-
-# FastAPI приложение
+# FastAPI для Hugging Face
 app = FastAPI()
 @app.get("/")
-async def root():
-    mode = "Webhook" if IS_HF_SPACE else "Polling"
-    return {"status": f"AI Prophet ({mode})", "space_id": os.getenv("SPACE_ID", "local")}
+async def root(): return {"status": "AI Prophet Modular is Running"}
 
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
-async def start_bot_polling():
-    """Polling режим для локальной разработки"""
+async def start_bot():
     apply_dns_patch()
-
+    
     # Очистка временной папки при старте
     from config import TEMP_DIR
     import shutil
@@ -54,12 +48,12 @@ async def start_bot_polling():
         except Exception as e:
             logger.warning(f"⚠️ Не удалось полностью очистить temp: {e}")
     else: os.makedirs(TEMP_DIR)
-
+    
     from aiogram.types import BotCommand
     from config import HF_TOKEN, GEMINI_KEY
-
+    
     bot = Bot(token=TOKEN)
-
+    
     # Регистрация команд для подсказок (autocomplete)
     commands = [
         BotCommand(command="start", description="Запустить Пророка и открыть меню"),
@@ -71,17 +65,17 @@ async def start_bot_polling():
         BotCommand(command="stop", description="Остановить текущие действия")
     ]
     await bot.set_my_commands(commands)
-
+    
     if not HF_TOKEN: logger.warning("⚠️ HF_TOKEN is not set! Voice and WebSearch fallback will fail.")
     else: logger.info(f"✅ HF_TOKEN is loaded (prefix: {HF_TOKEN[:5]}...)")
-
+    
     dp = Dispatcher()
-
+    
     # Регистрация роутеров
     dp.include_router(vip.router)
     dp.include_router(limits.router)
     dp.include_router(messages.router)
-
+    
     logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
     # Очищаем очередь старых сообщений, чтобы избежать конфликтов при перезапуске
     await bot.delete_webhook(drop_pending_updates=True)
@@ -89,39 +83,22 @@ async def start_bot_polling():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-
+    
     # Запуск веб-сервера
     p_web = multiprocessing.Process(target=start_web)
     p_web.start()
-
+    
     logger.info("🛰️ Система авто-восстановления Пророка запущена (Бесконечный цикл)")
-
-    if IS_HF_SPACE:
-        # НА HF SPACES: используем webhook режим
-        logger.info("📡 HF Spaces detected: using WEBHOOK mode")
-        logger.info("📡 Webhook будет установлен на /webhook")
-        # Для webhook не нужен polling цикл - FastAPI будет обрабатывать запросы
+    
+    while True:
         try:
-            # Импортируем и запускаем webhook
-            import webhook
-            # Webhook уже настроен через @app.on_event("startup")
-            # Просто держим процесс запущенным
-            while True:
-                time.sleep(60)
+            asyncio.run(start_bot())
         except (KeyboardInterrupt, SystemExit):
             logger.info("🛑 Бот остановлен вручную.")
-    else:
-        # ЛОКАЛЬНО: используем polling режим
-        logger.info("📡 Local mode: using POLLING mode")
-        while True:
-            try:
-                asyncio.run(start_bot_polling())
-            except (KeyboardInterrupt, SystemExit):
-                logger.info("🛑 Бот остановлен вручную.")
-                break
-            except Exception as e:
-                logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
-                logger.info("⏳ Попытка воскрешения через 15 секунд...")
-                time.sleep(15)
-
+            break
+        except Exception as e:
+            logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
+            logger.info("⏳ Попытка воскрешения через 15 секунд...")
+            time.sleep(15)
+    
     p_web.terminate()
