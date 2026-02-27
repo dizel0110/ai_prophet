@@ -66,13 +66,9 @@ def setup_webhook_routes(fastapi_app: FastAPI):
         space_id = os.getenv("SPACE_ID")
 
         if space_id:
-            # Формируем правильный URL: space_id может быть "username/space-name" или "username-space-name"
-            # Для HF Spaces URL формат: https://username-space-name.hf.space
-            if "/" in space_id:
-                # Преобразуем "username/space-name" → "username-space-name"
-                space_slug = space_id.replace("/", "-")
-            else:
-                space_slug = space_id
+            # Формируем правильный URL: space_id может быть "username/space-name" или "username_space_name"
+            # Для HF Spaces URL формат: https://username-space-name.hf.space (все символы → дефисы)
+            space_slug = space_id.replace("/", "-").replace("_", "-")
 
             webhook_url = f"https://{space_slug}.hf.space/webhook"
 
