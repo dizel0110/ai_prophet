@@ -12,6 +12,7 @@ import os
 import logging
 from fastapi import FastAPI, Request, HTTPException
 from aiogram import Bot, Dispatcher, types
+from aiogram.client.session.aiohttp import AiohttpSession
 from config import TOKEN
 from handlers import messages, vip, limits
 
@@ -19,7 +20,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message
 logger = logging.getLogger(__name__)
 
 # Инициализация бота с кастомной сессией (только для webhook)
-bot = Bot(token=TOKEN)
+# session_settings=... отключает лишние запросы
+bot = Bot(token=TOKEN, session=AiohttpSession())
 dp = Dispatcher()
 
 # Регистрация роутеров
@@ -83,12 +85,9 @@ def setup_webhook_routes(fastapi_app: FastAPI):
     async def on_shutdown():
         """Очистка при остановке"""
         logger.info("🛑 Остановка бота...")
-        try:
-            await bot.delete_webhook()
-            logger.info("✅ Webhook удалён")
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось удалить webhook: {e}")
-
+        # Не удаляем webhook при shutdown на HF Spaces
+        # Webhook остаётся установленным для следующего запуска
         await bot.session.close()
+        logger.info("✅ Сессия бота закрыта")
 
     logger.info("✅ Webhook routes зарегистрированы")
