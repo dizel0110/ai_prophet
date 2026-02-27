@@ -98,13 +98,13 @@ if __name__ == "__main__":
 
     if IS_HF_SPACE:
         # НА HF SPACES: используем webhook режим
-        logger.info("📡 HF Spaces detected: importing webhook_only module")
-        logger.info("⚠️ ВАЖНО: Установите webhook вручную через @BotFather")
-        logger.info("   Команда: /setwebhook https://dizel0110-ai-prophet.hf.space/webhook")
+        logger.info("📡 HF Spaces detected: setting up webhook routes")
 
-        # Импортируем webhook_only для обработки входящих запросов
-        import webhook_only
-        # Webhook уже настроен через @app.on_event("startup") в webhook_only.py
+        # Регистрируем webhook routes в основном FastAPI приложении
+        from webhook_only import setup_webhook_routes
+        setup_webhook_routes(app)
+
+        logger.info("✅ Webhook готов к обработке сообщений")
 
         # Держим процесс запущенным
         try:

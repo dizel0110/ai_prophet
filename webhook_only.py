@@ -3,15 +3,16 @@
 Telegram Webhook для Hugging Face Spaces
 Работает ТОЛЬКО через входящие соединения от Telegram
 Исходящие запросы к api.telegram.org НЕ используются
+
+ВАЖНО: Этот модуль НЕ создаёт своё FastAPI приложение,
+а использует то, которое уже запущено в main.py
 """
 
 import os
 import logging
 from fastapi import FastAPI, Request, HTTPException
 from aiogram import Bot, Dispatcher, types
-from aiogram.methods import TelegramMethod
-from aiogram.client.session.aiohttp import AiohttpSession
-from config import TOKEN, PORT
+from config import TOKEN
 from handlers import messages, vip, limits
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -26,75 +27,71 @@ dp.include_router(vip.router)
 dp.include_router(limits.router)
 dp.include_router(messages.router)
 
-app = FastAPI()
+# НЕ создаём новое FastAPI приложение!
+# Используем то, которое импортируется из main.py
 
-@app.get("/")
-async def root():
-    """Health check"""
-    space_id = os.getenv("SPACE_ID", "local")
-    return {
-        "status": "AI Prophet Webhook",
-        "mode": "webhook_only",
-        "space_id": space_id
-    }
-
-@app.get("/webhook")
-async def get_webhook():
-    """Проверка webhook"""
-    return {"status": "ok", "mode": "webhook"}
-
-@app.post("/webhook")
-async def webhook_handler(request: Request):
+def setup_webhook_routes(fastapi_app: FastAPI):
     """
-    Обработка обновлений от Telegram
-    Telegram сам отправляет POST запросы на этот endpoint
+    Регистрирует webhook endpoints в существующем FastAPI приложении
     """
-    try:
-        # Получаем JSON от Telegram
-        update_dict = await request.json()
-        update = types.Update(**update_dict)
-        
-        # Обрабатываем через Dispatcher
-        await dp.feed_update(bot, update)
-        
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        # Возвращаем 200 даже при ошибке, чтобы Telegram не спамил
-        return {"status": "error", "message": str(e)}
 
-@app.on_event("startup")
-async def on_startup():
-    """Настройка webhook при старте"""
-    space_id = os.getenv("SPACE_ID")
-    
-    if space_id:
-        # Формируем URL текущего Space
-        webhook_url = f"https://{space_id}.hf.space/webhook"
-        
-        logger.info(f"📡 HF Spaces detected: {space_id}")
-        logger.info(f"📡 Webhook URL: {webhook_url}")
-        logger.info("⚠️ ВАЖНО: Вам нужно ВРУЧНУЮ установить webhook через BotFather")
-        logger.info(f"   Отправьте @BotFather: /setwebhook {webhook_url}")
-        
-        # Пытаемся установить webhook (может не сработать из-за блокировки)
+    @fastapi_app.get("/webhook")
+    async def get_webhook():
+        """Проверка webhook"""
+        return {"status": "ok", "mode": "webhook"}
+
+    @fastapi_app.post("/webhook")
+    async def webhook_handler(request: Request):
+        """
+        Обработка обновлений от Telegram
+        Telegram сам отправляет POST запросы на этот endpoint
+        """
         try:
-            await bot.set_webhook(webhook_url, drop_pending_updates=True)
-            logger.info("✅ Webhook установлен автоматически")
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось установить webhook автоматически: {e}")
-            logger.info("📝 Установите webhook вручную через @BotFather")
-    else:
-        logger.warning("⚠️ SPACE_ID не найден. Запустите на HF Spaces для webhook.")
+            # Получаем JSON от Telegram
+            update_dict = await request.json()
+            update = types.Update(**update_dict)
 
-@app.on_event("shutdown")
-async def on_shutdown():
-    """Очистка при остановке"""
-    logger.info("🛑 Остановка бота...")
-    try:
-        await bot.delete_webhook()
-        logger.info("✅ Webhook удалён")
-    except Exception as e:
-        logger.warning(f"⚠️ Не удалось удалить webhook: {e}")
-    
-    await bot.session.close()
+            # Обрабатываем через Dispatcher
+            await dp.feed_update(bot, update)
+
+            return {"status": "ok"}
+        except Exception as e:
+            logger.error(f"Webhook error: {e}")
+            # Возвращаем 200 даже при ошибке, чтобы Telegram не спамил
+            return {"status": "error", "message": str(e)}
+
+    @fastapi_app.on_event("startup")
+    async def on_startup():
+        """Настройка webhook при старте"""
+        space_id = os.getenv("SPACE_ID")
+
+        if space_id:
+            # Формируем URL текущего Space
+            webhook_url = f"https://{space_id}.hf.space/webhook"
+
+            logger.info(f"📡 HF Spaces detected: {space_id}")
+            logger.info(f"📡 Webhook URL: {webhook_url}")
+
+            # Пытаемся установить webhook (может не сработать из-за блокировки)
+            try:
+                await bot.set_webhook(webhook_url, drop_pending_updates=True)
+                logger.info("✅ Webhook установлен автоматически")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось установить webhook автоматически: {e}")
+                logger.info("📝 Webhook уже должен быть установлен через API Telegram")
+        else:
+            logger.warning("⚠️ SPACE_ID не найден. Запустите на HF Spaces для webhook.")
+
+    @fastapi_app.on_event("shutdown")
+    async def on_shutdown():
+        """Очистка при остановке"""
+        logger.info("🛑 Остановка бота...")
+        try:
+            await bot.delete_webhook()
+            logger.info("✅ Webhook удалён")
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось удалить webhook: {e}")
+
+        await bot.session.close()
+
+    logger.info("✅ Webhook routes зарегистрированы")
