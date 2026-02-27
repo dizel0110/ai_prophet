@@ -6,14 +6,30 @@ logger = logging.getLogger(__name__)
 
 def apply_dns_patch():
     """
-    Минималистичный сетевой мост: 
-    На Hugging Face полностью полагаемся на системный DNS.
-    Патчи отключены во избежание конфликтов SSL.
+    Классический метод статического маппинга. 
+    Самый надежный способ для Hugging Face, когда системный DNS 'болеет'.
     """
-    if os.getenv("SPACE_ID"):
-        logger.info("✅ Hugging Face Native Network Mode: Active")
-        return True
+    original_getaddrinfo = socket.getaddrinfo
+
+    # Список проверенных IP-адресов Telegram (Core DC)
+    # Эти адреса стабильны годами.
+    TELEGRAM_IPS = {
+        'api.telegram.org': '149.154.167.220',
+        'www.youtube.com': '142.250.180.228',
+        'youtube.com': '142.250.180.228'
+    }
+
+    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        # Если хост в нашем списке — подставляем проверенный IP
+        if host in TELEGRAM_IPS:
+            # Важно: используем AF_INET (IPv4), чтобы избежать -5 gaierror
+            return original_getaddrinfo(TELEGRAM_IPS[host], port, socket.AF_INET, type, proto, flags)
         
-    # Локально тоже не мешаем, если не попросят
-    logger.info("ℹ️ Standard Network Mode: Active")
+        # Для всех остальных используем стандартный путь
+        return original_getaddrinfo(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = patched_getaddrinfo
+    
+    status = "Cloud" if os.getenv("SPACE_ID") else "Local"
+    logger.info(f"✨ PROPHET STATIC DNS: {status} Shield Activated")
     return True
