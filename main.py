@@ -21,6 +21,7 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 logging.getLogger("google.genai").setLevel(logging.WARNING)
+import time
 logger = logging.getLogger(__name__)
 
 # FastAPI для Hugging Face
@@ -87,9 +88,17 @@ if __name__ == "__main__":
     p_web = multiprocessing.Process(target=start_web)
     p_web.start()
     
-    try:
-        asyncio.run(start_bot())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Stopped.")
-    finally:
-        p_web.terminate()
+    logger.info("🛰️ Система авто-восстановления Пророка запущена (Бесконечный цикл)")
+    
+    while True:
+        try:
+            asyncio.run(start_bot())
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("🛑 Бот остановлен вручную.")
+            break
+        except Exception as e:
+            logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
+            logger.info("⏳ Попытка воскрешения через 15 секунд...")
+            time.sleep(15)
+    
+    p_web.terminate()
