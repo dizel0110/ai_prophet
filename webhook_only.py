@@ -32,15 +32,8 @@ PROXY_URL = os.getenv("PROXY_URL")  # Например: http://proxy.example.com
 # Инициализация бота
 if PROXY_URL:
     logger.info(f"🔄 Используем прокси: {PROXY_URL}")
-    # Создаём сессию с прокси (ленивая инициализация)
-    from aiohttp import ClientSession, TCPConnector
-    
-    def create_proxy_session():
-        connector = TCPConnector(ssl=False)
-        return ClientSession(connector=connector, trust_env=True)
-    
-    aiohttp_session = AiohttpSession(session_factory=create_proxy_session)
-    bot = Bot(token=TOKEN, session=aiohttp_session)
+    # Создаём сессию с прокси через aiohttp_proxy параметр
+    bot = Bot(token=TOKEN, session=AiohttpSession(aiohttp_proxy=PROXY_URL))
 else:
     logger.warning("⚠️ PROXY_URL не настроен. Бот не сможет отправлять сообщения на HF Spaces.")
     logger.warning("📝 Добавьте в HF Spaces → Settings → Secrets:")
