@@ -11,6 +11,9 @@ requests
 mcp
 huggingface-hub
 
+# Proxy support (для HF Spaces)
+aiohttp-socks
+
 # Search
 duckduckgo-search
 
