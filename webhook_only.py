@@ -38,13 +38,10 @@ async def init_bot_proxy():
     """Инициализация бота с прокси при старте"""
     if PROXY_URL:
         logger.info(f"🔄 Используем прокси: {PROXY_URL}")
-        import aiohttp
         # Закрываем старую сессию
         await bot.session.close()
-        # Создаём новую с прокси
-        connector = aiohttp.TCPConnector(ssl=False)
-        session = aiohttp.ClientSession(connector=connector, proxy=PROXY_URL)
-        bot.session = AiohttpSession(session)
+        # Создаём новую сессию с прокси (передаём URL напрямую)
+        bot.session = AiohttpSession(proxy=PROXY_URL)
         logger.info("✅ Прокси настроен")
     else:
         logger.warning("⚠️ PROXY_URL не настроен. Бот не сможет отправлять сообщения на HF Spaces.")
