@@ -16,10 +16,10 @@ Telegram Webhook для Hugging Face Spaces
 
 import os
 import logging
+import asyncio
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.session.aiohttp import AiohttpSession
-from aiohttp import ClientSession
 from config import TOKEN
 from handlers import messages, vip, limits
 
@@ -27,21 +27,28 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message
 logger = logging.getLogger(__name__)
 
 # Проверяем наличие прокси
-PROXY_URL = os.getenv("PROXY_URL")  # Например: http://proxy.example.com:8080
+PROXY_URL = os.getenv("PROXY_URL")
 
-# Инициализация бота
-if PROXY_URL:
-    logger.info(f"🔄 Используем прокси: {PROXY_URL}")
-    # Создаём сессию с прокси через aiohttp_proxy параметр
-    bot = Bot(token=TOKEN, session=AiohttpSession(aiohttp_proxy=PROXY_URL))
-else:
-    logger.warning("⚠️ PROXY_URL не настроен. Бот не сможет отправлять сообщения на HF Spaces.")
-    logger.warning("📝 Добавьте в HF Spaces → Settings → Secrets:")
-    logger.warning("📝 PROXY_URL=http://47.243.107.235:8080  (бесплатный прокси)")
-    logger.warning("📝 Или используйте другую платформу (Oracle Cloud, Railway, Render)")
-    bot = Bot(token=TOKEN)
-
+# Инициализация бота (ленивая — сессия создаётся при первом использовании)
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+
+async def init_bot_proxy():
+    """Инициализация бота с прокси при старте"""
+    if PROXY_URL:
+        logger.info(f"🔄 Используем прокси: {PROXY_URL}")
+        import aiohttp
+        # Закрываем старую сессию
+        await bot.session.close()
+        # Создаём новую с прокси
+        connector = aiohttp.TCPConnector(ssl=False)
+        session = aiohttp.ClientSession(connector=connector, proxy=PROXY_URL)
+        bot.session = AiohttpSession(session)
+        logger.info("✅ Прокси настроен")
+    else:
+        logger.warning("⚠️ PROXY_URL не настроен. Бот не сможет отправлять сообщения на HF Spaces.")
+        logger.warning("📝 HF Spaces → Settings → Secrets: PROXY_URL=http://47.243.107.235:8080")
 
 # Регистрация роутеров
 dp.include_router(vip.router)
@@ -89,6 +96,9 @@ def setup_webhook_routes(fastapi_app: FastAPI):
     @fastapi_app.on_event("startup")
     async def on_startup():
         """Настройка webhook при старте"""
+        # Инициализация прокси (если настроен)
+        await init_bot_proxy()
+        
         space_id = os.getenv("SPACE_ID")
 
         if space_id:
