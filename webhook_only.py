@@ -33,13 +33,16 @@ PROXY_URL = os.getenv("PROXY_URL")  # Например: http://proxy.example.com
 if PROXY_URL:
     logger.info(f"🔄 Используем прокси: {PROXY_URL}")
     # Создаём сессию с прокси
-    session = AiohttpSession(
-        session=ClientSession(trust_env=True)
-    )
-    bot = Bot(token=TOKEN, session=session)
+    from aiohttp import ClientSession, TCPConnector
+    connector = TCPConnector(ssl=False)
+    session = ClientSession(connector=connector, trust_env=True)
+    aiohttp_session = AiohttpSession(session=session)
+    bot = Bot(token=TOKEN, session=aiohttp_session)
 else:
     logger.warning("⚠️ PROXY_URL не настроен. Бот не сможет отправлять сообщения на HF Spaces.")
-    logger.warning("📝 Настройте PROXY_URL в секретах HF Spaces или используйте другую платформу.")
+    logger.warning("📝 Добавьте в HF Spaces → Settings → Secrets:")
+    logger.warning("📝 PROXY_URL=http://47.243.107.235:8080  (бесплатный прокси)")
+    logger.warning("📝 Или используйте другую платформу (Oracle Cloud, Railway, Render)")
     bot = Bot(token=TOKEN)
 
 dp = Dispatcher()
