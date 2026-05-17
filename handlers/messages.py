@@ -1062,10 +1062,12 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
                 kb = InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
                 await message.answer(f"🎵 {text_result}", reply_markup=kb, disable_web_page_preview=True)
             return
-        else:
-            logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
-            if status_msg: await status_msg.edit_text("🌀 *Канал HF зашумлен, обращаюсь к звездам Google...*")
-            # Не делаем return, идем ниже к Gemini
+        # HF ответил, но нет tool_result — всё равно выходим
+        return
+    else:
+        logger.warning(f"⚠️ HF Failed for {chat_id}, falling back to Gemini despite settings.")
+        if status_msg: await status_msg.edit_text("🌀 *Канал HF зашумлен, обращаюсь к звездам Google...*")
+        # Не делаем return, идем ниже к Gemini
 
     # Логика Web Search
     trigger_words = ["найди", "погугли", "что слышно о", "курс", "цена"]
@@ -1828,99 +1830,3 @@ async def handle_pl_ex_run(callback: types.CallbackQuery, bot: Bot):
     await callback.answer()
 
 
-@router.message(F.text)
-async def handle_text_message(message: types.Message):
-    """Обработка обычных текстовых сообщений"""
-    text = message.text.strip()
-    chat_id = str(message.chat.id)
-
-    # Проверяем, не является ли это командой (начинается с /)
-    if text.startswith('/'):
-        return  # Игнорируем неизвестные команды
-
-    # Проверяем контекст: ожидает ли бот ответа на вопрос
-    pending_info = user_settings.get(chat_id, {})
-
-    # Если есть pending_photo — это ответ на фото
-    if pending_info.get('pending_photo'):
-        await handle_vision_action(message, message.bot, chat_id, text)
-        return
-
-    # Если есть pending_voice_text — это редактирование голосового
-    if pending_info.get('pending_voice_text'):
-        user_settings[chat_id]['pending_voice_text'] = text
-        await message.answer(
-            f"✏️ *Текст изменён:*\n\n_{text}_\n\n🔮 *Выполнить?*",
-            reply_markup=get_voice_confirmation_keyboard(chat_id, text),
-            parse_mode="Markdown"
-        )
-        return
-
-    # Если мастер плейлистов активен
-    playlist_step = pending_info.get('playlist_step')
-    if playlist_step:
-        from handlers.vip import handle_playlist_input
-        await handle_playlist_input(message, text, chat_id)
-        return
-
-    # Обычный режим — отвечаем через AI
-    is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
-    engine = user_settings.get(chat_id, {}).get('engine', 'auto')
-
-    status_msg = await message.answer("🔮 *Слышу твой вопрос...*")
-
-    # Проверяем, нужно ли использовать инструменты
-    use_gemini = is_vip or engine == 'gemini'
-
-    if use_gemini:
-        for model_name in FALLBACK_MODELS:
-            try:
-                chat = get_ai_chat(chat_id, model_name)
-                if not chat:
-                    continue
-
-                response = chat.send_message(message=text)
-
-                if response.text:
-                    # Проверяем маркеры инструментов
-                    clean_text, tool_result = parse_and_execute_tools(response.text, chat_id)
-
-                    if tool_result:
-                        # Если есть результат инструмента — обрабатываем
-                        if tool_result['type'] == 'playlist':
-                            from core.tools import send_playlist
-                            await send_playlist(message.bot, message.chat.id, tool_result['data'].get('tracks', []), chat_id_str=chat_id)
-                        elif tool_result['type'] == 'single_audio':
-                            from core.tools import send_audio
-                            track = tool_result['data']['tracks'][0]
-                            await send_audio(message.bot, message.chat.id, track, chat_id_str=chat_id)
-                    else:
-                        # Обычный ответ
-                        icon = "💎" if is_vip else "🤖"
-                        await status_msg.edit_text(f"{icon} {clean_text}")
-                    return
-            except Exception as e:
-                logger.warning(f"Text failure on {model_name}: {e}")
-                reset_chat(chat_id, model_name)
-                continue
-
-    # HF режим
-    logger.info(f"🧿 User {chat_id} uses HF for text.")
-    hf_response = get_hf_response(text=text, task="text")
-
-    if hf_response:
-        # Проверяем маркеры инструментов
-        clean_text, tool_result = parse_and_execute_tools(hf_response, chat_id)
-
-        if tool_result:
-            if tool_result['type'] == 'playlist':
-                from core.tools import send_playlist
-                await send_playlist(message.bot, message.chat.id, tool_result['data'].get('tracks', []), chat_id_str=chat_id)
-            elif tool_result['type'] == 'single_audio':
-                from core.tools import send_audio
-                track = tool_result['data']['tracks'][0]
-                await send_audio(message.bot, message.chat.id, track, chat_id_str=chat_id)
-        else:
-            await status_msg.edit_text(f"🧿 {clean_text}")
-    else:
-        await status_msg.edit_text("🔮 Эфир зашумлен... Попробуй ещё раз.")

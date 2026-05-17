@@ -103,3 +103,14 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 | `PROXY_URL` | No | HTTP proxy for Telegram API on HF Spaces |
 | `VIP_PASSWORD` | No | Default `prophet2026` |
 | `VIP_RESET_PASSWORD` | No | Default `reset2026` |
+
+## Gotchas & Known Issues
+
+- **HF Spaces blocks outgoing Telegram API** — polling requires `PROXY_URL` secret on HF. Without it, bot crashes with `ClientConnectorError`.
+- **google-genai SDK 2.x** requires `genai_types.FunctionDeclaration` for tools, NOT raw dicts with `parameters`. Use `inputSchema` format via `genai_types.Schema`.
+- **Duplicate text handlers** — `@router.message()` (catch-all) and `@router.message(F.text)` both fire on text. Only use `@router.message()` in `handle_text`; the `F.text` handler was removed.
+- **HF fallback must `return`** — after `get_hf_response()` succeeds, code must return. Otherwise it falls through to Gemini loop (429) → back to HF → duplicate response.
+- **Logs** go to `logs/bot_YYYYMMDD.log` — excluded from git and Docker.
+- **Two python processes** on local run: FastAPI (uvicorn) + aiogram polling. This is normal.
+- **`app.py` is stale** — references `start_bot` which doesn't exist. Only `main.py` works.
+- **Gemini quota exhaustion** — free tier hits 429 quickly. HF fallback handles it, but session creation is retried across all 4 models before giving up.

@@ -17,7 +17,18 @@ from core.network import apply_dns_patch
 from handlers import messages, vip, limits
 
 # Настройка логов
-logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+log_file = os.path.join(LOG_DIR, f"bot_{datetime.now().strftime('%Y%m%d')}.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s:%(levelname)s:%(name)s:%(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(log_file, encoding='utf-8')
+    ]
+)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 logging.getLogger("google.genai").setLevel(logging.WARNING)

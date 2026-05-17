@@ -33,6 +33,7 @@ ENV/
 *.mp3
 *.m4a
 temp/
+logs/
 *.log
 
 # OS

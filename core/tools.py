@@ -773,33 +773,48 @@ def download_audio(url: str, chat_id: str = None, title_hint: str = None, max_du
     return None, None, None
 
 def get_prophet_tools_spec():
-    """Спецификация инструментов в формате, который 100% поймет Pydantic в SDK 2026"""
-    return [
-        {
-            "name": "web_search",
-            "description": "Поиск свежей информации в интернете (новости, факты, цены).",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "query": {"type": "STRING", "description": "Поисковый запрос"}
-                },
-                "required": ["query"]
-            }
-        },
-        {
-            "name": "search_media_content",
-            "description": "Поиск музыки или видео на YouTube/Интернет.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "query": {"type": "STRING", "description": "Что искать (жанр, исполнитель, название трека)"},
-                    "media_type": {"type": "STRING", "description": "'audio' или 'video'"},
-                    "count": {"type": "INTEGER", "description": "Количество результатов (по умолчанию 5)"}
-                },
-                "required": ["query", "media_type"]
-            }
-        }
-    ]
+    """Спецификация инструментов для google-genai SDK 2.x"""
+    from google.genai import types as genai_types
+
+    web_search_tool = genai_types.FunctionDeclaration(
+        name="web_search",
+        description="Поиск свежей информации в интернете (новости, факты, цены).",
+        parameters=genai_types.Schema(
+            type=genai_types.Type.OBJECT,
+            properties={
+                "query": genai_types.Schema(
+                    type=genai_types.Type.STRING,
+                    description="Поисковый запрос"
+                )
+            },
+            required=["query"]
+        )
+    )
+
+    search_media_tool = genai_types.FunctionDeclaration(
+        name="search_media_content",
+        description="Поиск музыки или видео на YouTube/Интернет.",
+        parameters=genai_types.Schema(
+            type=genai_types.Type.OBJECT,
+            properties={
+                "query": genai_types.Schema(
+                    type=genai_types.Type.STRING,
+                    description="Что искать (жанр, исполнитель, название трека)"
+                ),
+                "media_type": genai_types.Schema(
+                    type=genai_types.Type.STRING,
+                    description="'audio' или 'video'"
+                ),
+                "count": genai_types.Schema(
+                    type=genai_types.Type.INTEGER,
+                    description="Количество результатов (по умолчанию 5)"
+                )
+            },
+            required=["query", "media_type"]
+        )
+    )
+
+    return [genai_types.Tool(function_declarations=[web_search_tool, search_media_tool])]
 
 AVAILABLE_FUNCTIONS = {
     "web_search": web_search,
