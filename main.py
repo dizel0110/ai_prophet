@@ -64,7 +64,20 @@ async def start_bot_polling():
     from aiogram.types import BotCommand
     from config import HF_TOKEN, GEMINI_KEY
 
-    bot = Bot(token=TOKEN)
+    # На HF Spaces нужен прокси для доступа к Telegram API
+    if IS_HF_SPACE:
+        PROXY_URL = os.getenv("PROXY_URL")
+        if PROXY_URL:
+            from aiogram.client.session.aiohttp import AiohttpSession
+            logger.info(f"🔗 HF Spaces: используем прокси {PROXY_URL}")
+            session = AiohttpSession(proxy=PROXY_URL)
+            bot = Bot(token=TOKEN, session=session)
+        else:
+            logger.error("❌ HF Spaces: PROXY_URL не установлен! Бот не сможет подключиться к Telegram API.")
+            logger.error("📝 Установите PROXY_URL в настройках Hugging Face Space (Settings → Secrets)")
+            raise RuntimeError("PROXY_URL required on HF Spaces")
+    else:
+        bot = Bot(token=TOKEN)
 
     # Регистрация команд для подсказок (autocomplete)
     commands = [
