@@ -104,6 +104,13 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 | `VIP_PASSWORD` | No | Default `prophet2026` |
 | `VIP_RESET_PASSWORD` | No | Default `reset2026` |
 
+## Context Management
+
+- **When context fills up (>70%)**: save key decisions, bug fixes, and architecture changes to `HISTORY.md` before continuing.
+- **New conventions or gotchas discovered**: add them to this file (`AGENTS.md`) immediately.
+- **Unfinished tasks**: note them at the bottom of `HISTORY.md` so the next session picks up where this one left off.
+- This ensures continuity across sessions — treat `HISTORY.md` as the project's persistent memory.
+
 ## Gotchas & Known Issues
 
 - **HF Spaces blocks outgoing Telegram API** — polling requires `PROXY_URL` secret on HF. Without it, bot crashes with `ClientConnectorError`.
