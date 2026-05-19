@@ -958,8 +958,8 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
 
     if use_gemini:
         # VIP режим — Gemini
-        if status_msg: await status_msg.edit_text("💎 *Подключение к Gemini 2.5 Flash...*")
-        else: status_msg = await message.answer("💎 *Подключение к Gemini 2.5 Flash...*")
+        if status_msg: await status_msg.edit_text("💎 *Подключение к Gemini 3.5 Flash...*")
+        else: status_msg = await message.answer("💎 *Подключение к Gemini 3.5 Flash...*")
 
         for model_name in FALLBACK_MODELS:
             try:

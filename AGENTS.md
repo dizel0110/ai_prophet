@@ -56,7 +56,8 @@ core/
 ## AI Engines
 
 **Primary**: Gemini via `google-genai` SDK with function calling (`web_search`, `search_media_content`)
-- Model fallback chain: `gemini-3.1-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` → `gemini-2.5-pro`
+- Model fallback chain: `gemini-3.5-flash` → `gemini-3.1-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash` → `gemini-2.5-pro`
+- Primary model is updated when new Gemini versions release (check [Google AI blog](https://blog.google/technology/ai/) and [AI Studio pricing](https://ai.google.dev/gemini-api/docs/pricing))
 
 **Fallback**: Hugging Face Inference API via `router.huggingface.co` (OpenAI-compatible endpoints)
 - Text: `Qwen/Qwen2.5-7B-Instruct`
@@ -73,6 +74,20 @@ User can switch engine per-chat: auto (Gemini→HF), Gemini only, HF only.
 - Media markers in AI responses: `[MEDIA: query, type, count]` triggers automatic search/download
 - Step markers in Gemini responses: `ШАГ: [text]` become inline keyboard buttons
 - Telegram callback data limited to 64 bytes; Cyrillic is 2 bytes/char in UTF-8
+
+## Model Version Updates
+
+When a new Gemini model is released, update these files:
+1. **`config.py`** — add new model to `FALLBACK_MODELS` (first position), update `SYSTEM_PROMPT`
+2. **`handlers/messages.py`** — update status message text (search for "Подключение к Gemini")
+3. **`handlers/vip.py`** — update VIP menu description text
+4. **`AGENTS.md`** — update fallback chain in AI Engines section
+5. **`HISTORY.md`** — add entry with release date and model details
+
+Check for new models at:
+- [Google AI Blog](https://blog.google/technology/ai/)
+- [Gemini API Models page](https://ai.google.dev/gemini-api/docs/models)
+- [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing) — shows free tier limits
 
 ## CI/CD
 

@@ -16,10 +16,11 @@ OWNER_USERNAME = "dizel0110"
 TEMP_DIR = "temp"
 if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
 
-# АКТУАЛЬНЫЕ МОДЕЛИ (Февраль 2026)
+# АКТУАЛЬНЫЕ МОДЕЛИ (Май 2026)
 FALLBACK_MODELS = [
-    'gemini-3.1-flash',       # Флагман февраля 2026 года
-    'gemini-3-flash-preview', 
+    'gemini-3.5-flash',       # Флагман мая 2026 — лучшая для агентов, 4x быстрее
+    'gemini-3.1-flash',       # Предыдущий флагман
+    'gemini-3-flash-preview',
     'gemini-2.5-flash',       # Стабильная база
     'gemini-2.5-pro'
 ]
@@ -33,7 +34,7 @@ HF_TASKS = {
 }
 
 SYSTEM_PROMPT = (
-    "Ты — AI Prophet (ИИ Пророк). Твой разум опирается на мощь Gemini 3 и DeepSeek.\n"
+    "Ты — AI Prophet (ИИ Пророк). Твой разум опирается на мощь Gemini 3.5 Flash.\n"
     "Стиль: мудрый, технологичный, лаконичный. Ты видишь суть вещей через код и образы.\n"
     "ВАЖНО: Если ты предлагаешь действия или следующие шаги, ВСЕГДА пиши их в формате:\n"
     "ШАГ: [Краткое название для кнопки]\n"
