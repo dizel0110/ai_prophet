@@ -1,12 +1,28 @@
+# Core
 aiogram
 google-genai
 python-dotenv
+
+# API & DNS
 fastapi
 uvicorn
 dnspython
-ddgs
 requests
 mcp
 huggingface-hub
+
+# Proxy support (для HF Spaces)
+aiohttp-socks
+
+# Search
+duckduckgo-search
+
+# Media (Requires ffmpeg in system)
 yt-dlp
 ffmpeg-python
+librosa
+soundfile
+
+# AI Local (Optional but needed for local whisper)
+transformers
+torch

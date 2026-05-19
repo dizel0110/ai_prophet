@@ -1,9 +1,17 @@
 venv/
 .env
 __pycache__/
+*.pyc
 *.jpg
 *.ogg
-*.pyc
+*.wav
 .DS_Store
 temp/
+logs/
 internal/
+.vscode/
+.prompts/
+
+# Медиа (кроме аватарки бота)
+!artef/bot_avatar.png
+!artef/bot_avatar.svg
