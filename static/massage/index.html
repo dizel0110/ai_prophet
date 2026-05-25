@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Мастерская Массажа</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:var(--tg-theme-bg-color,#f8f5f0);--text:var(--tg-theme-text-color,#2c1810);--hint:var(--tg-theme-hint-color,#8b7355);--accent:var(--tg-theme-button-color,#c49a6c);--accent-text:var(--tg-theme-button-text-color,#fff);--card:var(--tg-theme-section-bg-color,#fff);--border:rgba(0,0,0,.07);--gold:#c49a6c;--gold-dark:#a67c4e;--cream:#f8f5f0;--brown:#2c1810;--tab-h:64px}
+body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);color:var(--text);line-height:1.6;padding-bottom:var(--tab-h);overflow-x:hidden}
+.page{display:none;padding:0 0 16px;animation:fadeIn .35s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* Hero */
+.hero{background:linear-gradient(135deg,#2c1810 0%,#4a2c1a 50%,#5c3a24 100%);color:#f8f5f0;padding:52px 20px 36px;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-60%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(196,154,108,.12) 0%,transparent 60%);animation:glow 10s ease-in-out infinite alternate}
+@keyframes glow{0%{transform:translate(0,0) rotate(0)}100%{transform:translate(-15px,-10px) rotate(2deg)}}
+.hero h1{font-size:28px;font-weight:700;letter-spacing:1.5px;position:relative;margin-bottom:6px}
+.hero .sub{font-size:13px;opacity:.75;font-style:italic;position:relative;letter-spacing:2.5px}
+.hero .divider{width:36px;height:1.5px;background:var(--gold);margin:14px auto;position:relative;border-radius:2px}
+.hero-badge{display:inline-block;background:rgba(196,154,108,.2);border:1px solid rgba(196,154,108,.4);border-radius:20px;padding:4px 14px;font-size:11px;color:var(--gold);margin-top:10px;position:relative}
+
+/* Sections */
+.sec{padding:20px 16px}
+.sec-title{font-size:20px;font-weight:700;color:var(--gold-dark);margin-bottom:2px;letter-spacing:.5px}
+.sec-sub{font-size:12px;color:var(--hint);margin-bottom:16px}
+
+/* Cards */
+.card{background:var(--card);border-radius:16px;padding:20px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.05);border:1px solid var(--border);transition:transform .2s}
+
+/* Services */
+.svc{display:flex;justify-content:space-between;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border)}
+.svc:last-child{border-bottom:none;padding-bottom:0}
+.svc-info{flex:1}
+.svc-name{font-size:15px;font-weight:600}
+.svc-desc{font-size:12px;color:var(--hint);margin-top:2px;line-height:1.5}
+.svc-dur{font-size:11px;color:var(--gold);margin-top:2px}
+.svc-price{font-size:17px;font-weight:700;color:var(--gold-dark);white-space:nowrap;margin-left:12px}
+
+/* About */
+.about-text{font-size:14px;line-height:1.8;color:var(--text)}
+.about-text em{color:var(--gold-dark);font-style:italic}
+.master-card{display:flex;align-items:center;gap:14px;padding:14px;background:linear-gradient(135deg,rgba(196,154,108,.08),rgba(166,124,78,.04));border-radius:14px;margin-top:14px}
+.master-avatar{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-dark));display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.master-name{font-size:16px;font-weight:700}
+.master-title{font-size:12px;color:var(--hint)}
+.gallery-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gallery-item{aspect-ratio:1;border-radius:12px;background:linear-gradient(135deg,rgba(196,154,108,.15),rgba(166,124,78,.08));display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--gold);cursor:pointer;transition:transform .2s}
+.gallery-item:active{transform:scale(.95)}
+.gallery-label{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:10px;color:var(--hint)}
+.gallery-wrap{position:relative}
+
+/* Reviews */
+.review{padding:14px 0;border-bottom:1px solid var(--border)}
+.review:last-child{border-bottom:none}
+.review-header{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.review-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;flex-shrink:0}
+.review-name{font-size:13px;font-weight:600}
+.review-stars{color:var(--gold);font-size:12px}
+.review-text{font-size:13px;color:var(--text);line-height:1.6;opacity:.85}
+
+/* Booking */
+.contact-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.contact-item:last-child{border-bottom:none}
+.contact-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--gold),var(--gold-dark));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#fff}
+.contact-label{font-size:12px;color:var(--hint)}
+.contact-value{font-size:14px;font-weight:600}
+.btn{display:block;width:100%;padding:16px;border:none;border-radius:14px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .2s;text-align:center;text-decoration:none}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn-primary{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;margin-top:10px}
+.btn-secondary{background:rgba(196,154,108,.15);color:var(--gold-dark);margin-top:6px;border:1px solid rgba(196,154,108,.3)}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border);margin-top:6px}
+
+/* Blog */
+.blog-card{padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.blog-card:last-child{border-bottom:none}
+.blog-card:active{opacity:.7}
+.blog-date{font-size:11px;color:var(--hint);margin-bottom:4px}
+.blog-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.blog-preview{font-size:12px;color:var(--hint);line-height:1.5}
+
+/* Channel */
+.channel-card{background:linear-gradient(135deg,rgba(196,154,108,.1),rgba(166,124,78,.05));border:1px solid rgba(196,154,108,.25)}
+
+/* Bottom Nav */
+.tab-bar{position:fixed;bottom:0;left:0;right:0;height:var(--tab-h);background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;padding:0 4px;z-index:100;backdrop-filter:blur(10px)}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:none;background:none;cursor:pointer;min-width:52px;transition:all .2s;font-family:inherit}
+.tab-icon{font-size:20px;line-height:1;transition:transform .2s}
+.tab.active .tab-icon{transform:scale(1.1)}
+.tab-label{font-size:10px;color:var(--hint);font-weight:500;transition:color .2s}
+.tab.active .tab-label{color:var(--gold-dark);font-weight:600}
+.tab-indicator{width:4px;height:4px;border-radius:50%;background:var(--gold);margin-top:2px;opacity:0;transition:opacity .2s}
+.tab.active .tab-indicator{opacity:1}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:flex-end}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-height:80vh;overflow-y:auto;animation:slideUp .3s ease}
+.modal h3{font-size:18px;margin-bottom:16px;color:var(--gold-dark)}
+.modal-close{float:right;background:none;border:none;font-size:24px;color:var(--hint);cursor:pointer;padding:4px}
+
+/* Form */
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;transition:border-color .2s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold)}
+.form-group textarea{resize:vertical;min-height:80px}
+
+/* Utilities */
+.text-center{text-align:center}
+.mt-8{margin-top:8px}
+.mt-16{margin-top:16px}
+.flex{display:flex}
+.gap-8{gap:8px}
+.tag{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;background:rgba(196,154,108,.12);color:var(--gold-dark);margin:2px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px}
+.stat{text-align:center;padding:12px;background:rgba(196,154,108,.06);border-radius:12px}
+.stat-num{font-size:20px;font-weight:700;color:var(--gold-dark)}
+.stat-label{font-size:11px;color:var(--hint);margin-top:2px}
+.footer-text{font-size:11px;color:var(--hint);text-align:center;padding:20px 16px 8px}
+</style>
+</head>
+<body>
+
+<!-- HERO (часть каждой страницы) -->
+<div class="hero">
+  <h1>Мастерская Массажа</h1>
+  <div class="divider"></div>
+  <div class="sub">Искусство расслабления и восстановления</div>
+  <div class="hero-badge">👫 Семейная команда мастеров</div>
+</div>
+
+<!-- PAGE: HOME -->
+<div class="page active" id="page-home">
+  <div class="sec">
+    <p style="font-size:14px;line-height:1.8;margin-bottom:6px;text-align:center">
+      Превращаем напряжение в гармонию. Профессиональный массаж для здоровья, красоты и хорошего самочувствия.
+    </p>
+  </div>
+  <div class="sec">
+    <div class="stats">
+      <div class="stat"><div class="stat-num">5+</div><div class="stat-label">Лет опыта</div></div>
+      <div class="stat"><div class="stat-num">500+</div><div class="stat-label">Довольных клиентов</div></div>
+      <div class="stat"><div class="stat-num">12</div><div class="stat-label">Техник массажа</div></div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">Популярные услуги</div>
+    <div class="card" onclick="navigate('services')" style="cursor:pointer">
+      <div class="svc" style="border:none;padding:4px 0">
+        <div class="svc-info">
+          <div class="svc-name">Классический массаж</div>
+          <div class="svc-desc">Общий оздоровительный массаж всего тела</div>
+          <div class="svc-dur">⏱ 60 мин</div>
+        </div>
+        <div class="svc-price">2 500 ₽</div>
+      </div>
+      <div class="svc" style="border:none;padding:8px 0 4px">
+        <div class="svc-info">
+          <div class="svc-name">Спортивный массаж</div>
+          <div class="svc-desc">Восстановление после тренировок</div>
+          <div class="svc-dur">⏱ 90 мин</div>
+        </div>
+        <div class="svc-price">3 500 ₽</div>
+      </div>
+      <div style="text-align:center;margin-top:10px;font-size:13px;color:var(--gold)">Все услуги →</div>
+    </div>
+  </div>
+  <div class="sec">
+    <button class="btn btn-primary" onclick="navigate('booking')">✨ Записаться на сеанс</button>
+  </div>
+  <div class="sec">
+    <div class="card channel-card" onclick="openLink('https://t.me/your_channel')" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px">📢</div>
+        <div>
+          <div style="font-size:13px;font-weight:600">Наш Telegram-канал</div>
+          <div style="font-size:11px;color:var(--hint)">Полезные советы и акции</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: SERVICES -->
+<div class="page" id="page-services">
+  <div class="sec">
+    <div class="sec-title">Все услуги</div>
+    <div class="sec-sub">Профессиональный массаж для здоровья и гармонии</div>
+    <div class="card">
+      <div class="svc"><div class="svc-info"><div class="svc-name">Классический массаж</div><div class="svc-desc">Общий оздоровительный массаж всего тела</div><div class="svc-dur">⏱ 60 мин</div></div><div class="svc-price">2 500 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Антицеллюлитный массаж</div><div class="svc-desc">Глубокий массаж проблемных зон</div><div class="svc-dur">⏱ 60 мин</div></div><div class="svc-price">2 800 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Спортивный массаж</div><div class="svc-desc">Восстановление после тренировок</div><div class="svc-dur">⏱ 90 мин</div></div><div class="svc-price">3 500 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Массаж спины и шеи</div><div class="svc-desc">Целевая проработка воротниковой зоны</div><div class="svc-dur">⏱ 30 мин</div></div><div class="svc-price">1 500 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Стоун-терапия</div><div class="svc-desc">Массаж горячими камнями</div><div class="svc-dur">⏱ 80 мин</div></div><div class="svc-price">3 200 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Медовый массаж</div><div class="svc-desc">Детокс и питание кожи</div><div class="svc-dur">⏱ 60 мин</div></div><div class="svc-price">2 800 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Тайский массаж</div><div class="svc-desc">Глубокое растяжение и работа с энергией</div><div class="svc-dur">⏱ 90 мин</div></div><div class="svc-price">4 000 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Массаж лица</div><div class="svc-desc">Омоложение и лифтинг</div><div class="svc-dur">⏱ 30 мин</div></div><div class="svc-price">1 800 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Аромамассаж</div><div class="svc-desc">Расслабление с эфирными маслами</div><div class="svc-dur">⏱ 60 мин</div></div><div class="svc-price">3 000 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Бамбуковый массаж</div><div class="svc-desc">Глубокое воздействие бамбуковыми палочками</div><div class="svc-dur">⏱ 60 мин</div></div><div class="svc-price">3 200 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Лимфодренажный массаж</div><div class="svc-desc">Лёгкий вывод токсинов и отёков</div><div class="svc-dur">⏱ 45 мин</div></div><div class="svc-price">2 500 ₽</div></div>
+      <div class="svc"><div class="svc-info"><div class="svc-name">Экспресс-программа</div><div class="svc-desc">Быстрое снятие усталости</div><div class="svc-dur">⏱ 20 мин</div></div><div class="svc-price">1 000 ₽</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: ABOUT -->
+<div class="page" id="page-about">
+  <div class="sec">
+    <div class="sec-title">О нас</div>
+    <div class="sec-sub">Супер-мастера массажа</div>
+    <div class="card">
+      <p class="about-text">
+        Мы — супружеская пара дипломированных мастеров массажа с опытом работы более 5 лет. В нашей работе мы соединяем <em>классические техники</em> массажа с современными методиками восстановления тела.
+      </p>
+      <p class="about-text mt-8">
+        Каждый сеанс начинается с <em>консультации</em> — мы подбираем технику и интенсивность под твои потребности. Наша цель — не просто расслабить мышцы, а вернуть телу <em>баланс и лёгкость</em>.
+      </p>
+      <div class="master-card">
+        <div class="master-avatar">👫</div>
+        <div>
+          <div class="master-name">Семейная команда</div>
+          <div class="master-title">Дипломированные мастера • 5+ лет • Более 500 клиентов</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="sec-title" style="font-size:16px">Наши дипломы и сертификаты</div>
+      <div class="sec-sub" style="margin-bottom:10px">Постоянно учимся новому</div>
+      <div class="flex gap-8" style="flex-wrap:wrap">
+        <span class="tag">Классический массаж</span>
+        <span class="tag">Спортивный массаж</span>
+        <span class="tag">Стоун-терапия</span>
+        <span class="tag">Тайский массаж</span>
+        <span class="tag">Лимфодренаж</span>
+        <span class="tag">Бамбуковый массаж</span>
+        <span class="tag">Ароматерапия</span>
+      </div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">Фотогалерея</div>
+    <div class="sec-sub">Наш кабинет и процесс работы</div>
+    <div class="gallery-grid">
+      <div class="gallery-item" onclick="openGallery('1')">🛋️</div>
+      <div class="gallery-item" onclick="openGallery('2')">🌿</div>
+      <div class="gallery-item" onclick="openGallery('3')">💆</div>
+      <div class="gallery-item" onclick="openGallery('4')">🕯️</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: BOOKING -->
+<div class="page" id="page-booking">
+  <div class="sec">
+    <div class="sec-title">Контакты и запись</div>
+    <div class="sec-sub">Свяжитесь с нами удобным способом</div>
+    <div class="card">
+      <div class="contact-item" onclick="openLink('tel:+79991234567')">
+        <div class="contact-icon">📞</div>
+        <div><div class="contact-label">Телефон</div><div class="contact-value">+7 (999) 123-45-67</div></div>
+      </div>
+      <div class="contact-item" onclick="openLink('https://wa.me/79991234567')">
+        <div class="contact-icon">💬</div>
+        <div><div class="contact-label">WhatsApp</div><div class="contact-value">Написать в WhatsApp</div></div>
+      </div>
+      <div class="contact-item" onclick="openLink('https://t.me/your_username')">
+        <div class="contact-icon">✈️</div>
+        <div><div class="contact-label">Telegram</div><div class="contact-value">@your_username</div></div>
+      </div>
+      <div class="contact-item" onclick="openLink('https://maps.google.com/?q=Москва')">
+        <div class="contact-icon">📍</div>
+        <div><div class="contact-label">Адрес</div><div class="contact-value">Москва, м. Центральная</div></div>
+      </div>
+      <button class="btn btn-primary" onclick="showBookingForm()">📝 Записаться онлайн</button>
+      <button class="btn btn-secondary" onclick="openLink('https://wa.me/79991234567?text=Здравствуйте!+Хочу+записаться+на+массаж')">📱 Запись через WhatsApp</button>
+    </div>
+    <div class="card">
+      <div class="sec-title" style="font-size:15px">Часы работы</div>
+      <div style="margin-top:8px;font-size:14px;line-height:2">
+        <div style="display:flex;justify-content:space-between"><span>Пн–Пт</span><span style="color:var(--gold-dark);font-weight:600">10:00 – 21:00</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Сб</span><span style="color:var(--gold-dark);font-weight:600">11:00 – 20:00</span></div>
+        <div style="display:flex;justify-content:space-between"><span>Вс</span><span style="color:var(--gold-dark);font-weight:600">Выходной</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: MORE (Reviews + Blog + Channel) -->
+<div class="page" id="page-more">
+  <div class="sec">
+    <div class="sec-title">Отзывы</div>
+    <div class="sec-sub">Что говорят наши клиенты</div>
+    <div class="card">
+      <div class="review"><div class="review-header"><div class="review-avatar">А</div><div><div class="review-name">Анна</div><div class="review-stars">★ ★ ★ ★ ★</div></div></div><div class="review-text">Лучший массаж, который я пробовала! После сеанса чувствую себя заново рождённой. Очень профессиональный подход.</div></div>
+      <div class="review"><div class="review-header"><div class="review-avatar">М</div><div><div class="review-name">Михаил</div><div class="review-stars">★ ★ ★ ★ ★</div></div></div><div class="review-text">Спортивный массаж помог восстановиться после марафона. Руки действительно чувствуют проблемные зоны. Рекомендую!</div></div>
+      <div class="review"><div class="review-header"><div class="review-avatar">Е</div><div><div class="review-name">Елена</div><div class="review-stars">★ ★ ★ ★ ★</div></div></div><div class="review-text">Ходим с мужем вдвоём. Очень уютная атмосфера, чувствуется, что работают профессионалы с душой.</div></div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">Полезные статьи</div>
+    <div class="sec-sub">Советы от мастеров</div>
+    <div class="card">
+      <div class="blog-card" onclick="openLink('https://t.me/your_channel')"><div class="blog-date">📅 15 мая 2026</div><div class="blog-title">Как часто нужно делать массаж?</div><div class="blog-preview">Оптимальная частота сеансов для поддержания здоровья спины и снятия хронического напряжения...</div></div>
+      <div class="blog-card" onclick="openLink('https://t.me/your_channel')"><div class="blog-date">📅 8 мая 2026</div><div class="blog-title">Стоун-терапия: горячие камни для здоровья</div><div class="blog-preview">Древняя техника массажа вулканическими камнями — показания, польза и противопоказания...</div></div>
+      <div class="blog-card" onclick="openLink('https://t.me/your_channel')"><div class="blog-date">📅 1 мая 2026</div><div class="blog-title">Массаж при остеохондрозе</div><div class="blog-preview">Какие техники массажа помогают при шейном и поясничном остеохондрозе. Советы специалиста...</div></div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="card channel-card" onclick="openLink('https://t.me/your_channel')" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="font-size:32px">📢</div>
+        <div>
+          <div style="font-size:15px;font-weight:700">Telegram-канал</div>
+          <div style="font-size:12px;color:var(--hint)">Подпишись на полезные советы, акции и новости массажного салона</div>
+          <div style="font-size:12px;color:var(--gold);margin-top:4px">@your_channel</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer-text">С любовью к вашему телу ❤️</div>
+</div>
+
+<!-- BOOKING MODAL -->
+<div class="modal-overlay" id="bookingModal">
+  <div class="modal">
+    <button class="modal-close" onclick="hideBookingForm()">✕</button>
+    <h3>📝 Запись на массаж</h3>
+    <div class="form-group"><label>Ваше имя</label><input type="text" id="bName" placeholder="Анна"></div>
+    <div class="form-group"><label>Телефон</label><input type="tel" id="bPhone" placeholder="+7 (999) 123-45-67"></div>
+    <div class="form-group"><label>Услуга</label>
+      <select id="bService">
+        <option value="">Выберите услугу</option>
+        <option>Классический массаж</option>
+        <option>Антицеллюлитный массаж</option>
+        <option>Спортивный массаж</option>
+        <option>Массаж спины и шеи</option>
+        <option>Стоун-терапия</option>
+        <option>Медовый массаж</option>
+        <option>Тайский массаж</option>
+        <option>Массаж лица</option>
+        <option>Аромамассаж</option>
+        <option>Бамбуковый массаж</option>
+        <option>Лимфодренажный массаж</option>
+        <option>Экспресс-программа</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Дата и время</label><input type="text" id="bDate" placeholder="Например: завтра 15:00"></div>
+    <div class="form-group"><label>Пожелания</label><textarea id="bNote" placeholder="Особые пожелания, зоны, интенсивность..."></textarea></div>
+    <button class="btn btn-primary" onclick="submitBooking()">📩 Отправить заявку</button>
+    <button class="btn btn-secondary" onclick="hideBookingForm()">Отмена</button>
+  </div>
+</div>
+
+<!-- GALLERY MODAL -->
+<div class="modal-overlay" id="galleryModal">
+  <div class="modal">
+    <button class="modal-close" onclick="hideGallery()">✕</button>
+    <h3>📸 Галерея</h3>
+    <div id="galleryContent" style="text-align:center;font-size:64px;padding:20px">🛋️</div>
+    <p style="text-align:center;color:var(--hint);font-size:13px">Фотографии нашего кабинета скоро появятся здесь</p>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab active" data-page="home" onclick="navigate('home')">
+    <span class="tab-icon">🏠</span>
+    <span class="tab-label">Главная</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" data-page="services" onclick="navigate('services')">
+    <span class="tab-icon">💆</span>
+    <span class="tab-label">Услуги</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" data-page="about" onclick="navigate('about')">
+    <span class="tab-icon">👫</span>
+    <span class="tab-label">О нас</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" data-page="booking" onclick="navigate('booking')">
+    <span class="tab-icon">📞</span>
+    <span class="tab-label">Запись</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" data-page="more" onclick="navigate('more')">
+    <span class="tab-icon">📋</span>
+    <span class="tab-label">Ещё</span>
+    <span class="tab-indicator"></span>
+  </button>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.expand();
+tg.ready();
+tg.setHeaderColor('#2c1810');
+tg.MainButton.setText("Закрыть").show().onClick(() => tg.close());
+tg.MainButton.setParams({ color: '#c49a6c', text_color: '#ffffff' });
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab[data-page="' + page + '"]').classList.add('active');
+  tg.HapticFeedback.impactOccurred('light');
+  window.scrollTo(0, 0);
+}
+
+function openLink(url) {
+  tg.HapticFeedback.impactOccurred('medium');
+  tg.openLink(url);
+}
+
+function showBookingForm() {
+  tg.HapticFeedback.impactOccurred('medium');
+  document.getElementById('bookingModal').classList.add('show');
+}
+function hideBookingForm() {
+  document.getElementById('bookingModal').classList.remove('show');
+}
+function showGallery(id) {
+  tg.HapticFeedback.impactOccurred('medium');
+  document.getElementById('galleryModal').classList.add('show');
+  document.getElementById('galleryContent').textContent = ['🛋️','🌿','💆','🕯️'][parseInt(id)-1];
+}
+function hideGallery() {
+  document.getElementById('galleryModal').classList.remove('show');
+}
+function openGallery(id) { showGallery(id); }
+
+function submitBooking() {
+  const name = document.getElementById('bName').value.trim();
+  const phone = document.getElementById('bPhone').value.trim();
+  const service = document.getElementById('bService').value;
+  if (!name || !phone) { tg.showAlert('Пожалуйста, заполните имя и телефон'); return; }
+  const date = document.getElementById('bDate').value.trim();
+  const note = document.getElementById('bNote').value.trim();
+  const msg = '📝 Новая заявка:%0A👤 ' + encodeURIComponent(name) + '%0A📞 ' + encodeURIComponent(phone) + '%0A💆 ' + encodeURIComponent(service || 'Не выбрано') + '%0A📅 ' + encodeURIComponent(date || 'Не указано') + '%0A📝 ' + encodeURIComponent(note || '—');
+  tg.HapticFeedback.notificationOccurred('success');
+  hideBookingForm();
+  tg.openLink('https://wa.me/79991234567?text=' + msg);
+  tg.showAlert('✅ Заявка отправлена! Мы свяжемся с вами в ближайшее время.');
+}
+
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', function(e) {
+    if (e.target === this) {
+      this.classList.remove('show');
+    }
+  });
+});
+</script>
+</body>
+</html>

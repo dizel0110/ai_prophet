@@ -8,9 +8,22 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 VIP_PASSWORD = os.getenv("VIP_PASSWORD", "prophet2026")  # Пароль для VIP режима
 VIP_RESET_PASSWORD = os.getenv("VIP_RESET_PASSWORD", "reset2026")  # Пароль сброса блокировки
+GEM_BOT_URL = os.getenv("GEM_BOT_URL")  # Ссылка на внешнего GEM-бота (не коммитить)
 
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = "dizel0110"
+
+# Mini App URL — Telegram требует HTTPS
+# На HF Spaces формируется автоматически, для локали — GitHub Pages или ngrok
+LOCAL_MINI_APP_URL = os.getenv("MINI_APP_URL", "https://dizel0110.github.io/ai_prophet/")
+
+def get_base_url() -> str:
+    """Базовый URL для Mini App (автоопределение HF или локаль)"""
+    space_id = os.getenv("SPACE_ID")
+    if space_id:
+        slug = space_id.replace("/", "-").replace("_", "-")
+        return f"https://{slug}.hf.space"
+    return LOCAL_MINI_APP_URL.rstrip("/")
 
 # Директории
 TEMP_DIR = "temp"

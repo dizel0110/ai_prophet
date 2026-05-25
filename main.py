@@ -10,11 +10,13 @@ import logging
 import multiprocessing
 import uvicorn
 from datetime import datetime
+from pathlib import Path
 from aiogram import Bot, Dispatcher
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from config import TOKEN, PORT
 from core.network import apply_dns_patch
-from handlers import messages, vip, limits
+from handlers import messages, vip, limits, massage
 
 # Настройка логов
 LOG_DIR = "logs"
@@ -40,6 +42,12 @@ IS_HF_SPACE = os.getenv("SPACE_ID") is not None
 
 # FastAPI приложение
 app = FastAPI()
+
+# Раздача статики (Mini App)
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR.mkdir(exist_ok=True)
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # НА HF SPACES: регистрируем webhook routes ДО запуска сервера
 if IS_HF_SPACE:
@@ -96,6 +104,7 @@ async def start_bot_polling():
         BotCommand(command="help", description="Показать все возможности"),
         BotCommand(command="playlist", description="Собрать свой плейлист"),
         BotCommand(command="playlist_example", description="Примеры и обучение (Академия)"),
+        BotCommand(command="massage", description="🖐 Массажный салон"),
         BotCommand(command="settings", description="Выбрать мозг бота (Gemini/HF)"),
         BotCommand(command="dizel0110", description="Вход в VIP режим"),
         BotCommand(command="stop", description="Остановить текущие действия")
@@ -110,6 +119,7 @@ async def start_bot_polling():
     # Регистрация роутеров
     dp.include_router(vip.router)
     dp.include_router(limits.router)
+    dp.include_router(massage.router)
     dp.include_router(messages.router)
 
     logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")

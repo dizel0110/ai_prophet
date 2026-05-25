@@ -11,6 +11,7 @@ logs/
 internal/
 .vscode/
 .prompts/
+node_modules/
 
 # Медиа (кроме аватарки бота)
 !artef/bot_avatar.png

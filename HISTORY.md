@@ -66,4 +66,35 @@
 - [ ] Расширение Mini App до полноценной панели управления состоянием ИИ.
 
 ---
+## 2026-05-25: Playwright MCP Setup
+- **Playwright MCP установлен** для opencode (глобальный `~/.config/opencode/opencode.jsonc`).
+- **Причина**: webfetch не умеет JS, клики, скриншоты, формы. Playwright — полноценный браузер.
+- Установлен пакет `@playwright/mcp` в проект (`npm install @playwright/mcp`).
+- Установлен Chromium для headless-режима (`npx playwright install chromium`).
+- **Документация**: создан `MCP_GUIDE.md` с подробным описанием установки, настройки и сравнением с webfetch.
+- **ngrok**: установлен глобально (`npm install -g ngrok`) для локального HTTPS-тестирования Mini App.
+- **План для бота**: интеграция Playwright как команды `/browse` и `/screenshot` (TODO).
+
+## 2026-05-25: Massage Mini App &amp; Static Serving
+- **Массажный Mini App**: Создан полноценный Telegram Mini App для массажного салона (`static/massage/index.html`).
+  - Каталог услуг с ценами, описание, контакты, кнопка записи.
+  - Telegram WebApp API (expand, haptic, theme).
+  - Автоопределение URL: на HF Spaces раздаётся FastAPI, локально — GitHub Pages.
+- **FastAPI Static Files**: FastAPI теперь раздаёт статику через `/static/` — основа для всех будущих Mini App.
+- **Handler массажа**: Добавлен `handlers/massage.py` с командой `/massage` и отдельной клавиатурой.
+- **Config**: Добавлены `GEM_BOT_URL`, `MINI_APP_URL`, `get_base_url()`.
+- **Router order**: `vip` → `limits` → `massage` → `messages`.
+
+---
+### 🛠 PHASE 4: Autonomous Agent (FUTURE)
+- [ ] **🔴 Playwright MCP (приоритет)** — для меня (opencode) и для бота:
+  - Для меня: открывать сайты, скриншоты, клики, формы.
+  - Для бота: поиск контента, проверка ссылок, скрейпинг Mini App.
+- [ ] **🔴 Прокси-бот** — второй Telegram-бот на Render/Fly.io как прокси для ответов (обходит блокировку HF Spaces).
+- [ ] Интеграция MCP для работы с файлами, БД.
+- [ ] Автоматическое исправление багов через самоанализ кода.
+- [ ] Расширение Mini App до полноценной панели управления состоянием ИИ.
+- [ ] Split-деплой: бот на Render/Fly.io, фронтенд на HF Spaces.
+
+---
 *Продолжение следует. Каждая строка кода — часть пророчества.*

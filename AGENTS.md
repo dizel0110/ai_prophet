@@ -35,10 +35,12 @@ python main.py
 
 ```
 main.py
-├── FastAPI (uvicorn) — health check + webhook routes on HF
+├── FastAPI (uvicorn) — health check, static files, webhook routes on HF
+│   └── static/ — Telegram Mini App HTML (massage salon, etc.)
 └── aiogram Dispatcher (polling)
     ├── handlers/vip.py      — VIP mode, admin commands, password auth
     ├── handlers/limits.py   — per-user download duration/size limits
+    ├── handlers/massage.py  — 🖐 Массажный салон Mini App (/massage command)
     └── handlers/messages.py — all user-facing: text, photo, voice, playlists, settings
 
 core/
@@ -48,7 +50,7 @@ core/
 └── mcp_client.py  — MCP client (unused/stub)
 ```
 
-- Router registration order in `main.py`: `vip` → `limits` → `messages` (matters for command precedence)
+- Router registration order in `main.py`: `vip` → `limits` → `massage` → `messages` (matters for command precedence)
 - User state stored in `temp/user_settings.json` (in-memory dict persisted to file; **lost on restart**)
 - User limits stored in `temp/user_limits.json`
 - All UI text is in Russian
@@ -118,6 +120,8 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 | `PROXY_URL` | No | HTTP proxy for Telegram API on HF Spaces |
 | `VIP_PASSWORD` | No | Default `prophet2026` |
 | `VIP_RESET_PASSWORD` | No | Default `reset2026` |
+| `GEM_BOT_URL` | No | External GEM-bot link (not committed to git) |
+| `MINI_APP_URL` | No | Custom Mini App base URL (default: GitHub Pages or ngrok) |
 
 ## Context Management
 
@@ -125,6 +129,19 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 - **New conventions or gotchas discovered**: add them to this file (`AGENTS.md`) immediately.
 - **Unfinished tasks**: note them at the bottom of `HISTORY.md` so the next session picks up where this one left off.
 - This ensures continuity across sessions — treat `HISTORY.md` as the project's persistent memory.
+
+## MCP (Model Context Protocol)
+
+Playwright MCP сервер установлен для opencode. Конфигурация: `~/.config/opencode/opencode.jsonc`
+
+Доступные инструменты агенту:
+- `browser_navigate` / `browser_snapshot` / `browser_screenshot`
+- `browser_click` / `browser_fill` / `browser_select`
+- Поддержка headless-режима (браузер без GUI)
+
+Детальный гайд: `MCP_GUIDE.md`
+
+**Playwright >> webfetch** — webfetch только GET-запросы (статический HTML), Playwright — полноценный браузер с JS, кликами, формами, скриншотами.
 
 ## Gotchas & Known Issues
 
