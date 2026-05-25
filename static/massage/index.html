@@ -170,6 +170,21 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     </div>
   </div>
   <div class="sec">
+    <div class="sec-title">🎵 Музыка для массажа</div>
+    <div class="sec-sub">Подбери идеальный плейлист через нашего бота</div>
+    <div class="card" style="cursor:pointer">
+      <div class="flex gap-8" style="flex-wrap:wrap">
+        <span class="tag" onclick="musicPlaylist('ambient spa relaxing')">🌿 Ambient</span>
+        <span class="tag" onclick="musicPlaylist('classical piano relaxing')">🎹 Классика</span>
+        <span class="tag" onclick="musicPlaylist('nature sounds meditation')">🌊 Природа</span>
+        <span class="tag" onclick="musicPlaylist('jazz lounge relax')">🎷 Jazz</span>
+        <span class="tag" onclick="musicPlaylist('acoustic guitar calm')">🎸 Акустика</span>
+        <span class="tag" onclick="musicPlaylist('binaural beats relaxation')">🧘 Бины</span>
+      </div>
+      <div style="font-size:12px;color:var(--hint);margin-top:8px;text-align:center">Нажми на жанр — откроется чат с ботом для создания плейлиста</div>
+    </div>
+  </div>
+  <div class="sec">
     <button class="btn btn-primary" onclick="navigate('booking')">✨ Записаться на сеанс</button>
   </div>
   <div class="sec">
@@ -310,6 +325,24 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     </div>
   </div>
   <div class="sec">
+    <div class="sec-title">🎵 Плейлисты для массажа</div>
+    <div class="sec-sub">Музыка, создающая атмосферу</div>
+    <div class="card">
+      <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.6">
+        Правильная музыка усиливает эффект массажа в 2 раза. Наш бот AI Prophet подберёт идеальный плейлист под твой сеанс.
+      </p>
+      <div class="flex gap-8" style="flex-wrap:wrap;margin-bottom:10px">
+        <span class="tag" onclick="musicPlaylist('spa relaxation ambient massage')">💆 Спа</span>
+        <span class="tag" onclick="musicPlaylist('deep tissue massage music')">💪 Глубокий</span>
+        <span class="tag" onclick="musicPlaylist('thai massage traditional')">🧘 Тайский</span>
+        <span class="tag" onclick="musicPlaylist('stone therapy relaxation')">🪨 Стоун</span>
+        <span class="tag" onclick="musicPlaylist('anti cellulite massage music')">🔥 Антицеллюлит</span>
+        <span class="tag" onclick="musicPlaylist('sport massage energetic')">⚡ Спорт</span>
+      </div>
+      <button class="btn btn-secondary" onclick="musicPlaylist('relaxing massage music')">🎶 Создать плейлист</button>
+    </div>
+  </div>
+  <div class="sec">
     <div class="card channel-card" onclick="openLink('https://t.me/your_channel')" style="cursor:pointer">
       <div style="display:flex;align-items:center;gap:14px">
         <div style="font-size:32px">📢</div>
@@ -411,9 +444,17 @@ function navigate(page) {
   window.scrollTo(0, 0);
 }
 
+const BOT_USERNAME = 'ai_prophet_io_bot';
+
 function openLink(url) {
   tg.HapticFeedback.impactOccurred('medium');
   tg.openLink(url);
+}
+
+function musicPlaylist(query) {
+  tg.HapticFeedback.impactOccurred('medium');
+  const text = '/playlist ' + encodeURIComponent(query) + ' 5';
+  tg.openTelegramLink('https://t.me/' + BOT_USERNAME + '?text=' + text);
 }
 
 function showBookingForm() {
