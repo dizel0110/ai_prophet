@@ -1,5 +1,11 @@
 # AGENTS.md — AI Prophet
 
+## 🧭 Главный принцип проекта
+
+**Кратчайший путь клиента.** Любая фича, любой запрос реализуется так, чтобы пользователь дошёл до результата за минимальное число действий. Не создавай лишних шагов, не прячь функционал.
+
+Всё, что добавляется в проект — это **фича AI Prophet**, а не отдельный продукт. Массажный салон, музыка, поиск — всё это возможности главного ИИ-проводника, а не самостоятельные сервисы.
+
 ## Project
 
 Telegram bot + Telegram Mini App ("AI Prophet") — multimodal AI agent with chat, voice transcription, image analysis, music playlist generation, and web search. Deployed on Hugging Face Spaces.
