@@ -12,7 +12,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
-from config import FALLBACK_MODELS, TEMP_DIR
+from config import FALLBACK_MODELS, TEMP_DIR, get_base_url
 from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ def cleanup_user_temp(chat_id):
 
 def get_main_menu(vip_mode: bool = False):
     """Главное меню: обычное или VIP"""
-    web_app_url = "https://dizel0110.github.io/ai_prophet/"
+    web_app_url = f"{get_base_url()}/static/prophet/index.html"
     
     if vip_mode:
         # VIP меню

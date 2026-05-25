@@ -1,7 +1,7 @@
 from aiogram import types, Router, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
-from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD
+from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_url
 import json
 import os
 import time
@@ -160,7 +160,7 @@ async def admin_cmd(message: types.Message):
     reset_failed_attempts(chat_id)
     
     # VIP Mini App URL с параметром admin=true
-    vip_web_app_url = "https://dizel0110.github.io/ai_prophet/?admin=true"
+    vip_web_app_url = f"{get_base_url()}/static/prophet/index.html?admin=true"
     kb = get_vip_menu()
 
     # Устанавливаем VIP режим
