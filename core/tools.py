@@ -224,7 +224,6 @@ def search_soundcloud(query: str, max_results: int = 5):
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
-            'extract_flat': True,  # Быстрый поиск без деталей
         }
 
         # scsearch: — официальный префикс для поиска SoundCloud
@@ -236,15 +235,17 @@ def search_soundcloud(query: str, max_results: int = 5):
             if res and 'entries' in res:
                 entries = []
                 for e in res['entries']:
-                    if e and e.get('url'):
+                    if e and e.get('webpage_url'):
                         entries.append({
                             'title': e.get('title', 'Unknown'),
-                            'url': e.get('url', ''),
+                            'url': e.get('webpage_url', ''),
                             'duration': e.get('duration', 0),
                             'thumbnail': e.get('thumbnail', ''),
                             'source': 'soundcloud',
                             'extractor': e.get('extractor', 'soundcloud')
                         })
+                        if len(entries) >= max_results:
+                            break
                 
                 logger.info(f"🎵 SoundCloud: найдено {len(entries)} треков для '{query}'")
                 return entries[:max_results]
