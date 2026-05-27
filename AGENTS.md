@@ -144,6 +144,7 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 | `GEM_BOT_URL` | No | External GEM-bot link (not committed to git) |
 | `MINI_APP_URL` | No | Custom Mini App base URL (default: GitHub Pages or ngrok) |
 | `PLATFORM` | No | `hf` / `render` / `local` (auto: local) |
+| `TELEGRAM_API_URL` | No | Cloudflare Worker URL — обход блокировки Telegram на HF Spaces |
 
 ## Context Management
 
@@ -151,6 +152,14 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 - **New conventions or gotchas discovered**: add them to this file (`AGENTS.md`) immediately.
 - **Unfinished tasks**: note them at the bottom of `HISTORY.md` so the next session picks up where this one left off.
 - This ensures continuity across sessions — treat `HISTORY.md` as the project's persistent memory.
+
+## Cloudflare Worker (Telegram API Proxy)
+
+`cloudflare-worker/index.js` — прокси для обхода блокировки Telegram API на HF Spaces.
+
+**Деплой:** Cloudflare Dashboard → Workers & Pages → Create Worker → вставить код → Deploy
+**Бесплатно:** 100k запросов/день, без карты
+**На HF Spaces:** установить `TELEGRAM_API_URL` = URL воркера в Secrets
 
 ## MCP (Model Context Protocol)
 

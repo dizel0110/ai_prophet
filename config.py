@@ -10,6 +10,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 VIP_PASSWORD = os.getenv("VIP_PASSWORD", "prophet2026")
 VIP_RESET_PASSWORD = os.getenv("VIP_RESET_PASSWORD", "reset2026")
 GEM_BOT_URL = os.getenv("GEM_BOT_URL")
+TELEGRAM_API_URL = os.getenv("TELEGRAM_API_URL")  # Cloudflare Worker proxy для HF Spaces
 
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = "dizel0110"
