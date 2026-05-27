@@ -60,6 +60,13 @@ async def root():
     mode = mode_map.get(PLATFORM, PLATFORM)
     return {"status": f"AI Prophet ({mode})", "platform": PLATFORM}
 
+# Dispatcher создаётся ОДИН раз на весь lifecycle
+dp = Dispatcher()
+dp.include_router(vip.router)
+dp.include_router(limits.router)
+dp.include_router(massage.router)
+dp.include_router(messages.router)
+
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
@@ -121,14 +128,6 @@ async def start_bot_polling():
 
     if not HF_TOKEN: logger.warning("⚠️ HF_TOKEN is not set! Voice and WebSearch fallback will fail.")
     else: logger.info(f"✅ HF_TOKEN is loaded (prefix: {HF_TOKEN[:5]}...)")
-
-    dp = Dispatcher()
-
-    # Регистрация роутеров
-    dp.include_router(vip.router)
-    dp.include_router(limits.router)
-    dp.include_router(massage.router)
-    dp.include_router(messages.router)
 
     logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
 
