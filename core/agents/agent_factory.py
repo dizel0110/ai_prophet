@@ -139,6 +139,28 @@ class SpecialistFactory:
         cls._ensure_clients()
         history = _load_conversation(chat_id, specialist.name)
 
+        # Gemini first — лучше следует system prompt
+        if cls._gemini_client:
+            for model in FALLBACK_MODELS[:2]:
+                try:
+                    ctx = specialist.system_prompt + "\n\n"
+                    for h in history[-4:]:
+                        ctx += f"{h['role']}: {h['content']}\n"
+                    ctx += f"user: {user_message}\n\n{specialist.name}:"
+                    resp = cls._gemini_client.models.generate_content(
+                        model=model,
+                        contents=ctx,
+                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=1024),
+                    )
+                    if resp and resp.text:
+                        specialist.message_count += 1
+                        _save_specialist(specialist)
+                        _save_conversation(chat_id, specialist.name, user_message, resp.text.strip())
+                        return AgentResult(f"s_{chat_id}", specialist.name, resp.text.strip())
+                except Exception as e:
+                    logger.warning(f"Gemini specialist chat {model}: {e}")
+
+        # HF fallback — обычно Qwen
         if cls._hf_token:
             try:
                 msgs = [{"role": "system", "content": specialist.system_prompt}]
@@ -163,26 +185,6 @@ class SpecialistFactory:
                     return AgentResult(f"s_{chat_id}", specialist.name, content)
             except Exception as e:
                 logger.warning(f"HF specialist chat: {e}")
-
-        if cls._gemini_client:
-            for model in FALLBACK_MODELS[:2]:
-                try:
-                    ctx = specialist.system_prompt + "\n\n"
-                    for h in history[-4:]:
-                        ctx += f"{h['role']}: {h['content']}\n"
-                    ctx += f"user: {user_message}\n\n{specialist.name}:"
-                    resp = cls._gemini_client.models.generate_content(
-                        model=model,
-                        contents=ctx,
-                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=1024),
-                    )
-                    if resp and resp.text:
-                        specialist.message_count += 1
-                        _save_specialist(specialist)
-                        _save_conversation(chat_id, specialist.name, user_message, resp.text.strip())
-                        return AgentResult(f"s_{chat_id}", specialist.name, resp.text.strip())
-                except Exception as e:
-                    logger.warning(f"Gemini specialist chat {model}: {e}")
 
         return AgentResult(f"s_{chat_id}", specialist.name, "", error="All AI engines failed")
 

@@ -129,10 +129,10 @@ async def on_mc_spnew(callback: types.CallbackQuery):
 async def on_mc_spchat(callback: types.CallbackQuery):
     await callback.answer()
     name = callback.data.replace("mc_spchat_", "")
-    from handlers.messages import _create_and_show_specialist
-    settings = _load_settings()
-    settings[str(callback.message.chat.id)]["specialist_chat"] = name
-    _save_settings(settings)
+    from handlers.messages import user_settings, save_settings as msg_save
+    chat_str = str(callback.message.chat.id)
+    user_settings.setdefault(chat_str, {})["specialist_chat"] = name
+    msg_save(user_settings)
     await callback.message.edit_text(
         f"💬 Ты общаешься со специалистом *{name}*.\n"
         "Просто напиши ему сообщение.\n\n"

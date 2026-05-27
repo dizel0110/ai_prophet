@@ -516,7 +516,7 @@ async def _create_and_show_specialist(message: types.Message, chat_id: int, role
     lines.append(f"\n💬 Задай ему вопрос прямо сейчас!")
 
     await status.edit_text("\n".join(lines), parse_mode="Markdown")
-    user_settings[str(chat_id)]["specialist_chat"] = specialist.name
+    user_settings.setdefault(str(chat_id), {})["specialist_chat"] = specialist.name
     save_settings(user_settings)
 
 
@@ -534,14 +534,16 @@ async def _handle_create_specialist_auto(chat_id: int, role_description: str, me
         lines.append(f"\n🔧 *Навыки:* {specialist.skills}")
     lines.append(f"\n💬 Задай ему вопрос прямо сейчас или продолжай общение со мной.")
     await message.answer("\n".join(lines), parse_mode="Markdown")
-    user_settings[str(chat_id)]["specialist_chat"] = specialist.name
+    user_settings.setdefault(str(chat_id), {})["specialist_chat"] = specialist.name
     save_settings(user_settings)
     return specialist
 
 
 def _is_chatting_with_specialist(chat_id_str: str) -> bool:
     settings = user_settings.get(chat_id_str, {})
-    return bool(settings.get("specialist_chat"))
+    val = settings.get("specialist_chat")
+    logger.info(f"_is_chatting_with_specialist: chat={chat_id_str} settings_keys={list(settings.keys())[:5]} specialist_chat={val}")
+    return bool(val)
 
 
 @router.message(F.photo)
@@ -760,18 +762,25 @@ async def handle_audio(message: types.Message, bot: Bot):
             return
 
         # 2. Специалист
+        logger.info(f"Voice: checking specialist chat for {chat_id}")
         if _is_chatting_with_specialist(chat_id):
             sp_name = user_settings[chat_id].get("specialist_chat")
+            logger.info(f"Voice: specialist_chat={sp_name}")
             if sp_name:
                 specialist = get_specialist(int_chat_id, sp_name)
+                logger.info(f"Voice: got specialist={specialist}")
                 if specialist:
-                    result = SpecialistFactory.chat(chat_id=int_chat_id, specialist=specialist, user_message=text)
                     await status_msg.delete()
-                    if result.is_success():
-                        await message.answer(f"👤 *Распознано:* _{text}_", parse_mode="Markdown")
-                        await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
-                    else:
-                        await message.answer("❌ Ошибка связи со специалистом.")
+                    try:
+                        result = SpecialistFactory.chat(chat_id=int_chat_id, specialist=specialist, user_message=text)
+                        if result.is_success():
+                            await message.answer(f"👤 *Распознано:* _{text}_", parse_mode="Markdown")
+                            await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+                        else:
+                            await message.answer("❌ Ошибка связи со специалистом.")
+                    except Exception as e:
+                        logger.error(f"Voice specialist chat error: {e}")
+                        await message.answer("❌ Ошибка при общении со специалистом.")
                     return
                 else:
                     del user_settings[chat_id]["specialist_chat"]
@@ -880,19 +889,28 @@ async def handle_text(message: types.Message, bot: Bot):
     if not text: return
 
     # Если пользователь общается со специалистом — перенаправляем
-    if _is_chatting_with_specialist(chat_id):
+    is_sp = _is_chatting_with_specialist(chat_id)
+    logger.info(f"handle_text specialist check: chat_id={chat_id} is_sp={is_sp}")
+    if is_sp:
         sp_name = user_settings[chat_id].get("specialist_chat")
+        logger.info(f"specialist_chat name: {sp_name}")
         if sp_name:
             specialist = get_specialist(int(chat_id), sp_name)
+            logger.info(f"get_specialist result: {specialist}")
             if specialist:
-                result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=text)
-                if result.is_success():
-                    await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
-                    if specialist.message_count == 1:
-                        await message.answer("Отправь `/exit_specialist` чтобы выйти из диалога.")
-                else:
-                    await message.answer("❌ Ошибка связи со специалистом.")
-                return
+                try:
+                    result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=text)
+                    if result.is_success():
+                        await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+                        if specialist.message_count == 1:
+                            await message.answer("Отправь `/exit_specialist` чтобы выйти из диалога.")
+                    else:
+                        await message.answer("❌ Ошибка связи со специалистом.")
+                    return
+                except Exception as e:
+                    logger.error(f"Specialist chat error: {e}")
+                    await message.answer("❌ Ошибка при общении со специалистом.")
+                    return
             else:
                 del user_settings[chat_id]["specialist_chat"]
                 save_settings(user_settings)
