@@ -84,6 +84,7 @@ core/
 - Text: `Qwen/Qwen2.5-7B-Instruct`
 - Vision: `meta-llama/Llama-3.2-11B-Vision-Instruct`
 - Audio: `openai/whisper-large-v3-turbo`
+- Reasoning: `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` (stub, unused)
 
 User can switch engine per-chat: auto (Gemini→HF), Gemini only, HF only.
 
@@ -141,6 +142,7 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 | `PROXY_URL` | No | HTTP proxy for Telegram API on HF Spaces |
 | `VIP_PASSWORD` | No | Default `prophet2026` |
 | `VIP_RESET_PASSWORD` | No | Default `reset2026` |
+| `OWNER_USERNAME` | No | Default `dizel0110` |
 | `GEM_BOT_URL` | No | External GEM-bot link (not committed to git) |
 | `MINI_APP_URL` | No | Custom Mini App base URL (default: GitHub Pages or ngrok) |
 | `PLATFORM` | No | `hf` / `render` / `local` (auto: local) |
@@ -183,4 +185,4 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - **Logs** go to `logs/bot_YYYYMMDD.log` — excluded from git and Docker.
 - **Two python processes** on local run: FastAPI (uvicorn) + aiogram polling. This is normal.
 - **`app.py` is stale** — references `start_bot` which doesn't exist. Only `main.py` works.
-- **Gemini quota exhaustion** — free tier hits 429 quickly. HF fallback handles it, but session creation is retried across all 4 models before giving up.
+- **Gemini quota exhaustion** — free tier hits 429 quickly. HF fallback handles it, but session creation is retried across all 5 models before giving up.

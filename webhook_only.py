@@ -21,7 +21,7 @@ from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.session.aiohttp import AiohttpSession
 from config import TOKEN
-from handlers import messages, vip, limits
+from handlers import messages, vip, limits, massage
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ def setup_webhook_routes(fastapi_app: FastAPI):
     webhook_dp = Dispatcher()
     webhook_dp.include_router(vip.router)
     webhook_dp.include_router(limits.router)
+    webhook_dp.include_router(massage.router)
     webhook_dp.include_router(messages.router)
 
     async def init_bot_proxy():

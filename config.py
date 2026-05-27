@@ -13,7 +13,7 @@ GEM_BOT_URL = os.getenv("GEM_BOT_URL")
 TELEGRAM_API_URL = os.getenv("TELEGRAM_API_URL")  # Cloudflare Worker proxy для HF Spaces
 
 PORT = int(os.getenv("PORT", 7860))
-OWNER_USERNAME = "dizel0110"
+OWNER_USERNAME = os.getenv("OWNER_USERNAME", "dizel0110")
 
 # Mini App URL — Telegram требует HTTPS
 # На HF Spaces формируется автоматически, для локали — GitHub Pages или ngrok
