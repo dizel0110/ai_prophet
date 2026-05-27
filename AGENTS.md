@@ -6,9 +6,22 @@
 
 Всё, что добавляется в проект — это **фича AI Prophet**, а не отдельный продукт. Массажный салон, музыка, поиск — всё это возможности главного ИИ-проводника, а не самостоятельные сервисы.
 
+## 📈 Принцип масштабирования (Scale‑Ready)
+
+Любой код пишется так, чтобы приложение можно было расширить на большую аудиторию **без переписывания**:
+
+1. **Платформенная независимость** — не хардкодить `SPACE_ID`, `localhost` или конкретный URL. Использовать `PLATFORM` env var (`hf` | `render` | `local`) и `get_base_url()`.
+2. **Расширение = новые инстансы, не новый код** — при росте нагрузки добавляются Replica на Render / Worker на Fly.io / VPS, а не меняется логика.
+3. **Stateless по умолчанию** — состояние пользователя в файлах `temp/` (потеря при рестарте). При расширении — замена на Redis/Postgres без изменения хендлеров.
+4. **Split-архитектура** — Mini App (статический UI) на HF Spaces, бот (polling) на Render.com. При росте — единая платформа (Render Pro / свой VPS).
+
 ## Project
 
-Telegram bot + Telegram Mini App ("AI Prophet") — multimodal AI agent with chat, voice transcription, image analysis, music playlist generation, and web search. Deployed on Hugging Face Spaces.
+Telegram bot + Telegram Mini App ("AI Prophet") — multimodal AI agent with chat, voice transcription, image analysis, music playlist generation, and web search.
+
+**Split-архитектура:**
+- **Hugging Face Spaces** — Mini App (статический HTML) + API health
+- **Render.com** — polling бот (FastAPI + aiogram)
 
 ## Entry Points
 
@@ -35,7 +48,7 @@ python main.py
 - Runs two processes: FastAPI on `PORT` (default 7860) + aiogram polling bot
 - Auto-restarts on crash with 15s delay
 - `IS_HF_SPACE` is detected via `SPACE_ID` env var
-- Both local and HF modes use **polling** (webhook is blocked by HF without a proxy)
+- Both local, Render, and HF modes use **polling** (webhook is blocked by HF without a proxy)
 
 ## Architecture
 
@@ -101,6 +114,8 @@ Check for new models at:
 
 `.github/workflows/sync_hf.yml` — on **any branch push**, force-pushes to HF Spaces `dizel0110/ai_prophet`. No PR gate. `main` branch push = production deploy.
 
+Render.com подхватывает `main` ветку автоматически через Git-интеграцию (Manual Deploy → Deploy from Branch).
+
 ## Docker
 
 `Dockerfile` based on `python:3.11-slim`, installs `ffmpeg` and `dnsutils`. CMD: `python main.py`.
@@ -128,6 +143,7 @@ No test framework configured. Test files (`test_*.py`) are manual scripts exclud
 | `VIP_RESET_PASSWORD` | No | Default `reset2026` |
 | `GEM_BOT_URL` | No | External GEM-bot link (not committed to git) |
 | `MINI_APP_URL` | No | Custom Mini App base URL (default: GitHub Pages or ngrok) |
+| `PLATFORM` | No | `hf` / `render` / `local` (auto: local) |
 
 ## Context Management
 

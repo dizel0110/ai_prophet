@@ -14,7 +14,7 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from config import TOKEN, PORT
+from config import TOKEN, PORT, PLATFORM
 from core.network import apply_dns_patch
 from handlers import messages, vip, limits, massage
 
@@ -56,8 +56,9 @@ if IS_HF_SPACE:
 
 @app.get("/")
 async def root():
-    mode = "Webhook (HF)" if IS_HF_SPACE else "Polling (Local)"
-    return {"status": f"AI Prophet ({mode})", "space_id": os.getenv("SPACE_ID", "local")}
+    mode_map = {"hf": "HF Spaces", "render": "Render.com", "local": "Polling (Local)"}
+    mode = mode_map.get(PLATFORM, PLATFORM)
+    return {"status": f"AI Prophet ({mode})", "platform": PLATFORM}
 
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
@@ -139,32 +140,18 @@ if __name__ == "__main__":
 
     logger.info("🛰️ Система авто-восстановления Пророка запущена (Бесконечный цикл)")
 
-    # НА HF SPACES: тоже используем polling (webhook блокируется HF)
-    # Polling работает стабильно на HF Spaces
-    if IS_HF_SPACE:
-        logger.info("📡 HF Spaces: Запуск polling режима (webhook заблокирован HF)")
-        while True:
-            try:
-                asyncio.run(start_bot_polling())
-            except (KeyboardInterrupt, SystemExit):
-                logger.info("🛑 Бот остановлен вручную.")
-                break
-            except Exception as e:
-                logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
-                logger.info("⏳ Попытка воскрешения через 15 секунд...")
-                time.sleep(15)
-    else:
-        # ЛОКАЛЬНО: используем polling режим
-        logger.info("📡 Local mode: using POLLING mode")
-        while True:
-            try:
-                asyncio.run(start_bot_polling())
-            except (KeyboardInterrupt, SystemExit):
-                logger.info("🛑 Бот остановлен вручную.")
-                break
-            except Exception as e:
-                logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
-                logger.info("⏳ Попытка воскрешения через 15 секунд...")
-                time.sleep(15)
+    # Polling на всех платформах (на HF блокируется без PROXY_URL)
+    platform_name = {"hf": "HF Spaces", "render": "Render.com", "local": "Local"}.get(PLATFORM, PLATFORM)
+    logger.info(f"📡 {platform_name}: Запуск polling режима")
+    while True:
+        try:
+            asyncio.run(start_bot_polling())
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("🛑 Бот остановлен вручную.")
+            break
+        except Exception as e:
+            logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
+            logger.info("⏳ Попытка воскрешения через 15 секунд...")
+            time.sleep(15)
 
     p_web.terminate()
