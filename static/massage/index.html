@@ -432,7 +432,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 
 <!-- SPECIALIST CHAT MODAL -->
 <div class="modal-overlay" id="specialistChatModal" style="display:none">
-  <div class="modal" style="max-height:90vh;display:flex;flex-direction:column;padding:0">
+  <div class="modal" style="height:100dvh;display:flex;flex-direction:column;padding:0;overflow:hidden">
     <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
       <div style="display:flex;align-items:center;gap:8px">
         <button class="btn btn-secondary" id="btn-switch-sp" onclick="closeSpecialistChat();navigate('chat');loadChatList()" style="width:auto;padding:6px 10px;font-size:12px;min-width:0;margin:0" title="Сменить специалиста">🔄</button>
@@ -725,6 +725,9 @@ function submitConsultForm() {
   tg.sendData(JSON.stringify(formData));
   tg.showAlert('✅ Анкета отправлена! Открой чат с ботом для продолжения.');
 }
+
+// Telegram viewport fix — растягиваем на весь экран
+tg.expand();
 
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', function(e) {
