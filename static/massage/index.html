@@ -739,6 +739,7 @@ let currentSP = null;
 let spMessages = {};
 let allChatItems = [];
 let chatSearchFilter = '';
+let _chatListHandler = null;
 
 function uid() { try { return tg.initDataUnsafe?.user?.id || null; } catch(e) { return null; } }
 
@@ -804,6 +805,7 @@ function filterSpecialistList() {
 
 function renderChatList() {
   const el = qs('chat-page-list');
+  if (!el) return;
   let items = allChatItems;
   if (chatSearchFilter) {
     items = items.filter(i => i.name.toLowerCase().includes(chatSearchFilter) || i.role.toLowerCase().includes(chatSearchFilter));
@@ -821,17 +823,17 @@ function renderChatList() {
       </div>
     </div>`
   ).join('');
-  // Event delegation on the container
-  el._clickHandler = function(e) {
+  // Event delegation — proper handler management (no duplicate listeners)
+  if (_chatListHandler) el.removeEventListener('click', _chatListHandler);
+  _chatListHandler = function(e) {
     const item = e.target.closest('.sp-item');
     if (!item) return;
     const name = item.dataset.name;
     const role = item.dataset.role;
-    if (item.dataset.exists === '1') { openSpecialistChat(name); }
-    else { createAndOpen(name, role || name); }
+    if (item.dataset.exists === '1') openSpecialistChat(name);
+    else createAndOpen(name, role || name);
   };
-  el.removeEventListener('click', el._clickHandler);
-  el.addEventListener('click', el._clickHandler);
+  el.addEventListener('click', _chatListHandler);
 }
 
 // Also delegate on specialist-list (AI page)
