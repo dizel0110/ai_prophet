@@ -765,6 +765,7 @@ async function api(endpoint, data) {
 }
 
 const PRESETS = [
+  {name:'Мастер-консультант', role:'Главный гид по платформе и специалистам', universal:true},
   {name:'Массажист-реабилитолог', role:'Специалист по восстановлению после травм и операций'},
   {name:'Эксперт по стоун-терапии', role:'Мастер массажа горячими камнями'},
   {name:'Консультант по ЛФК', role:'Специалист по лечебной физкультуре'},
@@ -794,16 +795,26 @@ async function loadSpecialists() {
 // ===== Chat page list =====
 async function loadChatList() {
   allChatItems = [];
-  PRESETS.forEach(p => allChatItems.push({name:p.name, role:p.role, type:'preset', exists:false}));
+  PRESETS.forEach(p => allChatItems.push({name:p.name, role:p.role, type:'preset', exists:false, universal:!!p.universal}));
   const u = uid();
   if (u) {
     const d = await api('/api/specialist/list', {chat_id: u});
     if (d.ok && d.specialists) {
-      d.specialists.forEach(s => {
-        const ex = allChatItems.find(i => i.name === s.name);
-        if (ex) { ex.exists = true; } else { allChatItems.push({name:s.name, role:s.role||'', type:'created', exists:true}); }
+      d.specialists.forEach(sp => {
+        const match = allChatItems.find(i => i.name === sp.name);
+        if (match) match.exists = true;
+        else allChatItems.push({name:sp.name, role:sp.role||'', type:'created', exists:true, universal:false});
       });
+      // Auto-create universal consultant if missing
+      if (!d.specialists.some(s => s.name === 'Мастер-консультант')) {
+        const cr = await api('/api/specialist/create', {chat_id: u, name:'Мастер-консультант', role:'Главный гид по платформе и специалистам'});
+        if (cr.ok) {
+          const match = allChatItems.find(i => i.name === 'Мастер-консультант');
+          if (match) match.exists = true;
+        }
+      }
     }
+  }
   }
   renderChatList();
 }
@@ -826,7 +837,7 @@ function renderChatList() {
   }
   el.innerHTML = items.map(i =>
     `<div class="sp-item" data-name="${i.name.replace(/"/g,'&quot;')}" data-role="${(i.role||'').replace(/"/g,'&quot;')}" data-exists="${i.exists?'1':'0'}" data-type="${i.type}">
-      <div class="sp-item-info"><div class="sp-item-name">${i.name}</div><div class="sp-item-role">${i.role||''}</div></div>
+      <div class="sp-item-info"><div class="sp-item-name">${i.universal?'🌟 ':''}${i.name}${i.universal?' <span style="font-size:10px;color:var(--gold-dark);font-weight:400;margin-left:2px">Главный</span>':''}</div><div class="sp-item-role">${i.role||''}</div></div>
       <div style="display:flex;align-items:center;gap:6px">
         ${i.type==='preset'&&!i.exists?'<span style="font-size:10px;color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:2px 8px">+</span>':''}
         <span style="font-size:20px;color:var(--hint)">${i.exists?'💬':'➕'}</span>

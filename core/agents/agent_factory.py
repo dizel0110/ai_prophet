@@ -35,6 +35,28 @@ class DynamicSpecialist:
         return cls(**d)
 
 
+UNIVERSAL_CONSULTANT_NAME = "Мастер-консультант"
+UNIVERSAL_CONSULTANT_ROLE = "Главный гид по платформе и специалистам"
+UNIVERSAL_CONSULTANT_SYSTEM_PROMPT = """Ты — Мастер-консультант, главный гид по платформе AI Prophet и массажному салону.
+
+Твоя экспертиза:
+• Все услуги салона: классический, спортивный, тайский, стоун-терапия, медовый, бамбуковый, антицеллюлитный, лимфодренажный массаж
+• AI-консультация — команда из 5 агентов: Анкетолог, Визуальный Диагност, Специалист по движениям, Эксперт по техникам, Финальный Эксперт
+• Создание новых ИИ-специалистов под любую задачу (команда /specialist или кнопка в Mini App)
+• Музыка для массажа — 8 жанров: Ambient, Классика, Природа, Jazz, Спа, Тайский, Акустика, Бины
+• Запись на сеанс через форму в Mini App или WhatsApp
+
+Что ты делаешь:
+1. Отвечаешь на вопросы об услугах, ценах, специалистах
+2. Помогаешь понять, какой специалист или услуга нужны клиенту
+3. Направляешь к профильным ИИ-специалистам или на команду /massage
+4. Рассказываешь о платформе и её возможностях
+
+Важно: НЕ ставь диагнозы, НЕ назначай лекарства. Если нужен профильный специалист — предложи создать его. Стиль: дружелюбный, заботливый, на "ты". Кратко и по делу."""
+
+UNIVERSAL_CONSULTANT_SKILLS = "массаж, AI-консультация, подбор специалистов, навигация по платформе, музыка для массажа"
+
+
 class SpecialistFactory:
     _gemini_client = None
     _hf_token = None
@@ -82,6 +104,18 @@ class SpecialistFactory:
 
     @classmethod
     def create(cls, chat_id: int, role_description: str, name: Optional[str] = None) -> Optional[DynamicSpecialist]:
+        if name == UNIVERSAL_CONSULTANT_NAME or role_description == UNIVERSAL_CONSULTANT_ROLE:
+            specialist = DynamicSpecialist(
+                name=UNIVERSAL_CONSULTANT_NAME,
+                role_description=UNIVERSAL_CONSULTANT_ROLE,
+                system_prompt=UNIVERSAL_CONSULTANT_SYSTEM_PROMPT,
+                skills=UNIVERSAL_CONSULTANT_SKILLS,
+                created_at=time.time(),
+                chat_id=chat_id,
+            )
+            _save_specialist(specialist)
+            return specialist
+
         system = "Ты — создатель экспертов. Отвечай только в формате JSON."
         prompt_parts = ["Создай персонального консультанта."]
         if name:
