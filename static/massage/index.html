@@ -870,8 +870,8 @@ async function createSpecialist() {
     closeCreateModal();
     const n = qs('csName'); if(n) n.value='';
     const r = qs('csRole'); if(r) r.value='';
-    tg.showAlert('✅ Создан: ' + d.name);
     loadSpecialists(); loadChatList();
+    openSpecialistChat(d.name);
   } else { tg.showAlert('❌ ' + (d.error || 'Не удалось создать')); }
 }
 
