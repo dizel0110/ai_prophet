@@ -16,3 +16,4 @@ node_modules/
 # Медиа (кроме аватарки бота)
 !artef/bot_avatar.png
 !artef/bot_avatar.svg
+.playwright-mcp/

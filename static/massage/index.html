@@ -855,7 +855,7 @@ async function createAndOpen(name, role) {
   const u = uid(); if (!u) return;
   tg.HapticFeedback.impactOccurred('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: role || name});
-  if (d.ok) { tg.showAlert('✅ Создан: ' + d.name); loadChatList(); openSpecialistChat(name); }
+  if (d.ok) { tg.showAlert('✅ Создан: ' + d.name); loadChatList(); openSpecialistChat(d.name); }
   else { tg.showAlert('❌ ' + (d.error || 'Не удалось создать')); }
 }
 

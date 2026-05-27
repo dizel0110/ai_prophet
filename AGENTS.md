@@ -269,8 +269,9 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - **Temp files (massage photos/videos)** — сохраняются как `massage_photo_{chat_id}_{file_id}.ext` и `massage_video_{chat_id}_{file_id}.ext`. Удаляются после анализа.
 - **`F.web_app_data` handler** — массажный роутер перехватывает WebApp данные (`tg.sendData`) до того, как их получит messages.py.
 - **HF first strategy** — агенты сначала пробуют HF Router (бесплатно, `router.huggingface.co`), только при ошибке падают на Gemini. Это экономит квоту Gemini.
-- **Video frame extraction** — видео анализируется через извлечение 2-3 кадров ffmpeg (2 на HF, 3 локально) → каждый кадр подаётся в vision-модель. Без ffmpeg анализ видео не работает.
 - **Event delegation (sp-items)** — Mini App uses `data-name`/`data-role`/`data-exists` attributes on `.sp-item` divs, NOT inline `onclick`. Container-level click listeners in `renderChatList()` and on `#specialist-list` handle clicks via `e.target.closest('.sp-item')`. This avoids JS escaping issues and template-literal breakage.
+- **Chat opens after create** — both `createSpecialist()` (form) and `createAndOpen()` (preset/generated) call `openSpecialistChat(d.name)` after successful creation.
+- **No duplicate listeners** — `_chatListHandler` is a module-level variable; old handler is removed before adding new one in `renderChatList()`.
 - **Final Expert always runs** — `orchestrator.py` runs Final Expert unconditionally (lines 63-65). `_build_context` with `include_all=True` passes all results including `technique_expert`. The `[:300]` truncation for questionnaire text passed to vision/video agents was removed — Final Expert now gets full data.
 - **`orchestrator.py` synchronous AI calls** — wrapped in `asyncio.to_thread()` for compatibility with aiogram handlers.
 
