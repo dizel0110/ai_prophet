@@ -485,20 +485,29 @@ async def cmd_specialists(message: types.Message):
 async def cmd_dismiss(message: types.Message):
     chat_id = int(message.chat.id)
     name = message.text.replace("/dismiss", "", 1).strip()
-    if not name:
-        sps = get_specialists(chat_id)
-        if not sps:
-            await message.answer("Нет специалистов для удаления.")
-            return
-        lines = ["Напиши `/dismiss <имя>`:\n"]
-        for s in sps:
-            lines.append(f"• *{s.name}*")
-        await message.answer("\n".join(lines), parse_mode="Markdown")
+    if name:
+        if remove_specialist(chat_id, name):
+            await message.answer(f"✅ Специалист *{name}* удалён.", parse_mode="Markdown")
+        else:
+            await message.answer(f"❌ Специалист с именем *{name}* не найден.", parse_mode="Markdown")
         return
+    sps = get_specialists(chat_id)
+    if not sps:
+        await message.answer("Нет специалистов для удаления.")
+        return
+    rows = [[InlineKeyboardButton(text=f"🗑 {s.name}", callback_data=f"dsp_del_{s.name}")] for s in sps]
+    await message.answer("Выбери специалиста для удаления:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("dsp_del_"))
+async def on_dsp_del_confirm(callback: types.CallbackQuery):
+    await callback.answer()
+    name = callback.data.replace("dsp_del_", "")
+    chat_id = callback.message.chat.id
     if remove_specialist(chat_id, name):
-        await message.answer(f"✅ Специалист *{name}* удалён.", parse_mode="Markdown")
+        await callback.message.edit_text(f"✅ Специалист *{name}* удалён.", parse_mode="Markdown")
     else:
-        await message.answer(f"❌ Специалист с именем *{name}* не найден.", parse_mode="Markdown")
+        await callback.message.edit_text(f"❌ Не удалось удалить специалиста.")
 
 
 async def _create_and_show_specialist(message: types.Message, chat_id: int, role: str):
