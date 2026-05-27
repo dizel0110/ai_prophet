@@ -69,6 +69,21 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .contact-label{font-size:12px;color:var(--hint)}
 .contact-value{font-size:14px;font-weight:600}
 .btn{display:block;width:100%;padding:16px;border:none;border-radius:14px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .2s;text-align:center;text-decoration:none}
+/* Chat */
+.chat-bubble{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;word-wrap:break-word}
+.chat-bubble.user{align-self:flex-end;background:var(--accent);color:var(--accent-text);border-bottom-right-radius:4px}
+.chat-bubble.ai{align-self:flex-start;background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px}
+.chat-bubble.ai .chat-name{font-size:11px;font-weight:600;color:var(--gold);margin-bottom:2px}
+.chat-bubble .chat-typing{display:flex;gap:4px;padding:4px 0}
+.chat-bubble .chat-typing span{width:6px;height:6px;border-radius:50%;background:var(--hint);animation:typing 1.4s infinite}
+.chat-bubble .chat-typing span:nth-child(2){animation-delay:.2s}
+.chat-bubble .chat-typing span:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,60%,100%{opacity:.3}30%{opacity:1}}
+.sp-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.sp-item:last-child{border-bottom:none}
+.sp-item-info{flex:1}
+.sp-item-name{font-size:14px;font-weight:600}
+.sp-item-role{font-size:11px;color:var(--hint)}
 .btn:active{transform:scale(.97);opacity:.9}
 .btn-primary{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;margin-top:10px}
 .btn-secondary{background:rgba(196,154,108,.15);color:var(--gold-dark);margin-top:6px;border:1px solid rgba(196,154,108,.3)}
@@ -403,6 +418,48 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
         Загрузи файлы в чат с ботом после заполнения анкеты
       </p>
     </div>
+    <!-- SPECIALISTS SECTION -->
+    <div class="card">
+      <div class="sec-title" style="font-size:15px">🧑‍⚕️ Твои специалисты</div>
+      <p style="font-size:12px;color:var(--hint);margin-bottom:10px">Создай своего консультанта или общайся с существующим</p>
+      <div id="specialist-list" style="margin-bottom:10px">
+        <p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Загрузка...</p>
+      </div>
+      <button class="btn btn-secondary" onclick="showCreateSpecialist()">➕ Создать специалиста</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPECIALIST CHAT MODAL -->
+<div class="modal-overlay" id="specialistChatModal" style="display:none">
+  <div class="modal" style="max-height:90vh;display:flex;flex-direction:column;padding:0">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <div>
+        <div style="font-weight:700;font-size:15px" id="chat-sp-name">Специалист</div>
+        <div style="font-size:11px;color:var(--hint)" id="chat-sp-role">Роль</div>
+      </div>
+      <button class="modal-close" onclick="closeSpecialistChat()" style="position:static">✕</button>
+    </div>
+    <div id="chat-messages" style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-height:200px">
+    </div>
+    <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+      <input type="text" id="chat-input" placeholder="Напиши сообщение..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:20px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">
+      <button class="btn btn-primary" onclick="sendSpecialistMessage()" style="white-space:nowrap;padding:10px 18px;min-width:auto;border-radius:20px">➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE SPECIALIST MODAL -->
+<div class="modal-overlay" id="createSpecialistModal" style="display:none">
+  <div class="modal" style="max-height:70vh">
+    <button class="modal-close" onclick="document.getElementById('createSpecialistModal').style.display='none'">✕</button>
+    <h3>🧑‍⚕️ Создать специалиста</h3>
+    <p style="font-size:12px;color:var(--hint);margin-bottom:12px">Напиши, какой специалист тебе нужен</p>
+    <div class="form-group"><label>Роль / описание</label>
+      <textarea id="csRole" placeholder="Эксперт по спортивному массажу, реабилитолог, мастер стоун-терапии..." rows="3"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="createSpecialist()">🧑‍⚕️ Создать</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('createSpecialistModal').style.display='none'">Отмена</button>
   </div>
 </div>
 
@@ -643,6 +700,157 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
     }
   });
 });
+
+/* Specialist Chat Functions */
+let currentSP = null;
+let spMessages = {};
+
+
+async function apiCall(endpoint, data) {
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    return await r.json();
+  } catch(e) {
+    return {ok: false, error: 'Network error'};
+  }
+}
+
+async function loadSpecialists() {
+  const uid = tg.initDataUnsafe?.user?.id;
+  if (!uid) return;
+  const data = await apiCall('/api/specialist/list', {chat_id: uid});
+  const el = document.getElementById('specialist-list');
+  if (!data.ok || !data.specialists || data.specialists.length === 0) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Пока нет специалистов. Создай первого!</p>';
+    return;
+  }
+  el.innerHTML = data.specialists.map(s => `
+    <div class="sp-item" onclick="openSpecialistChat('${s.name}')">
+      <div class="sp-item-info">
+        <div class="sp-item-name">${s.name}</div>
+        <div class="sp-item-role">${s.role}</div>
+      </div>
+      <div style="font-size:20px;color:var(--hint)">💬</div>
+    </div>
+  `).join('');
+}
+
+function showCreateSpecialist() {
+  tg.HapticFeedback.impactOccurred('medium');
+  document.getElementById('createSpecialistModal').style.display = 'flex';
+}
+
+async function createSpecialist() {
+  const role = document.getElementById('csRole').value.trim();
+  if (!role) { tg.showAlert('Опиши роль специалиста'); return; }
+  const uid = tg.initDataUnsafe?.user?.id;
+  if (!uid) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, role: role});
+  if (data.ok) {
+    document.getElementById('createSpecialistModal').style.display = 'none';
+    document.getElementById('csRole').value = '';
+    tg.showAlert(`✅ Создан специалист: ${data.name}`);
+    loadSpecialists();
+  } else {
+    tg.showAlert('❌ Ошибка: ' + (data.error || 'Не удалось создать'));
+  }
+}
+
+function openSpecialistChat(name) {
+  currentSP = name;
+  const uid = tg.initDataUnsafe?.user?.id;
+  if (!uid) return;
+  document.getElementById('chat-sp-name').textContent = name;
+  document.getElementById('chat-sp-role').textContent = 'Печатает...';
+  document.getElementById('specialistChatModal').style.display = 'flex';
+  document.getElementById('chat-messages').innerHTML = '';
+  if (!spMessages[uid]) spMessages[uid] = {};
+  if (!spMessages[uid][name]) spMessages[uid][name] = [];
+  // display any previous messages
+  spMessages[uid][name].forEach(m => {
+    addMessageToChat(m.role, m.text, name);
+  });
+  document.getElementById('chat-input').focus();
+}
+
+function closeSpecialistChat() {
+  document.getElementById('specialistChatModal').style.display = 'none';
+  currentSP = null;
+}
+
+function addMessageToChat(role, text, name) {
+  const container = document.getElementById('chat-messages');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble ' + role;
+  if (role === 'ai') {
+    const nameEl = document.createElement('div');
+    nameEl.className = 'chat-name';
+    nameEl.textContent = name || 'Специалист';
+    bubble.appendChild(nameEl);
+  }
+  const textEl = document.createElement('div');
+  textEl.textContent = text;
+  bubble.appendChild(textEl);
+  container.appendChild(bubble);
+  container.scrollTop = container.scrollHeight;
+}
+
+function showTyping() {
+  const container = document.getElementById('chat-messages');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble ai';
+  bubble.id = 'typing-indicator';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'chat-name';
+  nameEl.textContent = currentSP || 'Специалист';
+  bubble.appendChild(nameEl);
+  const typing = document.createElement('div');
+  typing.className = 'chat-typing';
+  typing.innerHTML = '<span></span><span></span><span></span>';
+  bubble.appendChild(typing);
+  container.appendChild(bubble);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideTyping() {
+  const el = document.getElementById('typing-indicator');
+  if (el) el.remove();
+}
+
+async function sendSpecialistMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !currentSP) return;
+  input.value = '';
+  const uid = tg.initDataUnsafe?.user?.id;
+  if (!uid) return;
+  if (!spMessages[uid]) spMessages[uid] = {};
+  if (!spMessages[uid][currentSP]) spMessages[uid][currentSP] = [];
+  spMessages[uid][currentSP].push({role: 'user', text: text});
+  addMessageToChat('user', text);
+  showTyping();
+  const data = await apiCall('/api/specialist/chat', {chat_id: uid, name: currentSP, message: text});
+  hideTyping();
+  if (data.ok) {
+    spMessages[uid][currentSP].push({role: 'ai', text: data.response});
+    addMessageToChat('ai', data.response, data.name || currentSP);
+  } else {
+    addMessageToChat('ai', '❌ Ошибка: ' + (data.error || 'Не удалось получить ответ'));
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.getElementById('specialistChatModal').style.display === 'flex') {
+    sendSpecialistMessage();
+  }
+});
+
+loadSpecialists();
 </script>
 </body>
 </html>

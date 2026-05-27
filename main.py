@@ -70,6 +70,52 @@ async def root():
     mode = mode_map.get(PLATFORM, PLATFORM)
     return {"status": f"AI Prophet ({mode})", "platform": PLATFORM}
 
+@app.post("/api/specialist/chat")
+async def api_specialist_chat(req: dict):
+    from core.agents.agent_factory import SpecialistFactory, get_specialist, get_specialists
+    chat_id = req.get("chat_id")
+    name = req.get("name", "")
+    message_text = req.get("message", "")
+    if not chat_id or not name or not message_text:
+        return {"ok": False, "error": "Missing chat_id, name, or message"}
+    specialist = get_specialist(chat_id, name)
+    if not specialist:
+        return {"ok": False, "error": f"Specialist '{name}' not found"}
+    result = SpecialistFactory.chat(chat_id, specialist, message_text)
+    if result.is_success():
+        return {"ok": True, "response": result.content, "name": result.agent_name}
+    return {"ok": False, "error": "AI engine failed"}
+
+@app.post("/api/specialist/list")
+async def api_specialist_list(req: dict):
+    from core.agents.agent_factory import get_specialists
+    chat_id = req.get("chat_id")
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    sps = get_specialists(chat_id)
+    return {"ok": True, "specialists": [{"name": s.name, "role": s.role_description, "skills": s.skills} for s in sps]}
+
+@app.post("/api/specialist/create")
+async def api_specialist_create(req: dict):
+    from core.agents.agent_factory import SpecialistFactory, get_specialist
+    chat_id = req.get("chat_id")
+    role = req.get("role", "")
+    if not chat_id or not role:
+        return {"ok": False, "error": "Missing chat_id or role"}
+    sp = SpecialistFactory.create(chat_id=chat_id, role_description=role)
+    if sp:
+        return {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}
+    return {"ok": False, "error": "Failed to create specialist"}
+
+@app.post("/api/specialist/delete")
+async def api_specialist_delete(req: dict):
+    from core.agents.agent_factory import remove_specialist
+    chat_id = req.get("chat_id")
+    name = req.get("name", "")
+    if not chat_id or not name:
+        return {"ok": False, "error": "Missing chat_id or name"}
+    return {"ok": remove_specialist(chat_id, name)}
+
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
