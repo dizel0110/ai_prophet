@@ -49,23 +49,26 @@ STATIC_DIR.mkdir(exist_ok=True)
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# НА HF SPACES: регистрируем webhook routes ДО запуска сервера
-if IS_HF_SPACE:
-    from webhook_only import setup_webhook_routes
-    setup_webhook_routes(app)
-
-@app.get("/")
-async def root():
-    mode_map = {"hf": "HF Spaces", "render": "Render.com", "local": "Polling (Local)"}
-    mode = mode_map.get(PLATFORM, PLATFORM)
-    return {"status": f"AI Prophet ({mode})", "platform": PLATFORM}
-
 # Dispatcher создаётся ОДИН раз на весь lifecycle
 dp = Dispatcher()
 dp.include_router(vip.router)
 dp.include_router(limits.router)
 dp.include_router(massage.router)
 dp.include_router(messages.router)
+
+# Webhook routes (только на HF Spaces, после dp — чтобы не красть роутеры)
+if IS_HF_SPACE:
+    try:
+        from webhook_only import setup_webhook_routes
+        setup_webhook_routes(app)
+    except RuntimeError:
+        logger.info("📡 Webhook routes пропущены (роутеры уже в dp)")
+
+@app.get("/")
+async def root():
+    mode_map = {"hf": "HF Spaces", "render": "Render.com", "local": "Polling (Local)"}
+    mode = mode_map.get(PLATFORM, PLATFORM)
+    return {"status": f"AI Prophet ({mode})", "platform": PLATFORM}
 
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
