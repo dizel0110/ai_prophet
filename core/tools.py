@@ -814,7 +814,22 @@ def get_prophet_tools_spec():
         )
     )
 
-    return [genai_types.Tool(function_declarations=[web_search_tool, search_media_tool])]
+    create_specialist_tool = genai_types.FunctionDeclaration(
+        name="create_specialist",
+        description="Создать специалиста-консультанта для ответа на запрос клиента. Используй, когда клиенту нужен эксперт в конкретной области (спортивный массаж, антицеллюлитный, стоун-терапия, ЛФК и т.д.).",
+        parameters=genai_types.Schema(
+            type=genai_types.Type.OBJECT,
+            properties={
+                "role_description": genai_types.Schema(
+                    type=genai_types.Type.STRING,
+                    description="Описание роли будущего специалиста. Например: 'эксперт по спортивному массажу для бегунов'"
+                )
+            },
+            required=["role_description"]
+        )
+    )
+
+    return [genai_types.Tool(function_declarations=[web_search_tool, search_media_tool, create_specialist_tool])]
 
 AVAILABLE_FUNCTIONS = {
     "web_search": web_search,

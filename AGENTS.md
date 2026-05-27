@@ -55,19 +55,90 @@ python main.py
 ```
 main.py
 ├── FastAPI (uvicorn) — health check, static files, webhook routes on HF
-│   └── static/ — Telegram Mini App HTML (massage salon, etc.)
+│   └── static/ — Telegram Mini App HTML (massage salon, prophet)
 └── aiogram Dispatcher (polling)
-    ├── handlers/vip.py      — VIP mode, admin commands, password auth
-    ├── handlers/limits.py   — per-user download duration/size limits
-    ├── handlers/massage.py  — 🖐 Массажный салон Mini App (/massage command)
-    └── handlers/messages.py — all user-facing: text, photo, voice, playlists, settings
+    ├── handlers/vip.py        — VIP mode, admin commands, password auth
+    ├── handlers/limits.py     — per-user download duration/size limits
+    ├── handlers/massage.py    — 🖐 Массажный салон + AI-консультация (/massage)
+    └── handlers/messages.py   — all user-facing: text, photo, voice, playlists, settings
 
 core/
 ├── ai_engine.py   — Gemini client (google-genai SDK) + HF router (requests) + transcription
-├── tools.py       — web search (DuckDuckGo), media search (YouTube/Jamendo/SoundCloud/Archive), download
-├── network.py     — DNS patch (no-op in current code)
-└── mcp_client.py  — MCP client (unused/stub)
+├── tools.py       — web search (DDG), media search (YT/Jamendo/SC/Archive), download
+├── agents/        — 🆕 Мульти-агентная система ИИ-специалистов
+│   ├── agent_base.py      — Базовый класс агента (HF + Gemini fallback)
+│   ├── registry.py        — Реестр агентов (3 группы, 5 специалистов)
+│   ├── orchestrator.py    — Оркестратор: запуск специалистов → синтез
+│   └── music_db.py        — Кураторская база проверенной музыки для массажа
+├── questionnaire.py — 🆕 Модель анкеты массажного салона (12 шагов)
+├── network.py       — DNS patch (no-op in current code)
+└── mcp_client.py    — MCP client (unused/stub)
 ```
+
+### Dynamic Specialist System (core/agents/agent_factory.py)
+
+Пользователь может динамически создавать собственных ИИ-специалистов под любую задачу.
+
+**Как работает:**
+1. Пользователь пишет роль (например, "эксперт по стоун-терапии")
+2. `SpecialistFactory.create()` генерирует имя + системный промпт через Gemini (HF fallback)
+3. Специалист сохраняется в `temp/specialists.json`
+4. Пользователь может общаться со специалистом — его сообщения перехватываются в `handle_text` (messages.py) через `specialist_chat` флаг в `user_settings.json`
+5. Специалиста можно удалить через `/dismiss`
+
+**Команды:**
+- `/specialist <роль>` — создать и начать диалог со специалистом
+- `/specialists` — список созданных специалистов
+- `/dismiss <имя>` — удалить специалиста
+- `/exit_specialist` — выйти из диалога со специалистом
+
+**Auto-detection:** Gemini получает в system prompt инструкцию использовать `create_specialist` function call, когда клиенту нужен профильный эксперт. Функция объявлена в `tools.py` как `FunctionDeclaration`, обрабатывается в цикле function calling `messages.py:1236`.
+
+**Интеграция с массажем:** В `/massage` добавлена кнопка "Создать специалиста", которая открывает список активных специалистов (+ создание/удаление). Режим `massage_step == "create_specialist"` перехватывается через `InQuestionnaireFilter`.
+
+**HF-first:** SpecialistFactory использует HF Router (Qwen) для общения, Gemini — только для генерации системного промпта и как fallback.
+
+### Мульти-агентная система (core/agents/)
+
+Запускается из `/massage` → "AI-консультация".
+
+**Стратегия AI:** HF Router first (бесплатно, мультимодально) → Gemini fallback.
+- Текст: `Qwen/Qwen2.5-7B-Instruct` (HF Router)
+- Vision: `meta-llama/Llama-3.2-11B-Vision-Instruct` (HF Router)
+- Видео: извлечение кадров через ffmpeg → анализ через Vision
+
+**Группы агентов** (определены в `registry.py`):
+
+| Группа | Агент | Модель | Вход |
+|--------|-------|--------|------|
+| **Диагносты** | Визуальный Диагност | vision | Фото спины/осанки |
+| | Специалист по движениям | vision (из видео) | Видео походки/наклонов |
+| **Аналитики** | Анкетолог | text | Текст анкеты (12 шагов) |
+| **Эксперты** | Эксперт по техникам | text | Данные всех специалистов |
+| | Финальный Эксперт | text | Все данные → заключение |
+
+**Pipeline:** Анкета → Анкетолог → (Фото → Диагност) → (Видео → кадры → Движения) → Техники → Финальный эксперт
+
+**Добавить/удалить/изменить агента:** редактировать `registry.py` → группы `AGENT_GROUPS`.
+
+### Анкетирование (core/questionnaire.py)
+
+12 шагов: имя, возраст, пол, жалобы, локация боли, тип боли, длительность, заболевания, противопоказания, лекарства, образ жизни, доп.инфо.
+
+Два способа заполнения:
+1. **В боте** — пошагово через inline-кнопки и текст
+2. **В Mini App** — форма в `/static/massage/index.html` → `tg.sendData()` → бот получает через `web_app_data`
+
+### Музыка для массажа (core/agents/music_db.py)
+
+Кураторская база **проверенных YouTube-ссылок** для 8 жанров массажной музыки:
+Ambient, Классика, Природа, Jazz, Спа, Тайский, Акустика, Бины.
+
+**Как работает:** ссылки не скачаны заранее — это внешние YouTube-треки, по которым бот:
+1. Показывает ссылки (кликабельные — открываются в YouTube)
+2. Запускает параллельный поиск через `search_media_content()` (Jamendo/SoundCloud/YouTube) для скачивания MP3-плейлиста
+
+Гарантированно работающие ссылки + fallback-поиск.
 
 - Router registration order in `main.py`: `vip` → `limits` → `massage` → `messages` (matters for command precedence)
 - User state stored in `temp/user_settings.json` (in-memory dict persisted to file; **lost on restart**)
@@ -127,6 +198,18 @@ Render.com подхватывает `main` ветку автоматически
 - **ffmpeg** required for audio conversion (OGG→WAV) and yt-dlp post-processing
 - Without ffmpeg, audio falls back to raw OGG and yt-dlp skips post-processing
 
+## HF Spaces Resource Constraints
+
+HF Spaces **CPU Basic** (бесплатный):
+- 1 vCPU, 8GB RAM, 50GB storage
+- Python + deps занимают ~3-5GB → остаётся ~45GB для временных файлов
+- **transformers + torch** (~2GB) отключены в `requirements.txt` — не влезают
+- **Вся AI-логика** — внешние API (HF Router, Gemini), не локальные модели
+- **Тяжёлые операции** (извлечение кадров из видео → 2 кадра на HF вместо 3)
+- **temp/** чистится: при старте бота, при старте/отмене/завершении консультации
+- yt-dlp скачивает MP3 во временную папку → сразу отправляет → удаляет
+- Логи ротируются ежедневно в `logs/`
+
 ## Testing
 
 No test framework configured. Test files (`test_*.py`) are manual scripts excluded from Docker.
@@ -175,6 +258,18 @@ Playwright MCP сервер установлен для opencode. Конфигу
 Детальный гайд: `MCP_GUIDE.md`
 
 **Playwright >> webfetch** — webfetch только GET-запросы (статический HTML), Playwright — полноценный браузер с JS, кликами, формами, скриншотами.
+
+## Key Gotchas for the Agent System
+
+- **Agents use `generate_content()` NOT chat sessions** — каждый агент создаёт свой запрос, не использует `get_ai_chat()`. Это важно — агенты одноразовые, а не диалоговые.
+- **Custom Filter `InQuestionnaireFilter`** — текст от пользователя во время анкетирования перехватывается кастомным фильтром, который проверяет `massage_step == "questionnaire"` в `user_settings.json`. Это не даёт catch-all handler в messages.py перехватить ввод. Для создания специалиста тоже используется этот фильтр (проверка `massage_step == "create_specialist"`).
+- **Callback data (64 bytes)** — все `mc_*` префиксы должны быть короткими. Cyrillic в callback_data занимает 2 байта/символ.
+- **Music DB — fallback** — `music_db.py` содержит проверенные ссылки, но всегда запускает и `search_media_content()` как fallback.
+- **Orchestrator synchronous calls** — AI вызовы синхронные (`requests.post`, `genai.Client.models.generate_content`), обёрнуты в `asyncio.to_thread()`.
+- **Temp files (massage photos/videos)** — сохраняются как `massage_photo_{chat_id}_{file_id}.ext` и `massage_video_{chat_id}_{file_id}.ext`. Удаляются после анализа.
+- **`F.web_app_data` handler** — массажный роутер перехватывает WebApp данные (`tg.sendData`) до того, как их получит messages.py.
+- **HF first strategy** — агенты сначала пробуют HF Router (бесплатно, `router.huggingface.co`), только при ошибке падают на Gemini. Это экономит квоту Gemini.
+- **Video frame extraction** — видео анализируется через извлечение 2-3 кадров ffmpeg (2 на HF, 3 локально) → каждый кадр подаётся в vision-модель. Без ffmpeg анализ видео не работает.
 
 ## Gotchas & Known Issues
 

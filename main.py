@@ -123,6 +123,9 @@ async def start_bot_polling():
         BotCommand(command="playlist", description="Собрать свой плейлист"),
         BotCommand(command="playlist_example", description="Примеры и обучение (Академия)"),
         BotCommand(command="massage", description="🖐 Массажный салон"),
+        BotCommand(command="specialist", description="🧑‍⚕️ Создать специалиста-консультанта"),
+        BotCommand(command="specialists", description="Список специалистов"),
+        BotCommand(command="dismiss", description="Удалить специалиста"),
         BotCommand(command="settings", description="Выбрать мозг бота (Gemini/HF)"),
         BotCommand(command="dizel0110", description="Вход в VIP режим"),
         BotCommand(command="stop", description="Остановить текущие действия")

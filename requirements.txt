@@ -8,7 +8,6 @@ fastapi
 uvicorn
 dnspython
 requests
-mcp
 huggingface-hub
 
 # Proxy support (для HF Spaces)
@@ -17,12 +16,14 @@ aiohttp-socks
 # Search
 duckduckgo-search
 
-# Media (Requires ffmpeg in system)
+# Media (требует ffmpeg в системе)
 yt-dlp
-ffmpeg-python
-librosa
-soundfile
 
-# AI Local (Optional but needed for local whisper)
-transformers
-torch
+# ─── Опционально (не влезает на HF Spaces free) ───
+# Локальная транскрибация Whisper. ~2GB с torch.
+# На HF Spaces используем HF Router/Api (Whisper).
+# transformers
+# torch
+# librosa
+# soundfile
+# ffmpeg-python

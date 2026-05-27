@@ -12,6 +12,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
+from core.agents.agent_factory import SpecialistFactory, get_specialists, get_specialist, remove_specialist, DynamicSpecialist
 from config import FALLBACK_MODELS, TEMP_DIR, get_base_url
 from google.genai import types as genai_types
 
@@ -81,12 +82,17 @@ def cleanup_file(path):
 
 def cleanup_user_temp(chat_id):
     """Удаление всех старых файлов конкретного пользователя"""
-    pattern = os.path.join(TEMP_DIR, f"task_{chat_id}_*")
-    for f in glob.glob(pattern):
-        cleanup_file(f)
-    pattern_audio = os.path.join(TEMP_DIR, f"audio_{chat_id}_*")
-    for f in glob.glob(pattern_audio):
-        cleanup_file(f)
+    patterns = [
+        f"task_{chat_id}_*",
+        f"audio_{chat_id}_*",
+        f"massage_photo_{chat_id}_*",
+        f"massage_video_{chat_id}_*",
+        f"massage_doc_{chat_id}_*",
+        f"frame_*",
+    ]
+    for pat in patterns:
+        for f in glob.glob(os.path.join(TEMP_DIR, pat)):
+            cleanup_file(f)
 
 def get_main_menu(vip_mode: bool = False):
     """Главное меню: обычное или VIP"""
@@ -417,7 +423,10 @@ async def cmd_help(message: types.Message):
         "🚀 *Быстрые команды:*\n"
         "• `/playlist Pink Floyd 5` — мгновенная подборка.\n"
         "• `/playlist_example` — обучение на примерах.\n"
-        "• `/massage` — 🖐 Массажный салон (услуги, цены, запись).\n\n"
+        "• `/massage` — 🖐 Массажный салон (услуги, цены, запись).\n"
+        "• `/specialist <роль>` — 🧑‍⚕️ создать специалиста-консультанта под твой запрос\n"
+        "• `/specialists` — список твоих специалистов\n"
+        "• `/dismiss <имя>` — удалить специалиста\n\n"
         "🎹 *Другие возможности:*\n"
         "• 🔮 *Предсказание* — задай вопрос, получи мудрость AI.\n"
         "• 🎙 *Голос Судьбы* — отправь голосовое, я его пойму.\n"
@@ -434,6 +443,104 @@ async def cmd_help(message: types.Message):
         "🧘 *Приятного погружения в звук!*"
     )
     await message.answer(help_text, parse_mode="Markdown")
+
+@router.message(Command("specialist"))
+async def cmd_specialist(message: types.Message):
+    chat_id = int(message.chat.id)
+    text = message.text.replace("/specialist", "", 1).strip()
+    if not text:
+        await message.answer(
+            "🧑‍⚕️ *Создание специалиста*\n\n"
+            "Напиши, какой специалист тебе нужен.\n"
+            "Например: `/specialist эксперт по спортивному массажу для бегунов`\n\n"
+            "Я создам персонального консультанта с этой ролью.\n\n"
+            "Другие команды:\n"
+            "• `/specialists` — список твоих специалистов\n"
+            "• `/dismiss <имя>` — удалить специалиста",
+            parse_mode="Markdown"
+        )
+        return
+    await _create_and_show_specialist(message, chat_id, text)
+
+
+@router.message(Command("specialists"))
+async def cmd_specialists(message: types.Message):
+    chat_id = int(message.chat.id)
+    sps = get_specialists(chat_id)
+    if not sps:
+        await message.answer(
+            "У тебя пока нет созданных специалистов.\n"
+            "Создай: `/specialist <описание роли>`",
+            parse_mode="Markdown"
+        )
+        return
+    lines = ["🧑‍⚕️ *Твои специалисты:*\n"]
+    for s in sps:
+        lines.append(f"• *{s.name}* — {s.role_description[:50]}…")
+    lines.append(f"\nВсего: {len(sps)}")
+    await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(Command("dismiss"))
+async def cmd_dismiss(message: types.Message):
+    chat_id = int(message.chat.id)
+    name = message.text.replace("/dismiss", "", 1).strip()
+    if not name:
+        sps = get_specialists(chat_id)
+        if not sps:
+            await message.answer("Нет специалистов для удаления.")
+            return
+        lines = ["Напиши `/dismiss <имя>`:\n"]
+        for s in sps:
+            lines.append(f"• *{s.name}*")
+        await message.answer("\n".join(lines), parse_mode="Markdown")
+        return
+    if remove_specialist(chat_id, name):
+        await message.answer(f"✅ Специалист *{name}* удалён.", parse_mode="Markdown")
+    else:
+        await message.answer(f"❌ Специалист с именем *{name}* не найден.", parse_mode="Markdown")
+
+
+async def _create_and_show_specialist(message: types.Message, chat_id: int, role: str):
+    status = await message.answer(f"🧑‍⚕️ Создаю специалиста: _{role}_…")
+    specialist = SpecialistFactory.create(chat_id=int(chat_id), role_description=role)
+    if not specialist:
+        await status.edit_text("❌ Не удалось создать специалиста. Попробуй позже.")
+        return
+    text = (
+        f"✅ *Создан специалист:* {specialist.name}\n\n"
+        f"📋 *Роль:* {specialist.role_description}\n\n"
+        f"Ты можешь задать ему вопрос прямо сейчас!"
+    )
+    await status.edit_text(text, parse_mode="Markdown")
+    user_settings[str(chat_id)]["specialist_chat"] = specialist.name
+    save_settings(user_settings)
+
+
+async def _handle_create_specialist_auto(chat_id: int, role_description: str, message: types.Message):
+    """Вызывается из function calling loop при запросе create_specialist."""
+    await message.answer(f"🧑‍⚕️ Создаю специалиста: _{role_description}_…")
+    specialist = SpecialistFactory.create(chat_id=chat_id, role_description=role_description)
+    if not specialist:
+        await message.answer("❌ Не удалось создать специалиста. Попробуй позже.")
+        return None
+    text = (
+        f"✅ *Создан специалист:* {specialist.name}\n\n"
+        f"📋 *Роль:* {specialist.role_description}\n\n"
+        f"Ты можешь задать ему вопрос прямо сейчас, "
+        f"написав сообщение после этого.\n\n"
+        f"Или продолжай общение со мной."
+    )
+    await message.answer(text, parse_mode="Markdown")
+    user_settings[str(chat_id)]["specialist_chat"] = specialist.name
+    save_settings(user_settings)
+    return specialist
+
+
+def _is_chatting_with_specialist(chat_id_str: str) -> bool:
+    settings = user_settings.get(chat_id_str, {})
+    return bool(settings.get("specialist_chat"))
+
 
 @router.message(F.photo)
 async def handle_photo(message: types.Message, bot: Bot):
@@ -616,13 +723,13 @@ async def handle_audio(message: types.Message, bot: Bot):
         logger.info(f"📥 Gemini результат: {text[:50] if text else 'None'}...")
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
-            logger.info("♻️ Gemini Transcription failed, falling back to HF.")
-            text = transcribe_local(transcribe_path)
+            logger.info("♻️ Gemini Transcription failed, falling back to HF Whisper.")
+            text = get_hf_response(text=None, image_path=transcribe_path, task="audio")
             logger.info(f"📥 HF Whisper результат (fallback): {text[:50] if text else 'None'}...")
     else:
-        logger.info("🔄 Запуск локальной транскрибации (whisper-base)...")
-        text = transcribe_local(transcribe_path)
-        logger.info(f"📥 Локальная транскрибация результат: {text[:50] if text else 'None'}...")
+        logger.info("🔄 Запуск HF Whisper через Router...")
+        text = get_hf_response(text=None, image_path=transcribe_path, task="audio")
+        logger.info(f"📥 HF Whisper результат: {text[:50] if text else 'None'}...")
 
     cleanup_file(file_path)
     if transcribe_path != file_path:
@@ -631,7 +738,44 @@ async def handle_audio(message: types.Message, bot: Bot):
     if text:
         logger.info(f"✅ Audio transcribed: {text[:50]}...")
 
-        # Показываем распознанный текст с кнопками подтверждения
+        # Route голоса в активные контексты (массаж, специалист)
+        int_chat_id = message.chat.id
+
+        # 1. Массажная консультация
+        massage_step = user_settings.get(chat_id, {}).get("massage_step")
+        if massage_step == "questionnaire":
+            await status_msg.delete()
+            message.text = text
+            from handlers.massage import on_mc_text_input
+            await on_mc_text_input(message)
+            return
+        elif massage_step == "create_specialist":
+            await status_msg.delete()
+            _set_user_data(chat_id, "massage_step", None)
+            save_settings(user_settings)
+            message.text = text
+            await _create_and_show_specialist(message, int_chat_id, text)
+            return
+
+        # 2. Специалист
+        if _is_chatting_with_specialist(chat_id):
+            sp_name = user_settings[chat_id].get("specialist_chat")
+            if sp_name:
+                specialist = get_specialist(int_chat_id, sp_name)
+                if specialist:
+                    result = SpecialistFactory.chat(chat_id=int_chat_id, specialist=specialist, user_message=text)
+                    await status_msg.delete()
+                    if result.is_success():
+                        await message.answer(f"👤 *Распознано:* _{text}_", parse_mode="Markdown")
+                        await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+                    else:
+                        await message.answer("❌ Ошибка связи со специалистом.")
+                    return
+                else:
+                    del user_settings[chat_id]["specialist_chat"]
+                    save_settings(user_settings)
+
+        # 3. Обычный режим — показываем с подтверждением
         await message.answer(
             f"👤 *Распознано:* \n\n_{text}_\n\n"
             f"🔮 *Подтвердите выполнение:*",
@@ -732,6 +876,22 @@ async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
     text = message.text
     if not text: return
+
+    # Если пользователь общается со специалистом — перенаправляем
+    if _is_chatting_with_specialist(chat_id):
+        sp_name = user_settings[chat_id].get("specialist_chat")
+        if sp_name:
+            specialist = get_specialist(int(chat_id), sp_name)
+            if specialist:
+                result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=text)
+                if result.is_success():
+                    await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+                else:
+                    await message.answer("❌ Ошибка связи со специалистом.")
+                return
+            else:
+                del user_settings[chat_id]["specialist_chat"]
+                save_settings(user_settings)
 
     # Проверка на ввод VIP пароля
     if user_settings.get(chat_id, {}).get('waiting_vip_password'):
@@ -1119,9 +1279,18 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
                         
                         if status_msg: await status_msg.edit_text(f"⚒ *Задействую инструмент:* `{fn_name}`...")
                         
-                        if fn_name in AVAILABLE_FUNCTIONS:
+                        if fn_name == "create_specialist":
+                            role = args.get("role_description", "специалист")
+                            sp = await _handle_create_specialist_auto(message.chat.id, role, message)
+                            result_text = f"Создан специалист '{sp.name}' с ролью: {sp.role_description}" if sp else "Не удалось создать специалиста"
+                            response = chat.send_message(
+                                message=genai_types.Part.from_function_response(
+                                    name=fn_name,
+                                    response={"result": result_text}
+                                )
+                            )
+                        elif fn_name in AVAILABLE_FUNCTIONS:
                             result = AVAILABLE_FUNCTIONS[fn_name](**args)
-                            # Отправляем ответ инструмента обратно модели
                             response = chat.send_message(
                                 message=genai_types.Part.from_function_response(
                                     name=fn_name,
