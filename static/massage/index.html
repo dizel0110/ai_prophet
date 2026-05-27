@@ -446,6 +446,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:4px">
+        <button class="modal-close" onclick="showEditSpecialist()" style="position:static;font-size:16px" title="Редактировать специалиста">✏️</button>
         <button class="modal-close" onclick="if(currentSP)deleteSpecialist(currentSP)" style="position:static;font-size:18px" title="Удалить специалиста">🗑️</button>
         <button class="modal-close" onclick="closeSpecialistChat()" style="position:static">✕</button>
       </div>
@@ -478,6 +479,18 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
       <button class="btn btn-primary" onclick="createSpecialist()" style="flex:2">🧑‍⚕️ Создать</button>
       <button class="btn btn-secondary" onclick="createRandomSpecialist()" style="flex:1;font-size:13px">🎲 Случайный</button>
     </div>
+  </div>
+</div>
+
+<!-- EDIT SPECIALIST MODAL -->
+<div class="modal-overlay" id="editSpecialistModal" style="display:none">
+  <div class="modal" style="max-height:60vh">
+    <button class="modal-close" onclick="closeEditModal()">✕</button>
+    <h3>✏️ Редактировать специалиста</h3>
+    <div class="form-group"><label>Имя</label><input type="text" id="esName"></div>
+    <div class="form-group"><label>Роль / описание</label><textarea id="esRole" rows="2"></textarea></div>
+    <button class="btn btn-primary" onclick="saveEdit()">💾 Сохранить</button>
+    <button class="btn btn-secondary" onclick="closeEditModal()">Отмена</button>
   </div>
 </div>
 
@@ -935,6 +948,45 @@ async function deleteSpecialist(name) {
 }
 
 // ===== Chat modal =====
+function showEditSpecialist() {
+  if (!currentSP) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  qs('esName').value = currentSP;
+  qs('esRole').value = '';
+  const u = uid();
+  // Try to load current role
+  if (u) {
+    const sp = allChatItems.find(i => i.name === currentSP);
+    if (sp && sp.role) qs('esRole').value = sp.role;
+  }
+  qs('editSpecialistModal').style.display = 'flex';
+}
+function closeEditModal() { qs('editSpecialistModal').style.display = 'none'; }
+
+async function saveEdit() {
+  const newName = qsv('esName');
+  const newRole = qsv('esRole');
+  if (!newName && !newRole) { tg.showAlert('Заполни имя или роль'); return; }
+  const u = uid(); if (!u) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  const d = await api('/api/specialist/edit', {chat_id: u, old_name: currentSP, new_name: newName || currentSP, new_role: newRole});
+  if (d.ok) {
+    closeEditModal();
+    // Update in-memory name
+    if (newName && newName !== currentSP && spMessages[u]) {
+      spMessages[u][newName] = spMessages[u][currentSP] || [];
+      delete spMessages[u][currentSP];
+    }
+    const oldSP = currentSP;
+    if (newName) currentSP = newName;
+    qs('chat-sp-name').textContent = currentSP;
+    loadSpecialists(); loadChatList();
+    tg.showAlert('✅ Сохранено');
+  } else {
+    tg.showAlert('❌ ' + (d.error || 'Не удалось сохранить'));
+  }
+}
+
 function openSpecialistChat(name) {
   currentSP = name;
   qs('chat-sp-name').textContent = name;

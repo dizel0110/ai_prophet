@@ -319,5 +319,57 @@ def remove_specialist(chat_id: int, name: str) -> bool:
         if s.get("name", "").lower() == name.lower():
             lst.pop(i)
             _write_specialists(data)
+            # Clean up conversation
+            conv = {}
+            if os.path.exists(CONVERSATIONS_FILE):
+                try:
+                    with open(CONVERSATIONS_FILE, "r", encoding="utf-8") as f:
+                        conv = json.load(f)
+                except Exception:
+                    pass
+            conv.pop(f"{chat_id}_{name}", None)
+            try:
+                with open(CONVERSATIONS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(conv, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+            return True
+    return False
+
+
+def update_specialist(chat_id: int, old_name: str, new_name: str = "", new_role: str = "") -> bool:
+    data = _load_all_specialists()
+    key = str(chat_id)
+    if key not in data:
+        return False
+    lst = data[key]
+    for s in lst:
+        if s.get("name", "").lower() == old_name.lower():
+            if new_name:
+                s["name"] = new_name
+                s["role_description"] = s.get("role_description", "").replace(old_name, new_name)
+                if s.get("system_prompt", "").startswith("Ты — " + old_name):
+                    s["system_prompt"] = s["system_prompt"].replace("Ты — " + old_name, "Ты — " + new_name, 1)
+            if new_role:
+                s["role_description"] = new_role
+            _write_specialists(data)
+            # Rename conversation key if name changed
+            if new_name and new_name.lower() != old_name.lower():
+                conv = {}
+                if os.path.exists(CONVERSATIONS_FILE):
+                    try:
+                        with open(CONVERSATIONS_FILE, "r", encoding="utf-8") as f:
+                            conv = json.load(f)
+                    except Exception:
+                        pass
+                old_key = f"{chat_id}_{old_name}"
+                new_key = f"{chat_id}_{new_name}"
+                if old_key in conv:
+                    conv[new_key] = conv.pop(old_key)
+                    try:
+                        with open(CONVERSATIONS_FILE, "w", encoding="utf-8") as f:
+                            json.dump(conv, f, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
             return True
     return False

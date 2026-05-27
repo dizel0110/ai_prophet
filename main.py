@@ -119,6 +119,22 @@ async def api_specialist_delete(req: dict):
         return {"ok": False, "error": "Missing chat_id or name"}
     return {"ok": remove_specialist(chat_id, name)}
 
+
+@app.post("/api/specialist/edit")
+async def api_specialist_edit(req: dict):
+    from core.agents.agent_factory import update_specialist
+    chat_id = req.get("chat_id")
+    old_name = req.get("old_name", "")
+    new_name = req.get("new_name", "")
+    new_role = req.get("new_role", "")
+    if not chat_id or not old_name:
+        return {"ok": False, "error": "Missing chat_id or old_name"}
+    if not new_name and not new_role:
+        return {"ok": False, "error": "Provide new_name or new_role"}
+    ok = update_specialist(chat_id, old_name, new_name, new_role)
+    return {"ok": ok}
+
+
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
