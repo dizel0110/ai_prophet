@@ -90,19 +90,19 @@
 - [ ] **🔴 Playwright MCP (приоритет)** — для меня (opencode) и для бота:
   - Для меня: открывать сайты, скриншоты, клики, формы.
   - Для бота: поиск контента, проверка ссылок, скрейпинг Mini App.
+- [ ] **🔴 Auto-deploy Cloudflare Worker** — Git-интеграция воркера с репозиторием (CI/CD).
 - [ ] Интеграция MCP для работы с файлами, БД.
 - [ ] Автоматическое исправление багов через самоанализ кода.
 - [ ] Расширение Mini App до полноценной панели управления состоянием ИИ.
 
-## 2026-05-27: Split Deploy — Render.com + Hugging Face Spaces
-- **Проблема**: HF Spaces блокирует исходящие соединения к Telegram API. Бот не может работать на HF без PROXY_URL.
-- **Решение**: Split-архитектура:
-  - **HF Spaces** → Mini App (статический HTML) + API health
-  - **Render.com** → polling бот (FastAPI + aiogram)
-- **Config**: Добавлен `PLATFORM` env var (`hf` | `render` | `local`).
-- **Config**: `get_base_url()` теперь Render-aware: на Render Mini App URL = HF Spaces.
-- **main.py**: Убран дублирующийся код (HF / local ветки были идентичны). Единый polling-цикл с платформо-зависимым сообщением.
-- **AGENTS.md**: Добавлен принцип масштабирования (Scale‑Ready: платформенная независимость, stateless, split по умолчанию, рост через инстансы).
-- **Вывод**: Одна кодовая база, два деплой-таргета. При росте — единая платформа (Render Pro / VPS) без переписывания.
+## 2026-05-27: Cloudflare Worker Proxy — Telegram API на HF Spaces
+- **Проблема**: HF Spaces блокирует исходящие к `api.telegram.org`. Render.com требует банковскую карту.
+- **Решение**: Cloudflare Workers (бесплатно, без карты, 100k req/день) — прокси для Telegram API.
+- **Создан**: `cloudflare-worker/index.js` + `wrangler.toml` — простой forward proxy до `api.telegram.org`.
+- **main.py**: Поддержка `TELEGRAM_API_URL` через `TelegramAPIServer.from_base()` — aiogram ходит напрямую к Cloudflare Worker, минуя api.telegram.org.
+- **main.py**: `Dispatcher` вынесен на уровень модуля (один раз на lifecycle) — исправлен crash recovery ("Router already attached").
+- **webhook_only.py**: Рефакторинг — `dp` и `include_router` внутри `setup_webhook_routes()`, не на уровне модуля.
+- **Фикс порядка**: dp создаётся ДО импорта webhook_only — роутеры больше не воруются.
+- **Вывод**: HF Spaces (Mini App) + Cloudflare Worker (прокси) — два бесплатных сервиса, бот работает 24/7.
 ---
 *Продолжение следует. Каждая строка кода — часть пророчества.*
