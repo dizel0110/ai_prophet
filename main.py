@@ -100,9 +100,10 @@ async def api_specialist_create(req: dict):
     from core.agents.agent_factory import SpecialistFactory, get_specialist
     chat_id = req.get("chat_id")
     role = req.get("role", "")
+    name = req.get("name", "")
     if not chat_id or not role:
         return {"ok": False, "error": "Missing chat_id or role"}
-    sp = SpecialistFactory.create(chat_id=chat_id, role_description=role)
+    sp = SpecialistFactory.create(chat_id=chat_id, role_description=role, name=name or None)
     if sp:
         return {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}
     return {"ok": False, "error": "Failed to create specialist"}

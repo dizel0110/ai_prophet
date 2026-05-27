@@ -454,12 +454,32 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
   <div class="modal" style="max-height:70vh">
     <button class="modal-close" onclick="document.getElementById('createSpecialistModal').style.display='none'">✕</button>
     <h3>🧑‍⚕️ Создать специалиста</h3>
-    <p style="font-size:12px;color:var(--hint);margin-bottom:12px">Напиши, какой специалист тебе нужен</p>
+    <p style="font-size:12px;color:var(--hint);margin-bottom:12px">Задай имя и опиши его роль</p>
+    <div class="form-group"><label>Имя специалиста</label>
+      <input type="text" id="csName" placeholder="Мастер стоун-терапии, Консультант по ЛФК...">
+    </div>
     <div class="form-group"><label>Роль / описание</label>
-      <textarea id="csRole" placeholder="Эксперт по спортивному массажу, реабилитолог, мастер стоун-терапии..." rows="3"></textarea>
+      <textarea id="csRole" placeholder="Эксперт по спортивному массажу, реабилитолог, мастер стоун-терапии..." rows="2"></textarea>
     </div>
     <button class="btn btn-primary" onclick="createSpecialist()">🧑‍⚕️ Создать</button>
     <button class="btn btn-secondary" onclick="document.getElementById('createSpecialistModal').style.display='none'">Отмена</button>
+  </div>
+</div>
+
+<!-- CHAT PAGE -->
+<div class="page" id="page-chat">
+  <div class="sec">
+    <div class="sec-title">💬 Чат со специалистами</div>
+    <div class="sec-sub">Выбери специалиста или создай нового</div>
+    <div class="card">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="chat-search-input" placeholder="Поиск по имени или роли..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text)" oninput="filterSpecialistList()">
+      </div>
+      <div id="chat-page-list">
+        <p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Загрузка специалистов...</p>
+      </div>
+      <button class="btn btn-secondary" onclick="showCreateSpecialist()" style="margin-top:8px">➕ Создать специалиста</button>
+    </div>
   </div>
 </div>
 
@@ -570,6 +590,11 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
   <button class="tab" data-page="ai" onclick="navigate('ai')">
     <span class="tab-icon">🧑‍⚕️</span>
     <span class="tab-label">AI</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" data-page="chat" onclick="navigate('chat'); loadChatList()">
+    <span class="tab-icon">💬</span>
+    <span class="tab-label">Чат</span>
     <span class="tab-indicator"></span>
   </button>
   <button class="tab" data-page="more" onclick="navigate('more')">
@@ -719,6 +744,14 @@ async function apiCall(endpoint, data) {
   }
 }
 
+const PRESET_SPECIALISTS = [
+  {name: "Массажист-реабилитолог", role: "Специалист по восстановлению после травм и операций"},
+  {name: "Эксперт по стоун-терапии", role: "Мастер массажа горячими камнями"},
+  {name: "Консультант по ЛФК", role: "Специалист по лечебной физкультуре"},
+  {name: "Мастер тайского массажа", role: "Эксперт по тайским техникам массажа"},
+  {name: "Специалист по Anti-Age", role: "Эксперт по омоложению и массажу лица"},
+];
+
 async function loadSpecialists() {
   const uid = tg.initDataUnsafe?.user?.id;
   if (!uid) return;
@@ -739,23 +772,93 @@ async function loadSpecialists() {
   `).join('');
 }
 
+let allChatItems = [];
+
+async function loadChatList() {
+  const uid = tg.initDataUnsafe?.user?.id;
+  if (!uid) return;
+  const data = await apiCall('/api/specialist/list', {chat_id: uid});
+  const created = (data.ok && data.specialists) ? data.specialists : [];
+  allChatItems = [];
+  PRESET_SPECIALISTS.forEach(p => {
+    allChatItems.push({name: p.name, role: p.role, type: 'preset', exists: created.some(s => s.name === p.name)});
+  });
+  created.forEach(s => {
+    if (!allChatItems.find(i => i.name === s.name)) {
+      allChatItems.push({name: s.name, role: s.role, type: 'created', exists: true});
+    }
+  });
+  renderChatList();
+}
+
+let chatSearchFilter = '';
+
+function filterSpecialistList() {
+  chatSearchFilter = document.getElementById('chat-search-input').value.toLowerCase().trim();
+  renderChatList();
+}
+
+function renderChatList() {
+  const el = document.getElementById('chat-page-list');
+  let items = allChatItems;
+  if (chatSearchFilter) {
+    items = items.filter(i =>
+      i.name.toLowerCase().includes(chatSearchFilter) ||
+      i.role.toLowerCase().includes(chatSearchFilter)
+    );
+  }
+  if (items.length === 0) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Ничего не найдено</p>';
+    return;
+  }
+  el.innerHTML = items.map(i => `
+    <div class="sp-item" onclick="${i.exists ? `openSpecialistChat('${i.name}')` : `createAndOpen('${i.name}', '${i.role}')`}">
+      <div class="sp-item-info">
+        <div class="sp-item-name">${i.name}</div>
+        <div class="sp-item-role">${i.role}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        ${i.type === 'preset' && !i.exists ? '<span style="font-size:10px;color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:2px 8px">+</span>' : ''}
+        <span style="font-size:20px;color:var(--hint)">${i.exists ? '💬' : '➕'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function createAndOpen(name, role) {
+  const uid = tg.initDataUnsafe?.user?.id;
+  if (!uid) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: role});
+  if (data.ok) {
+    tg.showAlert(`✅ Создан: ${data.name}`);
+    loadChatList();
+    openSpecialistChat(name);
+  } else {
+    tg.showAlert('❌ Ошибка: ' + (data.error || 'Не удалось создать'));
+  }
+}
+
 function showCreateSpecialist() {
   tg.HapticFeedback.impactOccurred('medium');
   document.getElementById('createSpecialistModal').style.display = 'flex';
 }
 
 async function createSpecialist() {
+  const name = document.getElementById('csName').value.trim();
   const role = document.getElementById('csRole').value.trim();
-  if (!role) { tg.showAlert('Опиши роль специалиста'); return; }
+  if (!name && !role) { tg.showAlert('Заполни имя или роль специалиста'); return; }
   const uid = tg.initDataUnsafe?.user?.id;
   if (!uid) return;
   tg.HapticFeedback.impactOccurred('medium');
-  const data = await apiCall('/api/specialist/create', {chat_id: uid, role: role});
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: role});
   if (data.ok) {
     document.getElementById('createSpecialistModal').style.display = 'none';
+    document.getElementById('csName').value = '';
     document.getElementById('csRole').value = '';
     tg.showAlert(`✅ Создан специалист: ${data.name}`);
     loadSpecialists();
+    loadChatList();
   } else {
     tg.showAlert('❌ Ошибка: ' + (data.error || 'Не удалось создать'));
   }
