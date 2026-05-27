@@ -25,6 +25,7 @@ class DynamicSpecialist:
     chat_id: int
     message_count: int = 0
     skills: str = ""
+    client_memory: str = ""
 
     def to_dict(self) -> dict:
         return {**asdict(self), "__type__": "DynamicSpecialist"}
@@ -32,7 +33,7 @@ class DynamicSpecialist:
     @classmethod
     def from_dict(cls, d: dict) -> "DynamicSpecialist":
         d.pop("__type__", None)
-        return cls(**d)
+        return cls(**{k: v for k, v in d.items() if k in cls.__annotations__})
 
 
 UNIVERSAL_CONSULTANT_NAME = "Мастер-консультант"
@@ -55,6 +56,50 @@ UNIVERSAL_CONSULTANT_SYSTEM_PROMPT = """Ты — Мастер-консульта
 Важно: НЕ ставь диагнозы, НЕ назначай лекарства. Если нужен профильный специалист — предложи создать его. Стиль: дружелюбный, заботливый, на "ты". Кратко и по делу."""
 
 UNIVERSAL_CONSULTANT_SKILLS = "массаж, AI-консультация, подбор специалистов, навигация по платформе, музыка для массажа"
+
+# Встроенные агенты из мульти-агентной системы как чат-специалисты
+BUILT_IN_AGENTS = [
+    {
+        "name": "Визуальный Диагност",
+        "role": "Анализ фото осанки и спины",
+        "system_prompt": "Ты — Визуальный Диагност, эксперт по визуальной диагностике опорно-двигательного аппарата. По фотографиям спины, позвоночника и осанки клиента ты определяешь: наличие сколиоза, кифоза, лордоза, асимметрию плеч, лопаток, таза, мышечное напряжение или атрофию. Оцениваешь выраженность проблем (лёгкая/средняя/тяжёлая). Клиент может прислать тебе фото для оценки. Если фото нет — задавай наводящие вопросы, чтобы понять, на что обратить внимание. НЕ выходи за рамки визуальной диагностики. НЕ назначай массаж и НЕ давай советов по техникам.",
+        "skills": "визуальная диагностика, осанка, сколиоз, мышечное напряжение",
+        "built_in": True,
+        "badge": "🤖",
+    },
+    {
+        "name": "Специалист по движениям",
+        "role": "Анализ видео походки и движений",
+        "system_prompt": "Ты — Специалист по движениям. Анализируешь движения клиента по видео и описанию. Оцениваешь: симметричность движений, объём движений в суставах, ограничения подвижности, компенсаторные паттерны. Клиент может прислать видео для оценки. Если видео нет — задавай вопросы о походке, наклонах, поворотах, боли при движении. НЕ выходи за рамки анализа движений. НЕ ставь диагнозы. НЕ назначай массаж.",
+        "skills": "биомеханика, анализ движений, походка, подвижность суставов",
+        "built_in": True,
+        "badge": "🤖",
+    },
+    {
+        "name": "Анкетолог",
+        "role": "Анализ анкеты и противопоказаний",
+        "system_prompt": "Ты — Анкетолог массажного салона. Анализируешь медицинские анкеты клиентов. Выявляешь противопоказания к массажу: онкология, тромбоз, острые воспаления, кожные заболевания, беременность, температура, гипертония, варикоз. Оцениваешь факторы риска и даёшь рекомендации по предосторожностям. Если клиент не заполнил анкету — проведи устный опрос по стандартным пунктам (возраст, здоровье, аллергии, лекарства). НЕ анализируй фото или видео — работай ТОЛЬКО с текстом.",
+        "skills": "анализ анкет, противопоказания, факторы риска, медицинские показания",
+        "built_in": True,
+        "badge": "🤖",
+    },
+    {
+        "name": "Эксперт по техникам",
+        "role": "Подбор техник массажа",
+        "system_prompt": "Ты — Эксперт по техникам массажа. На основе данных о клиенте (жалобы, здоровье, предпочтения) ты рекомендуешь конкретные техники массажа. Техники: классический, спортивный, лимфодренажный, антицеллюлитный, точечный, миофасциальный, стоун-терапия, тайский, баночный, медовый. Для каждой указываешь показания и ожидаемый эффект. Консультируй клиента, помогай выбрать подходящую технику. НЕ ставь диагнозов и НЕ назначай медикаментов.",
+        "skills": "классический, спортивный, лимфодренаж, стоун-терапия, тайский, баночный массаж",
+        "built_in": True,
+        "badge": "🤖",
+    },
+    {
+        "name": "Финальный Эксперт",
+        "role": "Итоговое заключение и рекомендации",
+        "system_prompt": "Ты — Финальный Эксперт массажного салона AI Prophet. Ты получаешь всю информацию о клиенте и даёшь ОКОНЧАТЕЛЬНОЕ ЗАКЛЮЧЕНИЕ в формате: 1) СТАТУС КЛИЕНТА: Допущен / С ограничениями / Не допущен, 2) ПРИЧИНА, 3) РЕКОМЕНДОВАННЫЕ ТЕХНИКИ, 4) ЗОНЫ ВНИМАНИЯ, 5) ПРОТИВОПОКАЗАНИЯ, 6) СЕАНСЫ. Если данных мало — задавай вопросы, чтобы сформировать полную картину. Будь максимально конкретным и профессиональным.",
+        "skills": "синтез данных, финальное заключение, рекомендации, план лечения",
+        "built_in": True,
+        "badge": "🤖",
+    },
+]
 
 
 class SpecialistFactory:
@@ -173,15 +218,52 @@ class SpecialistFactory:
         return specialist
 
     @classmethod
+    def _extract_memory(cls, text: str) -> str:
+        facts = []
+        patterns = [
+            (r"(?:меня зовут|my name is|я\s+)(\w+)", "Имя клиента"),
+            (r"(?:мне\s+)(\d+)\s*(?:лет|года|год)", "Возраст"),
+            (r"(?:я\s+)(мужчина|женщина|парень|девушка|male|female)", "Пол"),
+            (r"(?:болит|беспокоит|жалуюсь)\s+(?:на\s+)?(.+?)(?:\.|,|$)", "Жалоба"),
+            (r"(?:спина|шея|поясница|шейный|грудной|поясничный)", "Локация боли"),
+            (r"(?:аллерги|противопоказан|нельзя|беременн|давление|сердц|диабет|онколог|варикоз|грыж|травм)", "Здоровье"),
+        ]
+        text_lower = text.lower()
+        for pat, label in patterns:
+            import re
+            m = re.search(pat, text_lower)
+            if m:
+                val = m.group(1).strip().capitalize() if m.lastindex else m.group(0).strip().capitalize()
+                facts.append(f"{label}: {val[:60]}")
+        return "; ".join(facts) if facts else ""
+
+    @classmethod
+    def _merge_memory(cls, old_memory: str, new_facts: str) -> str:
+        if not new_facts:
+            return old_memory
+        if not old_memory:
+            return new_facts
+        old_parts = set(p.strip() for p in old_memory.split(";"))
+        new_parts = [p.strip() for p in new_facts.split(";") if p.strip() not in old_parts]
+        if not new_parts:
+            return old_memory
+        return old_memory + "; " + "; ".join(new_parts)
+
+    @classmethod
     def chat(cls, chat_id: int, specialist: DynamicSpecialist, user_message: str) -> AgentResult:
         cls._ensure_clients()
         history = _load_conversation(chat_id, specialist.name)
+
+        # Build context with memory
+        memory_block = ""
+        if specialist.client_memory:
+            memory_block = f"\n[Память о клиенте: {specialist.client_memory}]\n\n"
 
         # Gemini first — лучше следует system prompt
         if cls._gemini_client:
             for model in FALLBACK_MODELS[:2]:
                 try:
-                    ctx = specialist.system_prompt + "\n\n"
+                    ctx = specialist.system_prompt + memory_block
                     for h in history[-4:]:
                         ctx += f"{h['role']}: {h['content']}\n"
                     ctx += f"user: {user_message}\n\n{specialist.name}:"
@@ -192,6 +274,7 @@ class SpecialistFactory:
                     )
                     if resp and resp.text:
                         specialist.message_count += 1
+                        specialist.client_memory = cls._merge_memory(specialist.client_memory, cls._extract_memory(user_message))
                         _save_specialist(specialist)
                         _save_conversation(chat_id, specialist.name, user_message, resp.text.strip())
                         return AgentResult(f"s_{chat_id}", specialist.name, resp.text.strip())
@@ -201,7 +284,7 @@ class SpecialistFactory:
         # HF fallback — обычно Qwen
         if cls._hf_token:
             try:
-                msgs = [{"role": "system", "content": specialist.system_prompt}]
+                msgs = [{"role": "system", "content": specialist.system_prompt + memory_block}]
                 for h in history:
                     msgs.append(h)
                 msgs.append({"role": "user", "content": user_message})
@@ -218,6 +301,7 @@ class SpecialistFactory:
                 if resp.status_code == 200:
                     content = resp.json()["choices"][0]["message"]["content"].strip()
                     specialist.message_count += 1
+                    specialist.client_memory = cls._merge_memory(specialist.client_memory, cls._extract_memory(user_message))
                     _save_specialist(specialist)
                     _save_conversation(chat_id, specialist.name, user_message, content)
                     return AgentResult(f"s_{chat_id}", specialist.name, content)
@@ -299,7 +383,20 @@ def _write_specialists(data: dict):
 
 def get_specialists(chat_id: int) -> List[DynamicSpecialist]:
     data = _load_all_specialists()
-    return [DynamicSpecialist.from_dict(s) for s in data.get(str(chat_id), [])]
+    created = [DynamicSpecialist.from_dict(s) for s in data.get(str(chat_id), [])]
+    # Merge built-in agents, avoiding duplicates
+    existing_names = {s.name.lower() for s in created}
+    for ba in BUILT_IN_AGENTS:
+        if ba["name"].lower() not in existing_names:
+            created.append(DynamicSpecialist(
+                name=ba["name"],
+                role_description=ba["role"],
+                system_prompt=ba["system_prompt"],
+                skills=ba["skills"],
+                created_at=0,
+                chat_id=chat_id,
+            ))
+    return created
 
 
 def get_specialist(chat_id: int, name: str) -> Optional[DynamicSpecialist]:

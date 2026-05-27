@@ -446,8 +446,8 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:4px">
-        <button class="modal-close" onclick="showEditSpecialist()" style="position:static;font-size:16px" title="Редактировать специалиста">✏️</button>
-        <button class="modal-close" onclick="if(currentSP)deleteSpecialist(currentSP)" style="position:static;font-size:18px" title="Удалить специалиста">🗑️</button>
+        <button class="modal-close" id="btn-edit-sp" onclick="showEditSpecialist()" style="position:static;font-size:16px" title="Редактировать специалиста">✏️</button>
+        <button class="modal-close" id="btn-delete-sp" onclick="if(currentSP)deleteSpecialist(currentSP)" style="position:static;font-size:18px" title="Удалить специалиста">🗑️</button>
         <button class="modal-close" onclick="closeSpecialistChat()" style="position:static">✕</button>
       </div>
     </div>
@@ -815,8 +815,8 @@ async function loadChatList() {
     if (d.ok && d.specialists) {
       d.specialists.forEach(sp => {
         const match = allChatItems.find(i => i.name === sp.name);
-        if (match) match.exists = true;
-        else allChatItems.push({name:sp.name, role:sp.role||'', type:'created', exists:true, universal:false});
+        if (match) { match.exists = true; match.badge = sp.badge || ''; match.built_in = sp.built_in || false; }
+        else allChatItems.push({name:sp.name, role:sp.role||'', type:'created', exists:true, universal:false, badge:sp.badge||'', built_in:!!sp.built_in});
       });
       // Auto-create universal consultant if missing
       if (!d.specialists.some(s => s.name === 'Мастер-консультант')) {
@@ -848,8 +848,8 @@ function renderChatList() {
     return;
   }
   el.innerHTML = items.map(i =>
-    `<div class="sp-item" data-name="${i.name.replace(/"/g,'&quot;')}" data-role="${(i.role||'').replace(/"/g,'&quot;')}" data-exists="${i.exists?'1':'0'}" data-type="${i.type}">
-      <div class="sp-item-info"><div class="sp-item-name">${i.universal?'🌟 ':''}${i.name}${i.universal?' <span style="font-size:10px;color:var(--gold-dark);font-weight:400;margin-left:2px">Главный</span>':''}</div><div class="sp-item-role">${i.role||''}</div></div>
+    `<div class="sp-item" data-name="${i.name.replace(/"/g,'&quot;')}" data-role="${(i.role||'').replace(/"/g,'&quot;')}" data-exists="${i.exists?'1':'0'}" data-type="${i.type}" data-badge="${i.badge||''}">
+      <div class="sp-item-info"><div class="sp-item-name">${i.universal?'🌟 ':i.badge||''}${i.name}${i.universal?' <span style="font-size:10px;color:var(--gold-dark);font-weight:400;margin-left:2px">Главный</span>':''}</div><div class="sp-item-role">${i.role||''}</div></div>
       <div style="display:flex;align-items:center;gap:6px">
         ${i.type==='preset'&&!i.exists?'<span style="font-size:10px;color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:2px 8px">+</span>':''}
         <span style="font-size:20px;color:var(--hint)">${i.exists?'💬':'➕'}</span>
@@ -993,6 +993,10 @@ function openSpecialistChat(name) {
   qs('chat-sp-role').textContent = 'Печатает...';
   qs('specialistChatModal').style.display = 'flex';
   qs('chat-messages').innerHTML = '';
+  // Hide edit/delete for built-in agents
+  const isBuilt = allChatItems.find(i => i.name === name)?.built_in;
+  qs('btn-edit-sp').style.display = isBuilt ? 'none' : '';
+  qs('btn-delete-sp').style.display = isBuilt ? 'none' : '';
   const u = uid();
   if (u) {
     if (!spMessages[u]) spMessages[u] = {};

@@ -92,8 +92,20 @@ async def api_specialist_list(req: dict):
     chat_id = req.get("chat_id")
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
+    from core.agents.agent_factory import BUILT_IN_AGENTS
     sps = get_specialists(chat_id)
-    return {"ok": True, "specialists": [{"name": s.name, "role": s.role_description, "skills": s.skills} for s in sps]}
+    built_names = {b["name"].lower() for b in BUILT_IN_AGENTS}
+    result = []
+    for s in sps:
+        is_built = s.name.lower() in built_names
+        result.append({
+            "name": s.name,
+            "role": s.role_description,
+            "skills": s.skills,
+            "built_in": is_built,
+            "badge": next((b["badge"] for b in BUILT_IN_AGENTS if b["name"].lower() == s.name.lower()), "🛠️"),
+        })
+    return {"ok": True, "specialists": result}
 
 @app.post("/api/specialist/create")
 async def api_specialist_create(req: dict):
@@ -112,11 +124,13 @@ async def api_specialist_create(req: dict):
 
 @app.post("/api/specialist/delete")
 async def api_specialist_delete(req: dict):
-    from core.agents.agent_factory import remove_specialist
+    from core.agents.agent_factory import remove_specialist, BUILT_IN_AGENTS
     chat_id = req.get("chat_id")
     name = req.get("name", "")
     if not chat_id or not name:
         return {"ok": False, "error": "Missing chat_id or name"}
+    if name.lower() in {b["name"].lower() for b in BUILT_IN_AGENTS}:
+        return {"ok": False, "error": "Нельзя удалить встроенного специалиста"}
     return {"ok": remove_specialist(chat_id, name)}
 
 
