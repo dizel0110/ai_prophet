@@ -958,6 +958,24 @@ function addMsg(role, text, name) {
   if(role==='ai'){ const n=document.createElement('div'); n.className='chat-name'; n.textContent=name||'Специалист'; b.appendChild(n); }
   const t=document.createElement('div'); t.textContent=text; b.appendChild(t);
   c.appendChild(b); c.scrollTop=c.scrollHeight;
+  // Clear old suggestions
+  const old = qs('chat-suggestions'); if(old) old.remove();
+  // Parse questions from AI response
+  if(role==='ai'){
+    const qs = text.match(/[^.!?]*\?/g);
+    if(qs && qs.length){
+      const wrap = document.createElement('div'); wrap.id='chat-suggestions'; wrap.style='display:flex;flex-wrap:wrap;gap:6px;padding:4px 0';
+      qs.slice(0,3).forEach(q => {
+        const btn = document.createElement('button'); btn.textContent=q.trim().slice(0,40); btn.className='btn btn-secondary'; btn.style='font-size:12px;padding:6px 12px;width:auto;min-width:0;margin:0';
+        btn.onclick=() => {
+          const inp = qs('chat-input'); if(inp) inp.value=q.trim();
+          sendSpecialistMessage();
+        };
+        wrap.appendChild(btn);
+      });
+      c.parentElement.insertBefore(wrap, c.nextSibling);
+    }
+  }
 }
 
 function showTyping() {

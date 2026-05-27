@@ -19,6 +19,10 @@ from google.genai import types as genai_types
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Quick-reply questions for specialist chat
+_quick_replies: dict = {}
+_qr_counter: int = 0
+
 # Путь к файлу настроек
 SETTINGS_FILE = os.path.join(TEMP_DIR, "user_settings.json")
 
@@ -892,6 +896,13 @@ async def handle_document(message: types.Message, bot: Bot):
         await message.answer("📁 *Файл получен.* К сожалению, я умею обрабатывать только `.json` бэкапы моей библиотеки музыки.")
 
 @router.message()
+def _extract_questions(text: str) -> list:
+    """Extract question phrases ending with ? from AI response."""
+    import re
+    qs = re.findall(r'[^.!?]*\?', text)
+    return [q.strip() for q in qs if len(q.strip()) > 5][:3]
+
+
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
     text = message.text
@@ -910,7 +921,20 @@ async def handle_text(message: types.Message, bot: Bot):
                 try:
                     result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=text)
                     if result.is_success():
-                        await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+                        global _qr_counter
+                        qs = _extract_questions(result.content)
+                        base_text = f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}"
+                        if qs:
+                            _qr_counter += 1
+                            qid = str(_qr_counter)
+                            _quick_replies[qid] = qs
+                            kb = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text=q[:35], callback_data=f"sp_ask:{qid}:{i}")]
+                                for i, q in enumerate(qs)
+                            ])
+                            await message.answer(base_text, parse_mode="Markdown", reply_markup=kb)
+                        else:
+                            await message.answer(base_text, parse_mode="Markdown")
                         if specialist.message_count == 1:
                             await message.answer("Отправь `/exit_specialist` чтобы выйти из диалога.")
                     else:
@@ -1574,6 +1598,33 @@ async def handle_playlist_callback(callback: types.CallbackQuery, bot: Bot):
             await callback.message.answer(f"⚠️ Не удалось скачать {playlist_result['failed']} треков. Попробуй другой запрос.", parse_mode="Markdown")
     else:
         await status_msg.edit_text("😔 Не удалось найти музыку по этому запросу.")
+
+
+@router.callback_query(F.data.startswith("sp_ask:"))
+async def on_sp_ask(callback: types.CallbackQuery, bot: Bot):
+    await callback.answer()
+    parts = callback.data.split(":", 2)
+    if len(parts) < 3:
+        return
+    qid, idx = parts[1], int(parts[2])
+    question = _quick_replies.get(qid, [None])[idx] if qid in _quick_replies else None
+    if not question:
+        await callback.message.edit_text("⏳ Вопрос устарел, напиши сам.")
+        return
+    chat_id = str(callback.message.chat.id)
+    sp_name = user_settings.get(chat_id, {}).get("specialist_chat")
+    if not sp_name:
+        await callback.message.answer("❌ Нет активного специалиста.")
+        return
+    specialist = get_specialist(int(chat_id), sp_name)
+    if not specialist:
+        await callback.message.answer("❌ Специалист не найден.")
+        return
+    result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=question)
+    if result.is_success():
+        await callback.message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+    else:
+        await callback.message.answer("❌ Ошибка связи со специалистом.")
 
 
 @router.callback_query(F.data.startswith("voice_"))
