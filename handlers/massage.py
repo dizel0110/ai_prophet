@@ -557,12 +557,24 @@ async def on_mc_analyze(callback: types.CallbackQuery):
     photos = data.get("massage_photos", [])
     videos = data.get("massage_videos", [])
 
-    orchestrator = MassageConsultationOrchestrator()
-    results = await orchestrator.run_consultation(
-        questionnaire_text=q.to_text(),
-        photo_paths=photos if photos else None,
-        video_paths=videos if videos else None,
-    )
+    try:
+        orchestrator = MassageConsultationOrchestrator()
+        results = await orchestrator.run_consultation(
+            questionnaire_text=q.to_text(),
+            photo_paths=photos if photos else None,
+            video_paths=videos if videos else None,
+        )
+    except Exception as e:
+        logger.error(f"Consultation failed: {e}", exc_info=True)
+        _set_user_data(chat_id, "massage_step", "done")
+        _cleanup_massage_temp(chat_id)
+        await msg.edit_text(
+            "😔 *Система диагностики временно недоступна.*\n\n"
+            "Попробуй позже или напиши свой вопрос текстом — я отвечу сам.\n\n"
+            "Анкета сохранена, мы её не потеряли.",
+            parse_mode="Markdown"
+        )
+        return
 
     _set_user_data(chat_id, "massage_step", "done")
     _cleanup_massage_temp(chat_id)

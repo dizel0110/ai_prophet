@@ -20,7 +20,8 @@ class MassageConsultationOrchestrator:
     """
     def __init__(self):
         self.specialists = get_all_agents()
-        self.final = AgentBase(**get_agent_def("final_expert"))
+        defn = get_agent_def("final_expert")
+        self.final = AgentBase(defn["id"], defn["name"], defn["role"], defn.get("model_type", "text"))
 
     async def run_consultation(
         self,
