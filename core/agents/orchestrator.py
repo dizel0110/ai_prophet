@@ -42,7 +42,7 @@ class MassageConsultationOrchestrator:
         if diag and photo_paths:
             results["visual_diagnostician"] = []
             for path in photo_paths:
-                r = await asyncio.to_thread(diag.process_vision, questionnaire_text[:300], path)
+                r = await asyncio.to_thread(diag.process_vision, questionnaire_text, path)
                 results["visual_diagnostician"].append(r.to_dict())
 
         # 3. Специалист по движениям (по видео — извлекает кадры)
@@ -50,7 +50,7 @@ class MassageConsultationOrchestrator:
         if mov and video_paths:
             results["movement_specialist"] = []
             for path in video_paths:
-                r = await asyncio.to_thread(mov.process_video_frames, questionnaire_text[:300], path)
+                r = await asyncio.to_thread(mov.process_video_frames, questionnaire_text, path)
                 results["movement_specialist"].append(r.to_dict())
 
         # 4. Эксперт по техникам (собирает все данные)

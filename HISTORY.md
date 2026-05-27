@@ -97,5 +97,24 @@
 - **webhook_only.py**: Рефакторинг — `dp` и `include_router` внутри `setup_webhook_routes()`, не на уровне модуля.
 - **Фикс порядка**: dp создаётся ДО импорта webhook_only — роутеры больше не воруются.
 - **Вывод**: HF Spaces (Mini App) + Cloudflare Worker (прокси) — два бесплатных сервиса, бот работает 24/7.
+
+## 2026-05-27: Dynamic Specialist Chat (Phase 2) — Mini App Chat UI + Fixes
+- **FastAPI endpoints**: Added `/api/specialist/chat`, `/list`, `/create` (accepts optional `name`), `/delete`.
+- **Mini App Chat tab**: Dedicated chat page (`#chat`) with:
+  - 5 preset specialist profiles + created specialists combined in one list
+  - Search filter (matched by name or role)
+  - Magic buttons: ✨ generate from name (auto-create + open chat), 🎲 random specialist
+  - Create modal with separate name + role fields
+  - Chat modal with message history, typing indicator, Enter-to-send
+  - **Switch specialist** button (🔄) in chat header — closes chat, returns to list
+- **SpecialistFactory.chat()**: Swapped to **Gemini first** — Gemini follows system prompt much better than Qwen for persona-based responses. HF fallback still works.
+- **Bug fixes**:
+  - `user_settings.setdefault(str(chat_id), {})` — prevents `KeyError` for new users
+  - Specialist chat logging + `try/except` in both `handle_text` and voice handler
+  - Presets always render synchronously; `loadChatList()` populates in two phases
+  - All DOM access null-safe via helper functions
+  - JSON response parsing fallback in API calls
+  - **F-string SyntaxError** in `agent_factory.py:99` — replaced f-string with plain string concat
+- **Event delegation** — replaced fragile inline `onclick` with `data-*` attributes and delegated click listeners on container elements (`.sp-item`). Fixes escaping issues in template literals.
+- **Final Expert fix** — removed `questionnaire_text[:300]` truncation for vision/video agents in `orchestrator.py:45,53`. Final Expert now receives full questionnaire data.
 ---
-*Продолжение следует. Каждая строка кода — часть пророчества.*
