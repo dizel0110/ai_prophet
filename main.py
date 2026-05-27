@@ -101,8 +101,10 @@ async def api_specialist_create(req: dict):
     chat_id = req.get("chat_id")
     role = req.get("role", "")
     name = req.get("name", "")
-    if not chat_id or not role:
-        return {"ok": False, "error": "Missing chat_id or role"}
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    if not role and not name:
+        return {"ok": False, "error": "Provide role or name"}
     sp = SpecialistFactory.create(chat_id=chat_id, role_description=role, name=name or None)
     if sp:
         return {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}

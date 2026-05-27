@@ -451,18 +451,23 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 
 <!-- CREATE SPECIALIST MODAL -->
 <div class="modal-overlay" id="createSpecialistModal" style="display:none">
-  <div class="modal" style="max-height:70vh">
-    <button class="modal-close" onclick="document.getElementById('createSpecialistModal').style.display='none'">✕</button>
+  <div class="modal" style="max-height:75vh">
+    <button class="modal-close" onclick="closeCreateModal()">✕</button>
     <h3>🧑‍⚕️ Создать специалиста</h3>
     <p style="font-size:12px;color:var(--hint);margin-bottom:12px">Задай имя и опиши его роль</p>
     <div class="form-group"><label>Имя специалиста</label>
-      <input type="text" id="csName" placeholder="Мастер стоун-терапии, Консультант по ЛФК...">
+      <div style="display:flex;gap:6px">
+        <input type="text" id="csName" placeholder="Напиши имя или нажми ✨" style="flex:1">
+        <button class="btn btn-secondary" onclick="generateFromName()" style="width:auto;padding:10px 14px;flex-shrink:0;font-size:13px">✨</button>
+      </div>
     </div>
     <div class="form-group"><label>Роль / описание</label>
-      <textarea id="csRole" placeholder="Эксперт по спортивному массажу, реабилитолог, мастер стоун-терапии..." rows="2"></textarea>
+      <textarea id="csRole" placeholder="Эксперт по спортивному массажу, реабилитолог..." rows="2"></textarea>
     </div>
-    <button class="btn btn-primary" onclick="createSpecialist()">🧑‍⚕️ Создать</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('createSpecialistModal').style.display='none'">Отмена</button>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button class="btn btn-primary" onclick="createSpecialist()" style="flex:2">🧑‍⚕️ Создать</button>
+      <button class="btn btn-secondary" onclick="createRandomSpecialist()" style="flex:1;font-size:13px">🎲 Случайный</button>
+    </div>
   </div>
 </div>
 
@@ -730,6 +735,9 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 let currentSP = null;
 let spMessages = {};
 
+function getUserId() {
+  try { return tg.initDataUnsafe?.user?.id; } catch(e) { return null; }
+}
 
 async function apiCall(endpoint, data) {
   try {
@@ -738,7 +746,8 @@ async function apiCall(endpoint, data) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data)
     });
-    return await r.json();
+    const txt = await r.text();
+    try { return JSON.parse(txt); } catch(e) { return {ok: false, error: 'Invalid JSON', raw: txt}; }
   } catch(e) {
     return {ok: false, error: 'Network error'};
   }
@@ -753,48 +762,70 @@ const PRESET_SPECIALISTS = [
 ];
 
 async function loadSpecialists() {
-  const uid = tg.initDataUnsafe?.user?.id;
+  const uid = getUserId();
   if (!uid) return;
   const data = await apiCall('/api/specialist/list', {chat_id: uid});
   const el = document.getElementById('specialist-list');
+  if (!el) return;
   if (!data.ok || !data.specialists || data.specialists.length === 0) {
     el.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Пока нет специалистов. Создай первого!</p>';
     return;
   }
-  el.innerHTML = data.specialists.map(s => `
-    <div class="sp-item" onclick="openSpecialistChat('${s.name}')">
+  el.innerHTML = data.specialists.map(s => {
+    const safeName = s.name.replace(/'/g, "\\'");
+    return `<div class="sp-item" onclick="openSpecialistChat('${safeName}')">
       <div class="sp-item-info">
         <div class="sp-item-name">${s.name}</div>
-        <div class="sp-item-role">${s.role}</div>
+        <div class="sp-item-role">${s.role || ''}</div>
       </div>
       <div style="font-size:20px;color:var(--hint)">💬</div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 let allChatItems = [];
 
 async function loadChatList() {
-  const uid = tg.initDataUnsafe?.user?.id;
-  if (!uid) return;
-  const data = await apiCall('/api/specialist/list', {chat_id: uid});
-  const created = (data.ok && data.specialists) ? data.specialists : [];
+  const uid = getUserId();
   allChatItems = [];
+
+  // Всегда показываем пресеты
   PRESET_SPECIALISTS.forEach(p => {
-    allChatItems.push({name: p.name, role: p.role, type: 'preset', exists: created.some(s => s.name === p.name)});
+    allChatItems.push({name: p.name, role: p.role, type: 'preset', exists: false});
   });
-  created.forEach(s => {
-    if (!allChatItems.find(i => i.name === s.name)) {
-      allChatItems.push({name: s.name, role: s.role, type: 'created', exists: true});
+
+  // Если есть uid — загружаем созданных
+  if (uid) {
+    const data = await apiCall('/api/specialist/list', {chat_id: uid});
+    if (data.ok && data.specialists) {
+      data.specialists.forEach(s => {
+        const existing = allChatItems.find(i => i.name === s.name);
+        if (existing) {
+          existing.exists = true;
+        } else {
+          allChatItems.push({name: s.name, role: s.role || '', type: 'created', exists: true});
+        }
+      });
     }
-  });
+  }
+
   renderChatList();
 }
 
 let chatSearchFilter = '';
 
+function getVal(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+function getValOr(id, fallback) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : fallback;
+}
+
 function filterSpecialistList() {
-  chatSearchFilter = document.getElementById('chat-search-input').value.toLowerCase().trim();
+  chatSearchFilter = getVal('chat-search-input');
   renderChatList();
 }
 
@@ -811,25 +842,28 @@ function renderChatList() {
     el.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Ничего не найдено</p>';
     return;
   }
-  el.innerHTML = items.map(i => `
-    <div class="sp-item" onclick="${i.exists ? `openSpecialistChat('${i.name}')` : `createAndOpen('${i.name}', '${i.role}')`}">
+  el.innerHTML = items.map(i => {
+    const safeName = i.name.replace(/'/g, "\\'");
+    const safeRole = (i.role || '').replace(/'/g, "\\'");
+    const action = i.exists ? `openSpecialistChat('${safeName}')` : `createAndOpen('${safeName}', '${safeRole}')`;
+    return `<div class="sp-item" onclick="${action}">
       <div class="sp-item-info">
         <div class="sp-item-name">${i.name}</div>
-        <div class="sp-item-role">${i.role}</div>
+        <div class="sp-item-role">${i.role || ''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         ${i.type === 'preset' && !i.exists ? '<span style="font-size:10px;color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:2px 8px">+</span>' : ''}
         <span style="font-size:20px;color:var(--hint)">${i.exists ? '💬' : '➕'}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 async function createAndOpen(name, role) {
-  const uid = tg.initDataUnsafe?.user?.id;
+  const uid = getUserId();
   if (!uid) return;
   tg.HapticFeedback.impactOccurred('medium');
-  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: role});
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: role || name});
   if (data.ok) {
     tg.showAlert(`✅ Создан: ${data.name}`);
     loadChatList();
@@ -844,18 +878,22 @@ function showCreateSpecialist() {
   document.getElementById('createSpecialistModal').style.display = 'flex';
 }
 
+function closeCreateModal() {
+  document.getElementById('createSpecialistModal').style.display = 'none';
+}
+
 async function createSpecialist() {
-  const name = document.getElementById('csName').value.trim();
-  const role = document.getElementById('csRole').value.trim();
+  const name = getValOr('csName', '');
+  const role = getValOr('csRole', '');
   if (!name && !role) { tg.showAlert('Заполни имя или роль специалиста'); return; }
-  const uid = tg.initDataUnsafe?.user?.id;
+  const uid = getUserId();
   if (!uid) return;
   tg.HapticFeedback.impactOccurred('medium');
-  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: role});
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: role || name});
   if (data.ok) {
-    document.getElementById('createSpecialistModal').style.display = 'none';
-    document.getElementById('csName').value = '';
-    document.getElementById('csRole').value = '';
+    closeCreateModal();
+    const nEl = document.getElementById('csName'); if (nEl) nEl.value = '';
+    const rEl = document.getElementById('csRole'); if (rEl) rEl.value = '';
     tg.showAlert(`✅ Создан специалист: ${data.name}`);
     loadSpecialists();
     loadChatList();
@@ -864,20 +902,71 @@ async function createSpecialist() {
   }
 }
 
+async function generateFromName() {
+  const name = getVal('csName');
+  if (!name) { tg.showAlert('Сначала напиши имя специалиста'); return; }
+  const uid = getUserId();
+  if (!uid) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: name, role: ''});
+  if (data.ok) {
+    closeCreateModal();
+    tg.showAlert(`✅ Создан: ${data.name} — ${data.role}`);
+    loadSpecialists();
+    loadChatList();
+    openSpecialistChat(data.name);
+  } else {
+    tg.showAlert('❌ Ошибка: ' + (data.error || 'Не удалось создать'));
+  }
+}
+
+async function createRandomSpecialist() {
+  const names = [
+    "Мастер интуитивного массажа", "Эксперт по биоэнергетике", "Специалист по звукотерапии",
+    "Мастер краниосакральной терапии", "Эксперт по арома-ЛФК", "Специалист по гидромассажу",
+    "Мастер висцерального массажа", "Консультант по осознанному движению", "Эксперт по фасциальному релизу",
+  ];
+  const roles = [
+    "Интуитивный терапевт, работающий через ощущения тела и дыхание",
+    "Знаток энергетических потоков, снимает блоки без прикосновений",
+    "Использует звук и вибрацию для расслабления мышц и ума",
+    "Специалист по мягкой работе с черепом и крестцом",
+    "Сочетает эфирные масла с лечебной физкультурой",
+    "Мастер водных процедур и подводного массажа",
+    "Работает с внутренними органами через переднюю брюшную стенку",
+    "Помогает почувствовать своё тело через медленные осознанные движения",
+    "Снимает хроническое напряжение через глубокую работу с фасциями",
+  ];
+  const idx = Math.floor(Math.random() * names.length);
+  const uid = getUserId();
+  if (!uid) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  const data = await apiCall('/api/specialist/create', {chat_id: uid, name: names[idx], role: roles[idx]});
+  if (data.ok) {
+    closeCreateModal();
+    tg.showAlert(`🎲 Создан: ${data.name}`);
+    loadSpecialists();
+    loadChatList();
+    openSpecialistChat(data.name);
+  } else {
+    tg.showAlert('❌ Ошибка: ' + (data.error || 'Не удалось создать'));
+  }
+}
+
 function openSpecialistChat(name) {
   currentSP = name;
-  const uid = tg.initDataUnsafe?.user?.id;
-  if (!uid) return;
+  const uid = getUserId();
   document.getElementById('chat-sp-name').textContent = name;
   document.getElementById('chat-sp-role').textContent = 'Печатает...';
   document.getElementById('specialistChatModal').style.display = 'flex';
   document.getElementById('chat-messages').innerHTML = '';
-  if (!spMessages[uid]) spMessages[uid] = {};
-  if (!spMessages[uid][name]) spMessages[uid][name] = [];
-  // display any previous messages
-  spMessages[uid][name].forEach(m => {
-    addMessageToChat(m.role, m.text, name);
-  });
+  if (uid) {
+    if (!spMessages[uid]) spMessages[uid] = {};
+    if (!spMessages[uid][name]) spMessages[uid][name] = [];
+    spMessages[uid][name].forEach(m => {
+      addMessageToChat(m.role, m.text, name);
+    });
+  }
   document.getElementById('chat-input').focus();
 }
 
@@ -888,6 +977,7 @@ function closeSpecialistChat() {
 
 function addMessageToChat(role, text, name) {
   const container = document.getElementById('chat-messages');
+  if (!container) return;
   const bubble = document.createElement('div');
   bubble.className = 'chat-bubble ' + role;
   if (role === 'ai') {
@@ -905,6 +995,7 @@ function addMessageToChat(role, text, name) {
 
 function showTyping() {
   const container = document.getElementById('chat-messages');
+  if (!container) return;
   const bubble = document.createElement('div');
   bubble.className = 'chat-bubble ai';
   bubble.id = 'typing-indicator';
@@ -927,10 +1018,11 @@ function hideTyping() {
 
 async function sendSpecialistMessage() {
   const input = document.getElementById('chat-input');
+  if (!input) return;
   const text = input.value.trim();
   if (!text || !currentSP) return;
   input.value = '';
-  const uid = tg.initDataUnsafe?.user?.id;
+  const uid = getUserId();
   if (!uid) return;
   if (!spMessages[uid]) spMessages[uid] = {};
   if (!spMessages[uid][currentSP]) spMessages[uid][currentSP] = [];
@@ -948,7 +1040,7 @@ async function sendSpecialistMessage() {
 }
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && document.getElementById('specialistChatModal').style.display === 'flex') {
+  if (e.key === 'Enter' && document.getElementById('specialistChatModal')?.style?.display === 'flex') {
     sendSpecialistMessage();
   }
 });
