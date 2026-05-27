@@ -507,12 +507,15 @@ async def _create_and_show_specialist(message: types.Message, chat_id: int, role
     if not specialist:
         await status.edit_text("❌ Не удалось создать специалиста. Попробуй позже.")
         return
-    text = (
-        f"✅ *Создан специалист:* {specialist.name}\n\n"
-        f"📋 *Роль:* {specialist.role_description}\n\n"
-        f"Ты можешь задать ему вопрос прямо сейчас!"
-    )
-    await status.edit_text(text, parse_mode="Markdown")
+
+    lines = [f"✅ *Создан специалист:* {specialist.name}"]
+    if specialist.role_description:
+        lines.append(f"\n📋 *Роль:* {specialist.role_description}")
+    if specialist.skills:
+        lines.append(f"\n🔧 *Навыки:* {specialist.skills}")
+    lines.append(f"\n💬 Задай ему вопрос прямо сейчас!")
+
+    await status.edit_text("\n".join(lines), parse_mode="Markdown")
     user_settings[str(chat_id)]["specialist_chat"] = specialist.name
     save_settings(user_settings)
 
@@ -524,14 +527,13 @@ async def _handle_create_specialist_auto(chat_id: int, role_description: str, me
     if not specialist:
         await message.answer("❌ Не удалось создать специалиста. Попробуй позже.")
         return None
-    text = (
-        f"✅ *Создан специалист:* {specialist.name}\n\n"
-        f"📋 *Роль:* {specialist.role_description}\n\n"
-        f"Ты можешь задать ему вопрос прямо сейчас, "
-        f"написав сообщение после этого.\n\n"
-        f"Или продолжай общение со мной."
-    )
-    await message.answer(text, parse_mode="Markdown")
+    lines = [f"✅ *Создан специалист:* {specialist.name}"]
+    if specialist.role_description:
+        lines.append(f"\n📋 *Роль:* {specialist.role_description}")
+    if specialist.skills:
+        lines.append(f"\n🔧 *Навыки:* {specialist.skills}")
+    lines.append(f"\n💬 Задай ему вопрос прямо сейчас или продолжай общение со мной.")
+    await message.answer("\n".join(lines), parse_mode="Markdown")
     user_settings[str(chat_id)]["specialist_chat"] = specialist.name
     save_settings(user_settings)
     return specialist
@@ -886,6 +888,8 @@ async def handle_text(message: types.Message, bot: Bot):
                 result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=text)
                 if result.is_success():
                     await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
+                    if specialist.message_count == 1:
+                        await message.answer("Отправь `/exit_specialist` чтобы выйти из диалога.")
                 else:
                     await message.answer("❌ Ошибка связи со специалистом.")
                 return
