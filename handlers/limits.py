@@ -13,12 +13,13 @@ from aiogram.types import (
 )
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from config import DATA_DIR
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 # Путь к файлу настроек пользователя
-LIMITS_FILE = "temp/user_limits.json"
+LIMITS_FILE = os.path.join(DATA_DIR, "user_limits.json")
 
 # Дефолтные значения
 DEFAULT_LIMITS = {

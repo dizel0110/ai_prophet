@@ -13,7 +13,7 @@ from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, Inlin
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
 from core.agents.agent_factory import SpecialistFactory, get_specialists, get_specialist, remove_specialist, DynamicSpecialist
-from config import FALLBACK_MODELS, TEMP_DIR, get_base_url
+from config import FALLBACK_MODELS, TEMP_DIR, DATA_DIR, get_base_url
 from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ _quick_replies: dict = {}
 _qr_counter: int = 0
 
 # Путь к файлу настроек
-SETTINGS_FILE = os.path.join(TEMP_DIR, "user_settings.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):

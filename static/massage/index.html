@@ -943,11 +943,14 @@ function showConsultStep() {
     container.appendChild(div);
   } else if (step.type === 'multi_choice') {
     const selected = consultFormAnswers[step.key] || [];
+    const skipLabels = {chronic_diseases: '⏭ Нет заболеваний', temp_contraindications: '⏭ Ничего из перечисленного', contraindications_absolute: '⏭ Ничего из перечисленного'};
+    const skipLabel = skipLabels[step.key] || '⏭ Пропустить';
     div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${(step.options || []).map(o => {
         const isSel = selected.includes(o);
         return `<button class="btn ${isSel ? 'btn-primary' : 'btn-outline'}" style="font-size:12px;margin:0" onclick="toggleConsultMC('${step.key}','${o.replace(/'/g, "\\'")}');showConsultStep()">${isSel ? '✅' : '☐'} ${o}</button>`;
-      }).join('')}</div>`;
+      }).join('')}</div>
+      <button class="btn btn-outline" style="width:100%;margin-top:6px;font-size:12px" onclick="consultFormAnswers['${step.key}']=[];consultStepIndex++;showConsultStep()">${skipLabel}</button>`;
     container.appendChild(div);
   } else if (step.type === 'consent') {
     const val = consultFormAnswers[step.key];

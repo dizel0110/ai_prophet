@@ -5,11 +5,11 @@ from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_ur
 import json
 import os
 import time
-from config import TEMP_DIR
+from config import TEMP_DIR, DATA_DIR
 
 router = Router()
 
-SETTINGS_FILE = os.path.join(TEMP_DIR, "user_settings.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
 
 # Лимиты безопасности
 MAX_FAILED_ATTEMPTS = 3  # Максимум неудачных попыток

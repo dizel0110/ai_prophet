@@ -5,7 +5,7 @@ import logging
 from aiogram import types, Router, F
 from aiogram.filters import Command, BaseFilter
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from config import get_base_url, GEM_BOT_URL, TEMP_DIR
+from config import get_base_url, GEM_BOT_URL, TEMP_DIR, DATA_DIR
 
 from core.agents import (
     MassageConsultationOrchestrator, format_consultation_results,
@@ -22,7 +22,8 @@ router = Router()
 
 class InQuestionnaireFilter(BaseFilter):
     def __init__(self):
-        self.settings_file = os.path.join(TEMP_DIR, "user_settings.json")
+        import config
+        self.settings_file = os.path.join(config.DATA_DIR, "user_settings.json")
 
     async def __call__(self, message: types.Message) -> bool:
         if not os.path.exists(self.settings_file):
@@ -39,7 +40,7 @@ class InQuestionnaireFilter(BaseFilter):
         except Exception:
             return False
 
-SETTINGS_FILE = os.path.join(TEMP_DIR, "user_settings.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
 
 
 def _load_settings():

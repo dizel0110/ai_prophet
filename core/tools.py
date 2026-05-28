@@ -279,7 +279,7 @@ def search_media_content(query: str, media_type: str = 'audio', count: int = 5, 
     from urllib.parse import parse_qs, urlparse
 
     # Загрузка лимитов пользователя
-    limits_file = "temp/user_limits.json"
+    limits_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "user_limits.json")
     if chat_id and os.path.exists(limits_file):
         try:
             with open(limits_file, 'r', encoding='utf-8') as f:
@@ -660,7 +660,7 @@ def download_audio(url: str, chat_id: str = None, title_hint: str = None, max_du
         return None, None, None
 
     # Загрузка лимитов
-    limits_file = "temp/user_limits.json"
+    limits_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "user_limits.json")
     if chat_id and os.path.exists(limits_file):
         try:
             with open(limits_file, 'r', encoding='utf-8') as f:

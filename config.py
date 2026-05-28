@@ -35,7 +35,9 @@ def get_base_url() -> str:
 
 # Директории
 TEMP_DIR = "temp"
-if not os.path.exists(TEMP_DIR): os.makedirs(TEMP_DIR)
+DATA_DIR = "data"
+for d in (TEMP_DIR, DATA_DIR):
+    if not os.path.exists(d): os.makedirs(d)
 
 # АКТУАЛЬНЫЕ МОДЕЛИ (Май 2026)
 FALLBACK_MODELS = [

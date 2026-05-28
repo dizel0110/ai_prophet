@@ -18,7 +18,7 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from config import TOKEN, PORT, PLATFORM
+from config import TOKEN, PORT, PLATFORM, DATA_DIR
 from core.network import apply_dns_patch
 from handlers import messages, vip, limits, massage
 
@@ -191,7 +191,7 @@ async def api_specialist_submit(req: dict):
 
 # ──────────────────── Music Player API ────────────────────
 
-MUSIC_SETTINGS_FILE = os.path.join("temp", "user_music.json")
+MUSIC_SETTINGS_FILE = os.path.join(DATA_DIR, "user_music.json")
 
 
 def _load_music_settings() -> dict:
@@ -205,7 +205,7 @@ def _load_music_settings() -> dict:
 
 
 def _save_music_settings(data: dict):
-    os.makedirs("temp", exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
     try:
         with open(MUSIC_SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -402,18 +402,19 @@ async def start_bot_polling():
     apply_dns_patch()
 
     # Очистка временной папки при старте
-    from config import TEMP_DIR
+    import config as cfg
     import shutil
-    if os.path.exists(TEMP_DIR):
+    os.makedirs(cfg.DATA_DIR, exist_ok=True)
+    if os.path.exists(cfg.TEMP_DIR):
         try:
-            for item in os.listdir(TEMP_DIR):
-                item_path = os.path.join(TEMP_DIR, item)
+            for item in os.listdir(cfg.TEMP_DIR):
+                item_path = os.path.join(cfg.TEMP_DIR, item)
                 if os.path.isfile(item_path): os.remove(item_path)
                 elif os.path.isdir(item_path): shutil.rmtree(item_path)
             logger.info("🧹 Временная папка очищена")
         except Exception as e:
             logger.warning(f"⚠️ Не удалось полностью очистить temp: {e}")
-    else: os.makedirs(TEMP_DIR)
+    else: os.makedirs(cfg.TEMP_DIR)
 
     from aiogram.types import BotCommand
     from config import HF_TOKEN, GEMINI_KEY
