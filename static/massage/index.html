@@ -550,6 +550,18 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
   </div>
 </div>
 
+<!-- SPECIALIST FORM MODAL (структурированный ввод) -->
+<div class="modal-overlay" id="spFormModal" style="display:none">
+  <div class="modal" style="max-height:85vh">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0" id="sp-form-title">📋 Заполните данные</h3>
+      <button class="modal-close" onclick="closeSpFormModal()">✕</button>
+    </div>
+    <div id="sp-form-fields"></div>
+    <button class="btn btn-primary" onclick="submitSpForm()" style="width:100%;margin-top:8px">✉️ Отправить</button>
+  </div>
+</div>
+
 <!-- MUSIC PAGE -->
 <div class="page" id="page-music">
   <div id="music-genre-page">
@@ -1171,23 +1183,109 @@ async function saveEdit() {
   }
 }
 
+// Cache for filled specialist forms: {chatId: {spName: {required: [...], optional: [...]}}}
+let spFormCache = {};
+
 function openSpecialistChat(name) {
+  const u = uid();
   currentSP = name;
+  // Check if specialist has an unfilled structured form
+  if (u && !spFormCache[u]?.[name]) {
+    const sp = allChatItems.find(i => i.name === name);
+    if (sp && sp.communication_schema) {
+      showSpForm(name, sp.communication_schema, u);
+      return;
+    }
+  }
+  openChatDirect(name, u);
+}
+
+function openChatDirect(name, u) {
   qs('chat-sp-name').textContent = name;
   qs('chat-sp-role').textContent = 'Печатает...';
   qs('specialistChatModal').style.display = 'flex';
   qs('chat-messages').innerHTML = '';
-  // Hide edit/delete for built-in agents
   const isBuilt = allChatItems.find(i => i.name === name)?.built_in;
   qs('btn-edit-sp').style.display = isBuilt ? 'none' : '';
   qs('btn-delete-sp').style.display = isBuilt ? 'none' : '';
-  const u = uid();
   if (u) {
     if (!spMessages[u]) spMessages[u] = {};
     if (!spMessages[u][name]) spMessages[u][name] = [];
     spMessages[u][name].forEach(m => addMsg(m.role, m.text, name));
   }
   const inp = qs('chat-input'); if(inp) inp.focus();
+}
+
+function showSpForm(name, schema, u) {
+  qs('sp-form-title').textContent = '📋 ' + name;
+  const html = [];
+  const renderField = (field, group) => {
+    const id = 'spf_' + group + '_' + field.key;
+    const req = group === 'required' ? ' <span style="color:var(--gold)">*</span>' : '';
+    if (field.type === 'select' && field.options) {
+      const opts = field.options.map(o => `<option value="${o}">${o}</option>`).join('');
+      return `<div class="form-group"><label>${field.label}${req}</label><select id="${id}" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box"><option value="">—</option>${opts}</select></div>`;
+    }
+    if (field.type === 'bool') {
+      return `<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="${id}" style="width:18px;height:18px"> ${field.label}${req}</label></div>`;
+    }
+    return `<div class="form-group"><label>${field.label}${req}</label><input type="${field.type === 'number' ? 'number' : 'text'}" id="${id}" placeholder="${field.label}..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box"></div>`;
+  };
+  if (schema.required) schema.required.forEach(f => html.push(renderField(f, 'required')));
+  if (schema.optional && schema.optional.length) {
+    html.push('<div style="font-size:12px;color:var(--hint);margin:8px 0 4px">Необязательные поля</div>');
+    schema.optional.forEach(f => html.push(renderField(f, 'optional')));
+  }
+  qs('sp-form-fields').innerHTML = html.join('');
+  qs('specialistChatModal').style.display = 'none';
+  qs('spFormModal').style.display = 'flex';
+  // Store schema for submission
+  qs('spFormModal').dataset.schema = JSON.stringify(schema);
+  qs('spFormModal').dataset.spName = name;
+}
+
+function closeSpFormModal() { qs('spFormModal').style.display = 'none'; }
+
+async function submitSpForm() {
+  const u = uid();
+  if (!u) return;
+  const name = qs('spFormModal').dataset.spName;
+  const schema = JSON.parse(qs('spFormModal').dataset.schema || '{}');
+  const result = {required: [], optional: []};
+  let missing = false;
+  const collect = (group) => {
+    for (const field of schema[group] || []) {
+      const id = 'spf_' + group + '_' + field.key;
+      const el = qs(id);
+      if (!el) continue;
+      let value;
+      if (field.type === 'bool') value = el.checked ? 'Да' : 'Нет';
+      else if (field.type === 'select') value = el.value === '—' ? '' : el.value;
+      else value = el.value.trim();
+      if (group === 'required' && !value) { missing = true; el.style.borderColor = 'red'; }
+      else if (value) {
+        result[group].push({key: field.key, label: field.label, value, type: field.type});
+      }
+    }
+  };
+  collect('required');
+  collect('optional');
+  if (missing) { tg.showAlert('Заполни все обязательные поля'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  closeSpFormModal();
+  if (!spFormCache[u]) spFormCache[u] = {};
+  spFormCache[u][name] = result;
+  const d = await api('/api/specialist/submit', {chat_id: u, name, structured_data: result, message: 'Начинаем консультацию'});
+  openChatDirect(name, u);
+  if (d.ok) {
+    if (!spMessages[u]) spMessages[u] = {};
+    if (!spMessages[u][name]) spMessages[u][name] = [];
+    spMessages[u][name].push({role: 'ai', text: d.response});
+    addMsg('ai', d.response, d.name || name);
+  } else {
+    addMsg('ai', '❌ ' + (d.error || 'Не удалось получить ответ'));
+  }
+  qs('chat-input').value = '';
 }
 
 function closeSpecialistChat() { qs('specialistChatModal').style.display='none'; currentSP=null; }

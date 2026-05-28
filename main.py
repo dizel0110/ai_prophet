@@ -102,13 +102,16 @@ async def api_specialist_list(req: dict):
     result = []
     for s in sps:
         is_built = s.name.lower() in built_names
-        result.append({
+        item = {
             "name": s.name,
             "role": s.role_description,
             "skills": s.skills,
             "built_in": is_built,
             "badge": next((b["badge"] for b in BUILT_IN_AGENTS if b["name"].lower() == s.name.lower()), "🛠️"),
-        })
+        }
+        if not is_built and hasattr(s, "communication_schema") and s.communication_schema:
+            item["communication_schema"] = s.communication_schema
+        result.append(item)
     return {"ok": True, "specialists": result}
 
 @app.post("/api/specialist/create")
@@ -123,7 +126,10 @@ async def api_specialist_create(req: dict):
         return {"ok": False, "error": "Provide role or name"}
     sp = SpecialistFactory.create(chat_id=chat_id, role_description=role, name=name or None)
     if sp:
-        return {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}
+        result = {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}
+        if hasattr(sp, "communication_schema") and sp.communication_schema:
+            result["communication_schema"] = sp.communication_schema
+        return result
     return {"ok": False, "error": "Failed to create specialist"}
 
 @app.post("/api/specialist/delete")
@@ -151,6 +157,36 @@ async def api_specialist_edit(req: dict):
         return {"ok": False, "error": "Provide new_name or new_role"}
     ok = update_specialist(chat_id, old_name, new_name, new_role)
     return {"ok": ok}
+
+
+@app.post("/api/specialist/submit")
+async def api_specialist_submit(req: dict):
+    from core.agents.agent_factory import SpecialistFactory, get_specialist
+    chat_id = req.get("chat_id")
+    name = req.get("name", "")
+    structured_data = req.get("structured_data", {})
+    user_message = req.get("message", "")
+    if not chat_id or not name:
+        return {"ok": False, "error": "Missing chat_id or name"}
+    specialist = get_specialist(chat_id, name)
+    if not specialist:
+        return {"ok": False, "error": f"Specialist '{name}' not found"}
+    # Build context from structured data
+    context_parts = []
+    for group in ("required", "optional"):
+        for field in structured_data.get(group, []):
+            label = field.get("label", field.get("key", ""))
+            value = field.get("value", "")
+            if value:
+                context_parts.append(f"{label}: {value}")
+    context_str = "\n".join(context_parts) if context_parts else ""
+    full_message = user_message
+    if context_str:
+        full_message = f"[Анкета клиента]\n{context_str}\n\n[Сообщение]\n{user_message}" if user_message else f"[Анкета клиента]\n{context_str}"
+    result = SpecialistFactory.chat(chat_id, specialist, full_message)
+    if result.is_success():
+        return {"ok": True, "response": result.content, "name": result.agent_name}
+    return {"ok": False, "error": "AI engine failed"}
 
 
 # ──────────────────── Music Player API ────────────────────

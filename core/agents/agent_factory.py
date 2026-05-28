@@ -26,14 +26,23 @@ class DynamicSpecialist:
     message_count: int = 0
     skills: str = ""
     client_memory: str = ""
+    communication_schema: Optional[dict] = None
 
     def to_dict(self) -> dict:
-        return {**asdict(self), "__type__": "DynamicSpecialist"}
+        d = asdict(self)
+        d["__type__"] = "DynamicSpecialist"
+        if self.communication_schema is not None:
+            d["communication_schema"] = self.communication_schema
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "DynamicSpecialist":
         d.pop("__type__", None)
-        return cls(**{k: v for k, v in d.items() if k in cls.__annotations__})
+        schema = d.pop("communication_schema", None)
+        valid = {k: v for k, v in d.items() if k in cls.__annotations__}
+        sp = cls(**valid)
+        sp.communication_schema = schema
+        return sp
 
 
 UNIVERSAL_CONSULTANT_NAME = "Мастер-консультант"
@@ -216,8 +225,58 @@ class SpecialistFactory:
                 chat_id=chat_id,
             )
 
+        # Generate communication schema from role
+        specialist.communication_schema = cls._generate_schema(specialist)
+
         _save_specialist(specialist)
         return specialist
+
+    @classmethod
+    def _generate_schema(cls, specialist: DynamicSpecialist) -> Optional[dict]:
+        if specialist.name == UNIVERSAL_CONSULTANT_NAME:
+            return None
+        default_schema = {
+            "required": [
+                {"key": "complaint", "label": "Основная жалоба / запрос", "type": "text"}
+            ],
+            "optional": [
+                {"key": "details", "label": "Подробности", "type": "text"}
+            ]
+        }
+        prompt = f"""Специалист: "{specialist.name}"
+Роль: "{specialist.role_description}"
+
+Сгенерируй структуру общения для этого специалиста — какие поля обязательны и необязательны для сбора информации перед консультацией.
+
+Допустимые типы полей: text, number, select, bool, photo, video
+Для select обязательно укажи список options.
+
+Ответь ТОЛЬКО JSON без пояснений:
+{{
+  "required": [
+    {{"key": "поле1", "label": "Вопрос пользователю", "type": "text"}},
+    ...
+  ],
+  "optional": [
+    {{"key": "поле2", "label": "Вопрос пользователю", "type": "select", "options": ["вар1","вар2"]}},
+    ...
+  ]
+}}
+
+Минимум 1 required, максимум 5 required + 5 optional. На русском языке."""
+        try:
+            text = cls._call_llm(prompt, "Ты — конструктор анкет. Отвечай только JSON.")
+            if not text:
+                return default_schema
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start >= 0 and end > start:
+                data = json.loads(text[start:end])
+                if data.get("required") or data.get("optional"):
+                    return data
+        except Exception:
+            pass
+        return default_schema
 
     @classmethod
     def _extract_memory(cls, text: str) -> str:
