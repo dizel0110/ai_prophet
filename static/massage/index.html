@@ -555,8 +555,10 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
         <div style="font-size:11px;color:var(--gold);font-weight:600" id="music-track-total-dur"></div>
       </div>
       <div id="music-track-list" class="music-track-list"></div>
-      <div style="margin-top:12px;display:flex;gap:6px;display:none" id="music-track-actions">
-        <button class="btn btn-secondary" onclick="saveCurrentPlaylist()" style="width:auto;padding:8px 14px;min-width:0;font-size:12px;flex:1;margin:0">💾 Сохранить плейлист</button>
+      <div style="margin-top:12px;display:flex;gap:6px;display:none;flex-wrap:wrap" id="music-track-actions">
+        <button class="btn btn-secondary" onclick="saveCurrentPlaylist()" style="width:auto;padding:8px 14px;min-width:0;font-size:12px;flex:1;margin:0">💾 Сохранить</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('uploadAudioInput').click()" style="width:auto;padding:8px 14px;min-width:0;font-size:12px;flex:1;margin:0">📤 Моя музыка</button>
+        <input type="file" id="uploadAudioInput" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac,.wma,.opus" style="display:none" onchange="uploadUserAudio(this)">
       </div>
     </div>
   </div>
@@ -570,6 +572,11 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
       <button class="modal-close" onclick="closeMusicPlaylists()">✕</button>
     </div>
     <div id="music-playlist-list"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="exportPlaylists()" style="flex:1;min-width:0;font-size:12px">📤 Экспорт</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importPlaylistInput').click()" style="flex:1;min-width:0;font-size:12px">📥 Импорт</button>
+    </div>
+    <input type="file" id="importPlaylistInput" accept=".json,application/json" style="display:none" onchange="importPlaylists(this)">
   </div>
 </div>
 
@@ -879,12 +886,9 @@ let _chatListHandler = null;
 function uid() {
   try {
     const id = tg.initDataUnsafe?.user?.id;
-    if (id) return id;
+    if (typeof id === 'number') return id;
   } catch(e) {}
-  // Fallback for non-Telegram environments
-  let id = localStorage.getItem('_uid');
-  if (!id) { id = 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); localStorage.setItem('_uid', id); }
-  return id;
+  return null;
 }
 
 function qs(id) { const e = document.getElementById(id); return e ? e : null; }
@@ -1288,8 +1292,8 @@ function renderTrackList() {
     `<div class="music-track-item ${i === currentTrackIndex ? 'playing' : ''}" onclick="playTrack(${i})">
       <div class="music-track-num">${i === currentTrackIndex ? '🔊' : (i + 1)}</div>
       <div class="music-track-info">
-        <div class="music-track-title">${t.title || 'Без названия'}</div>
-        <div class="music-track-dur">${t.artist || ''}${t.duration ? ' · ' + formatTime(t.duration) : ''}</div>
+        <div class="music-track-title">${(t.source === 'upload' ? '📤 ' : '')}${t.title || 'Без названия'}</div>
+        <div class="music-track-dur">${t.artist || ''}${t.duration ? ' · ' + formatTime(t.duration) : ''}${t.source === 'upload' ? ' · Моё' : ''}</div>
       </div>
       <div class="music-track-play">${i === currentTrackIndex ? '⏸' : '▶'}</div>
     </div>`
@@ -1301,6 +1305,14 @@ function showMusicGenres() {
   qs('music-genre-page').style.display = 'block';
   currentTrackIndex = -1;
   qs('music-track-actions').style.display = 'none';
+}
+
+function removeTrackFromPlaylist(index) {
+  if (index < 0 || index >= musicTracks.length) return;
+  musicTracks.splice(index, 1);
+  if (currentTrackIndex >= musicTracks.length) currentTrackIndex = -1;
+  if (index <= currentTrackIndex) currentTrackIndex--;
+  renderTrackList();
 }
 
 function formatTime(s) {
@@ -1317,7 +1329,14 @@ function playTrack(index) {
   currentTrackIndex = index;
   const audio = qs('player-audio');
   audio.src = t.url;
-  audio.play().catch(() => {});
+  audio.play().catch(() => {
+    if (t.source === 'upload') {
+      tg.showAlert('❌ Файл больше недоступен на сервере. Загрузи его снова через 📤 Моя музыка.');
+    } else {
+      tg.showAlert('❌ Не удалось воспроизвести трек. Возможно, ссылка устарела.');
+    }
+    removeTrackFromPlaylist(index);
+  });
   qs('player-track-title').textContent = t.title || 'Без названия';
   qs('player-track-artist').textContent = t.artist || '';
   qs('player-play-btn').textContent = '⏸';
@@ -1410,12 +1429,39 @@ function closePlayer() {
 async function saveCurrentPlaylist() {
   if (musicTracks.length === 0) { tg.showAlert('Нет треков для сохранения'); return; }
   const u = uid();
+  if (!u) { tg.showAlert('💾 Открой Mini App в Telegram, чтобы сохранять плейлисты в облако'); return; }
   tg.HapticFeedback.impactOccurred('medium');
   const name = prompt('Название плейлиста:', 'Мой плейлист');
   if (!name) return;
   const d = await api('/api/music/save_playlist', {chat_id: u, name: name, tracks: musicTracks});
   if (d.ok) tg.showAlert('✅ Плейлист сохранён: ' + name);
   else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
+}
+
+async function uploadUserAudio(input) {
+  const u = uid();
+  if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); input.value = ''; return; }
+  const file = input.files[0];
+  if (!file) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  qs('music-track-count').textContent = '📤 Загрузка...';
+  const fd = new FormData();
+  fd.append('chat_id', u);
+  fd.append('file', file);
+  try {
+    const r = await fetch('/api/music/upload', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (d.ok && d.track) {
+      musicTracks.push(d.track);
+      renderTrackList();
+      tg.showAlert(`✅ «${d.track.title}» добавлен в плейлист`);
+    } else {
+      tg.showAlert('❌ ' + (d.error || 'Ошибка загрузки'));
+    }
+  } catch(e) {
+    tg.showAlert('❌ Ошибка сети при загрузке');
+  }
+  input.value = '';
 }
 
 async function showAiPlaylistModal() {
@@ -1496,6 +1542,45 @@ async function deletePlaylist(index) {
   const d = await api('/api/music/delete_playlist', {chat_id: u, index: index});
   if (d.ok) { showSavedPlaylists(); tg.showAlert('✅ Плейлист удалён'); }
   else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
+}
+
+async function exportPlaylists() {
+  const u = uid();
+  if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
+  const d = await api('/api/music/playlists', {chat_id: u});
+  if (!d.ok || !d.playlists || !d.playlists.length) { tg.showAlert('Нет плейлистов для экспорта'); return; }
+  const blob = new Blob([JSON.stringify({chat_id: u, exported: new Date().toISOString(), playlists: d.playlists}, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const fname = `ai_prophet_playlists_${u}.json`;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  tg.HapticFeedback.notificationOccurred('success');
+  tg.showAlert(`✅ Файл «${fname}» сохранён на твоё устройство.\n\nЧтобы восстановить плейлисты после сброса — нажми 📥 Импорт и выбери этот файл.\n\nТакже ты можешь сохранить и скачать плейлисты через бота: отправь /playlist в чате с AI Prophet.`);
+}
+
+async function importPlaylists(input) {
+  const u = uid();
+  if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.playlists || !Array.isArray(data.playlists) || !data.playlists.length) {
+      tg.showAlert('❌ Файл не содержит плейлистов'); return;
+    }
+    tg.HapticFeedback.impactOccurred('medium');
+    const r = await api('/api/music/import_playlists', {chat_id: u, playlists: data.playlists});
+    if (r.ok) { tg.showAlert(`✅ Импортировано ${r.count || data.playlists.length} плейлистов`); showSavedPlaylists(); }
+    else tg.showAlert('❌ ' + (r.error || 'Ошибка импорта'));
+  } catch(e) {
+    tg.showAlert('❌ Неверный формат файла');
+  }
+  input.value = '';
 }
 
 // Version stamp for production verification

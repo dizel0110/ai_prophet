@@ -14,8 +14,10 @@ import uvicorn
 from datetime import datetime
 from pathlib import Path
 from aiogram import Bot, Dispatcher
-from fastapi import FastAPI
+import uuid
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from config import TOKEN, PORT, PLATFORM
 from core.network import apply_dns_patch
 from handlers import messages, vip, limits, massage
@@ -253,6 +255,64 @@ async def api_music_delete_playlist(req: dict):
         _save_music_settings(data)
         return {"ok": True}
     return {"ok": False, "error": "Invalid index"}
+
+
+@app.post("/api/music/import_playlists")
+async def api_music_import_playlists(req: dict):
+    chat_id = str(req.get("chat_id", ""))
+    playlists = req.get("playlists", [])
+    if not chat_id or not playlists:
+        return {"ok": False, "error": "Missing chat_id or playlists"}
+    data = _load_music_settings()
+    if chat_id not in data:
+        data[chat_id] = {}
+    existing = data[chat_id].get("playlists", [])
+    imported = 0
+    for pl in playlists:
+        name = pl.get("name", "Импорт")
+        tracks = pl.get("tracks", [])
+        if not tracks:
+            continue
+        existing.append({"name": name, "tracks": tracks})
+        imported += 1
+    data[chat_id]["playlists"] = existing
+    _save_music_settings(data)
+    return {"ok": True, "count": imported}
+
+
+USER_AUDIO_DIR = os.path.join("user_audio")
+
+@app.post("/api/music/upload")
+async def api_music_upload(chat_id: str = Form(...), file: UploadFile = File(...)):
+    if not chat_id or not file:
+        return {"ok": False, "error": "Missing chat_id or file"}
+    if not file.filename:
+        return {"ok": False, "error": "Empty filename"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma", ".opus"):
+        return {"ok": False, "error": "Unsupported format. Use mp3, wav, ogg, flac, m4a, aac, wma, opus"}
+    user_dir = os.path.join(USER_AUDIO_DIR, chat_id)
+    os.makedirs(user_dir, exist_ok=True)
+    file_id = str(uuid.uuid4())[:8]
+    safe_name = f"{file_id}{ext}"
+    path = os.path.join(user_dir, safe_name)
+    content = await file.read()
+    with open(path, "wb") as f:
+        f.write(content)
+    title = os.path.splitext(file.filename)[0]
+    url = f"/api/music/user_audio/{chat_id}/{safe_name}"
+    return {"ok": True, "track": {"title": title, "url": url, "source": "upload", "file_id": file_id}}
+
+
+@app.get("/api/music/user_audio/{chat_id}/{filename}")
+async def serve_user_audio(chat_id: str, filename: str):
+    import re
+    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", filename):
+        return {"ok": False, "error": "Invalid filename"}
+    path = os.path.join(USER_AUDIO_DIR, chat_id, filename)
+    if not os.path.exists(path):
+        return {"ok": False, "error": "File not found"}
+    return FileResponse(path, media_type="audio/mpeg")
 
 
 def start_web():
