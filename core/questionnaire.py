@@ -27,14 +27,10 @@ load_steps()
 
 
 def get_step_keys():
-    """All possible field keys across all steps and their children."""
+    """All possible field keys across all steps."""
     keys = set()
     for step in QUESTIONNAIRE_STEPS + QUESTIONNAIRE_STEPS_OPTIONAL:
-        if step["type"] == "group":
-            for child in step.get("children", []):
-                keys.add(child["key"])
-        else:
-            keys.add(step["key"])
+        keys.add(step["key"])
     return keys
 
 
@@ -68,6 +64,7 @@ class MassageQuestionnaire:
     doctor_diagnosis: str = ""
 
     # Vitals
+    blood_pressure: str = ""
     blood_pressure_systolic: int = 0
     blood_pressure_diastolic: int = 0
     pulse: int = 0
@@ -75,6 +72,7 @@ class MassageQuestionnaire:
 
     # Contraindications
     contraindications_absolute: List[str] = field(default_factory=list)
+    temp_contraindications: List[str] = field(default_factory=list)
     is_pregnant: bool = False
     has_fever: bool = False
     has_inflammation: bool = False
@@ -144,6 +142,15 @@ class MassageQuestionnaire:
         lines.append("")
 
         lines.append("=== ВИТАЛЬНЫЕ ПОКАЗАТЕЛИ ===")
+        bp = self.blood_pressure.strip()
+        if bp and "/" in bp:
+            parts = bp.split("/")
+            try:
+                lines.append(f"АД: {int(parts[0])}/{int(parts[1])}")
+            except ValueError:
+                lines.append(f"АД: {bp}")
+        elif bp:
+            lines.append(f"АД: {bp}")
         if self.blood_pressure_systolic or self.blood_pressure_diastolic:
             lines.append(f"АД: {self.blood_pressure_systolic}/{self.blood_pressure_diastolic}")
         if self.pulse: lines.append(f"Пульс: {self.pulse} уд/мин")
@@ -153,10 +160,15 @@ class MassageQuestionnaire:
         lines.append("=== ПРОТИВОПОКАЗАНИЯ ===")
         if self.contraindications_absolute:
             lines.append(f"Абсолютные: {', '.join(self.contraindications_absolute)}")
-        lines.append(f"Беременность: {'Да' if self.is_pregnant else 'Нет'}")
-        lines.append(f"Температура/лихорадка: {'Да' if self.has_fever else 'Нет'}")
-        lines.append(f"Воспаление/обострение: {'Да' if self.has_inflammation else 'Нет'}")
-        if self.recent_surgery: lines.append(f"Недавние операции: {self.recent_surgery}")
+        tc = list(self.temp_contraindications)
+        if "Беременность" in tc: lines.append(f"Беременность: Да")
+        elif self.is_pregnant: lines.append("Беременность: Да")
+        if "Температура/лихорадка" in tc: lines.append("Температура/лихорадка: Да")
+        elif self.has_fever: lines.append("Температура/лихорадка: Да")
+        if "Воспаление/обострение" in tc: lines.append("Воспаление/обострение: Да")
+        elif self.has_inflammation: lines.append("Воспаление/обострение: Да")
+        if "Недавние операции/травмы" in tc: lines.append("Недавние операции/травмы: Да")
+        elif self.recent_surgery: lines.append(f"Недавние операции: {self.recent_surgery}")
         lines.append(f"Информированное согласие: {'✅ Да' if self.informed_consent else 'Нет'}")
         lines.append("")
 

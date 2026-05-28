@@ -692,17 +692,12 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 
 <!-- CONSULTATION FORM MODAL -->
 <div class="modal-overlay" id="consultModal">
-  <div class="modal" style="max-height:85vh">
+  <div class="modal" style="max-height:88vh">
     <button class="modal-close" onclick="hideConsultForm()">✕</button>
-    <h3>📝 Анкета AI-консультации</h3>
-    <p style="font-size:12px;color:var(--hint);margin-bottom:12px">По стандарту Школы Мастеров Массажа</p>
+    <h3>📝 Анкета</h3>
+    <div id="consultProgress" style="margin-bottom:12px"></div>
     <div id="consultFormDynamic"></div>
-    <div id="consultOptionalToggle" style="display:none;margin:8px 0">
-      <button class="btn btn-secondary" onclick="toggleConsultOptional()" style="width:100%;font-size:12px">➕ Дополнительные детали</button>
-    </div>
-    <div id="consultOptionalFields" style="display:none"></div>
-    <button class="btn btn-primary" onclick="submitConsultForm()" style="margin-top:8px">📩 Отправить боту</button>
-    <button class="btn btn-secondary" onclick="hideConsultForm()">Отмена</button>
+    <div id="consultNavButtons" style="display:flex;gap:8px;margin-top:12px"></div>
   </div>
 </div>
 
@@ -774,7 +769,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     <span class="tab-label">AI</span>
     <span class="tab-indicator"></span>
   </button>
-  <button class="tab" data-page="chat" onclick="navigate('chat'); loadChatList()">
+  <button class="tab" data-page="chat" onclick="navigate('chat'); loadSpecialists(); loadChatList()">
     <span class="tab-icon">💬</span>
     <span class="tab-label">Чат</span>
     <span class="tab-indicator"></span>
@@ -861,9 +856,17 @@ function startConsultation() {
 }
 
 let consultSteps = null;
+let consultStepIndex = 0;
+let consultFormAnswers = {};
+let consultShowingOptional = false;
+let consultMCSelected = [];
 
 function openConsultForm() {
   tg.HapticFeedback.impactOccurred('medium');
+  consultStepIndex = 0;
+  consultFormAnswers = {};
+  consultShowingOptional = false;
+  consultMCSelected = [];
   document.getElementById('consultModal').classList.add('show');
   loadConsultSteps();
 }
@@ -873,158 +876,237 @@ function hideConsultForm() {
 }
 
 async function loadConsultSteps() {
-  if (consultSteps) { renderConsultForm(); return; }
+  if (consultSteps) { showConsultStep(); return; }
   try {
     const r = await fetch('/api/questionnaire/steps_full');
     consultSteps = await r.json();
   } catch(e) {
     consultSteps = null;
   }
-  renderConsultForm();
+  showConsultStep();
 }
 
-function renderConsultForm() {
+function getConsultAllSteps() {
+  if (!consultSteps) return [];
+  return consultShowingOptional
+    ? (consultSteps.optional || [])
+    : (consultSteps.required || []);
+}
+
+function showConsultStep() {
   const container = document.getElementById('consultFormDynamic');
+  const nav = document.getElementById('consultNavButtons');
+  const progress = document.getElementById('consultProgress');
   container.innerHTML = '';
-  const optContainer = document.getElementById('consultOptionalFields');
-  optContainer.innerHTML = '';
-  document.getElementById('consultOptionalToggle').style.display = 'none';
+  nav.innerHTML = '';
+  progress.innerHTML = '';
 
   if (!consultSteps) {
-    container.innerHTML = '<p style="color:var(--hint);font-size:13px">⚠️ Не удалось загрузить анкету. Попробуй позже.</p>';
+    container.innerHTML = '<p style="color:var(--hint);font-size:13px;text-align:center">⚠️ Не удалось загрузить анкету. Попробуй позже.</p>';
     return;
   }
 
-  const all = [...consultSteps.required, ...consultSteps.optional];
-  all.forEach(s => {
-    const div = document.createElement('div');
-    div.className = 'form-group';
-    div.setAttribute('data-step-key', s.key);
+  const all = getConsultAllSteps();
 
-    if (s.type === 'group') {
-      const full = [...(consultSteps.required || []), ...(consultSteps.optional || [])].find(x => x.key === s.key);
-      const children = (full && full.children) || [];
-      div.innerHTML = `<label>${s.question}</label>`;
-      children.forEach(c => {
-        const childDiv = document.createElement('div');
-        childDiv.style.marginTop = '4px';
-        const inputId = 'cf_' + c.key;
-        if (c.type === 'number') {
-          childDiv.innerHTML = `<span style="font-size:11px;color:var(--hint)">${c.label}</span><input type="number" id="${inputId}" placeholder="${c.label}" style="font-size:13px">`;
-        } else if (c.type === 'choice') {
-          childDiv.innerHTML = `<span style="font-size:11px;color:var(--hint)">${c.label}</span><select id="${inputId}"><option value="">Выберите</option>${(c.options||[]).map(o => `<option>${o}</option>`).join('')}</select>`;
-        } else {
-          childDiv.innerHTML = `<span style="font-size:11px;color:var(--hint)">${c.label}</span><input type="text" id="${inputId}" placeholder="${c.label}" style="font-size:13px">`;
-        }
-        div.appendChild(childDiv);
-      });
-    } else if (s.type === 'choice') {
-      const opts = (s.options || []).map(o => `<option>${o}</option>`).join('');
-      div.innerHTML = `<label>${s.question}</label><select id="cf_${s.key}"><option value="">Выберите</option>${opts}</select>`;
-    } else if (s.type === 'multi_choice') {
-      div.innerHTML = `<label>${s.question}</label>`;
-      const mcDiv = document.createElement('div');
-      mcDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:4px';
-      (s.options || []).forEach(o => {
-        const cbId = 'cf_mc_' + s.key + '_' + o.replace(/[^a-zA-Zа-яА-Я0-9]/g, '_');
-        const lbl = document.createElement('label');
-        lbl.style.cssText = 'font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer';
-        lbl.innerHTML = `<input type="checkbox" id="${cbId}" value="${o}"> ${o}`;
-        mcDiv.appendChild(lbl);
-      });
-      div.appendChild(mcDiv);
-    } else if (s.type === 'consent') {
-      div.innerHTML = `<label>${s.question}</label>
-        <div style="margin-top:4px">
-          <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
-            <input type="checkbox" id="cf_${s.key}"> ✅ Я подтверждаю
-          </label>
-        </div>`;
-    } else if (s.type === 'text') {
-      div.innerHTML = `<label>${s.question}</label><textarea id="cf_${s.key}" placeholder="Введите ответ" style="min-height:48px"></textarea>`;
-    } else if (s.type === 'number') {
-      div.innerHTML = `<label>${s.question}</label><input type="number" id="cf_${s.key}" placeholder="0">`;
-    }
+  // Если не на обязательных — показать интерстициал после обязательных
+  if (!consultShowingOptional && consultStepIndex >= (consultSteps.required || []).length) {
+    showOptionalInterstitial(container, nav, progress);
+    return;
+  }
 
-    if (s.required) {
-      container.appendChild(div);
-    } else {
-      optContainer.appendChild(div);
-      document.getElementById('consultOptionalToggle').style.display = 'block';
-    }
-  });
+  if (consultShowingOptional && consultStepIndex >= (consultSteps.optional || []).length) {
+    submitConsultForm();
+    return;
+  }
+
+  const step = all[consultStepIndex];
+  const total = all.length;
+  const idx = consultStepIndex;
+
+  // Progress
+  progress.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <span style="font-size:12px;color:var(--hint)">${idx + 1} / ${total}</span>
+    <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+      <div style="width:${((idx + 1) / total) * 100}%;height:100%;background:var(--gold);border-radius:2px;transition:width .3s"></div>
+    </div>
+  </div>`;
+
+  // Question
+  const div = document.createElement('div');
+  div.className = 'form-group';
+
+  if (step.type === 'choice') {
+    div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+      <div style="display:flex;flex-direction:column;gap:6px">${(step.options || []).map(o =>
+        `<button class="btn ${consultFormAnswers[step.key] === o ? 'btn-primary' : 'btn-outline'}" style="text-align:left;margin:0" onclick="selectConsultChoice('${step.key}','${o.replace(/'/g, "\\'")}');renderConsultNav()">${o}</button>`
+      ).join('')}</div>`;
+    container.appendChild(div);
+  } else if (step.type === 'multi_choice') {
+    const selected = consultFormAnswers[step.key] || [];
+    div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${(step.options || []).map(o => {
+        const isSel = selected.includes(o);
+        return `<button class="btn ${isSel ? 'btn-primary' : 'btn-outline'}" style="font-size:12px;margin:0" onclick="toggleConsultMC('${step.key}','${o.replace(/'/g, "\\'")}');showConsultStep()">${isSel ? '✅' : '☐'} ${o}</button>`;
+      }).join('')}</div>`;
+    container.appendChild(div);
+  } else if (step.type === 'consent') {
+    const val = consultFormAnswers[step.key];
+    div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+      <div style="display:flex;gap:8px">${['Да', 'Нет'].map(o => {
+        const isSel = val === (o === 'Да');
+        return `<button class="btn ${isSel ? 'btn-primary' : 'btn-outline'}" style="flex:1;margin:0" onclick="selectConsultChoice('${step.key}',${o === 'Да'});renderConsultNav()">${o === 'Да' ? '✅ Подтверждаю' : '❌ Отказываюсь'}</button>`;
+      }).join('')}</div>`;
+    container.appendChild(div);
+  } else if (step.type === 'text') {
+    div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+      <textarea id="cf_input" placeholder="Напишите ответ" style="min-height:60px;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;resize:vertical">${consultFormAnswers[step.key] || ''}</textarea>`;
+    container.appendChild(div);
+  } else if (step.type === 'number') {
+    div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+      <input type="number" id="cf_input" placeholder="0" value="${consultFormAnswers[step.key] ?? ''}" style="width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">`;
+    container.appendChild(div);
+  }
+
+  // Nav buttons
+  renderConsultNav();
 }
 
-let consultOptionalVisible = false;
-function toggleConsultOptional() {
-  consultOptionalVisible = !consultOptionalVisible;
-  document.getElementById('consultOptionalFields').style.display = consultOptionalVisible ? 'block' : 'none';
-  const btn = document.querySelector('#consultOptionalToggle button');
-  if (btn) btn.textContent = consultOptionalVisible ? '➖ Скрыть детали' : '➕ Дополнительные детали';
+function showOptionalInterstitial(container, nav, progress) {
+  progress.innerHTML = '<div style="height:4px;background:var(--border);border-radius:2px"><div style="width:100%;height:100%;background:var(--gold);border-radius:2px"></div></div>';
+  container.innerHTML = `<div style="text-align:center;padding:20px 0">
+    <div style="font-size:40px;margin-bottom:12px">✅</div>
+    <p style="font-size:16px;font-weight:600;color:var(--gold-dark)">Основная анкета заполнена!</p>
+    <p style="font-size:13px;color:var(--hint);margin-top:8px">Хотите добавить дополнительные сведения? Это поможет точнее подобрать массаж.</p>
+  </div>`;
+  nav.innerHTML = `
+    <button class="btn btn-secondary" onclick="hideConsultForm()" style="flex:1">📋 Закончить</button>
+    <button class="btn btn-primary" onclick="startConsultOptional()" style="flex:1">➕ Добавить детали</button>`;
 }
 
-function getConsultFormData() {
-  const data = {};
-  if (!consultSteps) return data;
+function startConsultOptional() {
+  consultShowingOptional = true;
+  consultStepIndex = 0;
+  showConsultStep();
+}
 
-  const all = [...consultSteps.required, ...consultSteps.optional];
-  all.forEach(s => {
-    if (s.type === 'group') {
-      const full = [...(consultSteps.required || []), ...(consultSteps.optional || [])].find(x => x.key === s.key);
-      const children = (full && full.children) || [];
-      children.forEach(c => {
-        const el = document.getElementById('cf_' + c.key);
-        if (el) {
-          if (c.type === 'number') data[c.key] = el.value ? Number(el.value) : 0;
-          else data[c.key] = el.value;
-        }
-      });
-    } else if (s.type === 'multi_choice') {
-      const selected = [];
-      (s.options || []).forEach(o => {
-        const cbId = 'cf_mc_' + s.key + '_' + o.replace(/[^a-zA-Zа-яА-Я0-9]/g, '_');
-        const cb = document.getElementById(cbId);
-        if (cb && cb.checked) selected.push(o);
-      });
-      data[s.key] = selected;
-    } else if (s.type === 'consent') {
-      const el = document.getElementById('cf_' + s.key);
-      data[s.key] = !!(el && el.checked);
-    } else {
-      const el = document.getElementById('cf_' + s.key);
-      if (el) {
-        if (s.type === 'number') data[s.key] = el.value ? Number(el.value) : 0;
-        else data[s.key] = el.value;
+function renderConsultNav() {
+  const nav = document.getElementById('consultNavButtons');
+  const all = getConsultAllSteps();
+  const step = all[consultStepIndex];
+  if (!step) return;
+
+  const isLast = consultShowingOptional
+    ? consultStepIndex >= (consultSteps.optional || []).length - 1
+    : consultStepIndex >= (consultSteps.required || []).length - 1;
+
+  nav.innerHTML = '';
+
+  // Назад
+  if (consultStepIndex > 0 || consultShowingOptional) {
+    const back = document.createElement('button');
+    back.className = 'btn btn-secondary';
+    back.style.flex = '1';
+    back.textContent = '← Назад';
+    back.onclick = () => {
+      saveCurrentStep();
+      if (consultStepIndex === 0 && consultShowingOptional) {
+        consultShowingOptional = false;
+        consultStepIndex = (consultSteps.required || []).length;
+        showConsultStep();
+      } else {
+        consultStepIndex--;
+        showConsultStep();
       }
+    };
+    nav.appendChild(back);
+  }
+
+  // Далее / Готово
+  const next = document.createElement('button');
+  next.className = 'btn btn-primary';
+  next.style.flex = '1';
+
+  if (step.type === 'choice' || step.type === 'consent') {
+    if (consultFormAnswers[step.key] !== undefined && consultFormAnswers[step.key] !== '') {
+      next.textContent = isLast ? '✅ Готово' : 'Далее →';
+      next.onclick = () => { consultStepIndex++; showConsultStep(); };
+    } else {
+      next.textContent = 'Выберите вариант';
+      next.style.opacity = '0.5';
+      next.style.pointerEvents = 'none';
     }
-  });
-  return data;
+  } else if (step.type === 'multi_choice') {
+    next.textContent = isLast ? '✅ Готово' : 'Далее →';
+    next.onclick = () => { consultStepIndex++; showConsultStep(); };
+  } else {
+    next.textContent = isLast ? '✅ Готово' : 'Далее →';
+    next.onclick = () => {
+      saveCurrentStep();
+      const el = document.getElementById('cf_input');
+      if (!el) { consultStepIndex++; showConsultStep(); return; }
+      const val = el.value.trim();
+      if (step.type === 'number') {
+        if (val === '' || isNaN(Number(val))) { tg.showAlert('Введите число'); return; }
+        consultFormAnswers[step.key] = Number(val);
+      } else {
+        consultFormAnswers[step.key] = val;
+      }
+      consultStepIndex++;
+      showConsultStep();
+    };
+  }
+
+  nav.appendChild(next);
+}
+
+function saveCurrentStep() {
+  const all = getConsultAllSteps();
+  const step = all[consultStepIndex];
+  if (!step) return;
+  if (step.type === 'text') {
+    const el = document.getElementById('cf_input');
+    if (el) consultFormAnswers[step.key] = el.value;
+  } else if (step.type === 'number') {
+    const el = document.getElementById('cf_input');
+    if (el && el.value) consultFormAnswers[step.key] = Number(el.value);
+  }
+}
+
+function selectConsultChoice(key, value) {
+  consultFormAnswers[key] = value;
+  showConsultStep();
+}
+
+function toggleConsultMC(key, option) {
+  let selected = consultFormAnswers[key] || [];
+  if (selected.includes(option)) {
+    selected = selected.filter(x => x !== option);
+  } else {
+    selected.push(option);
+  }
+  consultFormAnswers[key] = selected;
 }
 
 function submitConsultForm() {
-  const data = getConsultFormData();
   const required = consultSteps ? consultSteps.required : [];
   for (const s of required) {
-    if (s.type === 'group') {
-      const full = [...(consultSteps.required || []), ...(consultSteps.optional || [])].find(x => x.key === s.key);
-      const children = (full && full.children) || [];
-      for (const c of children) {
-        if (!data[c.key] && data[c.key] !== 0) { tg.showAlert('Заполните: ' + c.label); return; }
-      }
-    } else if (s.type === 'consent') {
-      if (!data[s.key]) { tg.showAlert('Подтвердите информированное согласие'); return; }
+    const val = consultFormAnswers[s.key];
+    if (s.type === 'consent') {
+      if (!val) { tg.showAlert('Подтвердите информированное согласие'); return; }
     } else if (s.type === 'multi_choice') {
       // optional
+    } else if (s.type === 'number') {
+      if (val === undefined || val === '' || isNaN(Number(val))) { tg.showAlert('Заполните все обязательные поля'); return; }
     } else {
-      if (!data[s.key] && data[s.key] !== 0) { tg.showAlert('Заполните все обязательные поля'); return; }
+      if (!val) { tg.showAlert('Заполните все обязательные поля'); return; }
     }
   }
 
-  const formData = { type: 'massage_consult', ...data };
+  const formData = { type: 'massage_consult', ...consultFormAnswers };
   tg.HapticFeedback.notificationOccurred('success');
   hideConsultForm();
   tg.sendData(JSON.stringify(formData));
-  tg.showAlert('✅ Анкета отправлена! Открой чат с ботом для продолжения.');
+  tg.showAlert('✅ Анкета отправлена! Открой чат с ботом.');
 }
 
 // Telegram viewport fix — растягиваем на весь экран

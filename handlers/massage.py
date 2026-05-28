@@ -377,14 +377,9 @@ async def _ask_question(chat_id, message: types.Message):
         ])
         await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
 
-    elif step["type"] == "group":
-        child_labels = [f"  • {c['label']}" for c in step.get("children", [])]
-        hint = "\n".join(child_labels)
+    elif step["type"] == "number":
         _set_user_data(chat_id, "massage_waiting_input", step["key"])
-        await message.answer(
-            f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}\n\n{hint}\n\n_Введи всё через запятую_",
-            parse_mode="Markdown"
-        )
+        await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}\n\n_Введи число_", parse_mode="Markdown")
 
     else:
         _set_user_data(chat_id, "massage_waiting_input", step["key"])
@@ -521,68 +516,20 @@ async def on_mc_text_input(message: types.Message):
             step = s
             break
 
-    if step and step["type"] == "group":
-        children = step.get("children", [])
-        parts = [p.strip() for p in text.split(",")]
-        for i, child in enumerate(children):
-            val = parts[i] if i < len(parts) else ""
-            ckey = child["key"]
-            ctype = child["type"]
-            if ctype == "number":
-                try:
-                    setattr(q, ckey, int(val))
-                except ValueError:
-                    pass
-            elif ctype == "choice":
-                setattr(q, ckey, val)
-            else:
-                setattr(q, ckey, val)
-    elif waiting_key == "additional":
-        q.additional_info = text
-    elif waiting_key == "complaints":
-        q.complaints = text
-    elif waiting_key == "pain_location":
-        q.pain_location = text
-    elif waiting_key == "pain_radiation":
-        q.pain_radiation = text
-    elif waiting_key == "allergies":
-        q.allergies = text
-    elif waiting_key == "medications":
-        q.medications = text
-    elif waiting_key == "trauma_surgery_history":
-        q.trauma_surgery_history = text
-    elif waiting_key == "ticklish_areas":
-        q.ticklish_areas = text
-    elif waiting_key == "skin_condition":
-        q.skin_condition = text
-    elif waiting_key == "vascular_issues":
-        q.vascular_issues = text
-    elif waiting_key == "doctor_diagnosis":
-        q.doctor_diagnosis = text
-    elif waiting_key == "work_schedule":
-        q.work_schedule = text
-    elif waiting_key == "physical_activity":
-        q.physical_activity = text
-    elif waiting_key == "recent_surgery":
-        q.recent_surgery = text
-    elif waiting_key == "full_name":
-        q.full_name = text
-    elif waiting_key == "age":
+    if step is None:
+        return
+
+    if step["type"] == "number":
         try:
-            q.age = int(text)
+            setattr(q, step["key"], int(text))
         except ValueError:
-            await message.answer("Пожалуйста, введите число (ваш возраст)")
-            return
-    else:
-        if step and step["type"] == "number":
             try:
-                name = step["key"]
-                setattr(q, name, int(text))
+                setattr(q, step["key"], float(text))
             except ValueError:
                 await message.answer("Пожалуйста, введите число")
                 return
-        elif step and step["type"] == "text":
-            setattr(q, step["key"], text)
+    elif step["type"] == "text":
+        setattr(q, step["key"], text)
 
     _save_questionnaire(chat_id, q)
     _set_user_data(chat_id, "massage_waiting_input", None)
