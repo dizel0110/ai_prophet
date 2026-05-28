@@ -1559,7 +1559,7 @@ async function exportPlaylists() {
   document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
   tg.HapticFeedback.notificationOccurred('success');
-  tg.showAlert(`✅ Файл «${fname}» сохранён на твоё устройство.\n\nЧтобы восстановить плейлисты после сброса — нажми 📥 Импорт и выбери этот файл.\n\nТакже ты можешь сохранить и скачать плейлисты через бота: отправь /playlist в чате с AI Prophet.`);
+  tg.showAlert(`✅ Файл «${fname}» сохранён на устройство (в папку "Загрузки" / "Downloads").\n\n📱 Android: Открой "Файлы" → "Загрузки"\n📱 iPhone: Файлы → На устройстве → Загрузки\n💻 ПК: Папка загрузок браузера\n\nЧтобы восстановить — нажми 📥 Импорт и выбери файл.\nЛибо сохрани плейлисты через бота: /playlist`);
 }
 
 async function importPlaylists(input) {
