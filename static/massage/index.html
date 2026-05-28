@@ -96,7 +96,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .player-time{font-size:10px;color:var(--hint);white-space:nowrap;min-width:32px}
 .player-progress{flex:1;height:4px;background:var(--border);border-radius:2px;cursor:pointer;position:relative}
 .player-progress-fill{height:100%;background:var(--gold);border-radius:2px;width:0%;transition:width .2s}
-.player-save-btn{font-size:14px;padding:4px}
+.player-btn.active{opacity:1!important;color:var(--gold)}
 /* Chat */
 .chat-bubble{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;word-wrap:break-word}
 .chat-bubble.user{align-self:flex-end;background:var(--accent);color:var(--accent-text);border-bottom-right-radius:4px}
@@ -530,7 +530,8 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
       <div class="sec-sub">Выбери жанр или найди свою музыку</div>
       <div style="display:flex;gap:6px;margin-bottom:12px">
         <input type="text" id="music-search-input" placeholder="Найти музыку: Rock Legends, Jazz, Lo-Fi..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text)" onkeydown="if(event.key==='Enter')searchMusic()">
-        <button class="btn btn-secondary" onclick="searchMusic()" style="width:auto;padding:10px 16px;min-width:0;font-size:13px;margin:0">🔍</button>
+        <button class="btn btn-secondary" onclick="searchMusic()" style="width:auto;padding:10px 12px;min-width:0;font-size:13px;margin:0">🔍</button>
+        <button class="btn btn-primary" onclick="showAiPlaylistModal()" style="width:auto;padding:10px 12px;min-width:0;font-size:13px;margin:0">🤖 AI</button>
       </div>
       <div id="music-genre-grid" class="music-grid"></div>
     </div>
@@ -579,9 +580,11 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     <div class="player-artist" id="player-track-artist">Исполнитель</div>
   </div>
   <div class="player-controls">
+    <button class="player-btn" id="player-shuffle-btn" onclick="toggleShuffle()" title="Перемешать" style="opacity:.4">🔀</button>
     <button class="player-btn" onclick="prevTrack()" title="Предыдущий">⏮</button>
     <button class="player-btn player-btn-play" id="player-play-btn" onclick="togglePlay()" title="Play/Pause">▶️</button>
     <button class="player-btn" onclick="nextTrack()" title="Следующий">⏭</button>
+    <button class="player-btn" id="player-repeat-btn" onclick="toggleRepeat()" title="Повтор" style="opacity:.4">🔁</button>
   </div>
   <div class="player-progress-container">
     <span class="player-time" id="player-time-current">0:00</span>
@@ -873,7 +876,16 @@ let allChatItems = [];
 let chatSearchFilter = '';
 let _chatListHandler = null;
 
-function uid() { try { return tg.initDataUnsafe?.user?.id || null; } catch(e) { return null; } }
+function uid() {
+  try {
+    const id = tg.initDataUnsafe?.user?.id;
+    if (id) return id;
+  } catch(e) {}
+  // Fallback for non-Telegram environments
+  let id = localStorage.getItem('_uid');
+  if (!id) { id = 'local_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); localStorage.setItem('_uid', id); }
+  return id;
+}
 
 function qs(id) { const e = document.getElementById(id); return e ? e : null; }
 function qsv(id) { const e = qs(id); return e ? e.value.trim() : ''; }
@@ -1179,6 +1191,9 @@ let musicTracks = [];
 let currentTrackIndex = -1;
 let currentGenre = '';
 let currentSearchQuery = '';
+let shuffleOn = false;
+let repeatOn = false;
+let shuffleHistory = [];
 
 async function loadMusicPage() {
   renderMusicGenres();
@@ -1318,10 +1333,25 @@ function playTrack(index) {
   audio.onended = () => nextTrack();
 }
 
+function toggleShuffle() {
+  shuffleOn = !shuffleOn;
+  qs('player-shuffle-btn').style.opacity = shuffleOn ? '1' : '.4';
+  qs('player-shuffle-btn').classList.toggle('active', shuffleOn);
+  if (shuffleOn) shuffleHistory = [currentTrackIndex];
+  tg.HapticFeedback.impactOccurred('light');
+}
+
+function toggleRepeat() {
+  repeatOn = !repeatOn;
+  qs('player-repeat-btn').style.opacity = repeatOn ? '1' : '.4';
+  qs('player-repeat-btn').classList.toggle('active', repeatOn);
+  tg.HapticFeedback.impactOccurred('light');
+}
+
 function togglePlay() {
   const audio = qs('player-audio');
   if (audio.paused) {
-    if (!audio.src) { if (musicTracks.length > 0) playTrack(0); return; }
+    if (!audio.src && musicTracks.length > 0) playTrack(0);
     audio.play().catch(() => {});
     qs('player-play-btn').textContent = '⏸';
   } else {
@@ -1332,12 +1362,26 @@ function togglePlay() {
 
 function nextTrack() {
   if (musicTracks.length === 0) return;
-  const next = (currentTrackIndex + 1) % musicTracks.length;
+  let next;
+  if (shuffleOn) {
+    let candidates = musicTracks.map((_, i) => i).filter(i => i !== currentTrackIndex);
+    if (candidates.length === 0) { next = 0; }
+    else { next = candidates[Math.floor(Math.random() * candidates.length)]; }
+    shuffleHistory.push(next);
+    if (shuffleHistory.length > 50) shuffleHistory.shift();
+  } else {
+    next = (currentTrackIndex + 1) % musicTracks.length;
+  }
   playTrack(next);
 }
 
 function prevTrack() {
   if (musicTracks.length === 0) return;
+  if (shuffleOn && shuffleHistory.length > 1) {
+    shuffleHistory.pop();
+    const prev = shuffleHistory[shuffleHistory.length - 1];
+    if (prev !== undefined) { playTrack(prev); return; }
+  }
   const prev = (currentTrackIndex - 1 + musicTracks.length) % musicTracks.length;
   playTrack(prev);
 }
@@ -1356,13 +1400,16 @@ function closePlayer() {
   audio.pause();
   audio.src = '';
   currentTrackIndex = -1;
+  shuffleOn = false; repeatOn = false;
+  if (qs('player-shuffle-btn')) { qs('player-shuffle-btn').style.opacity = '.4'; qs('player-shuffle-btn').classList.remove('active'); }
+  if (qs('player-repeat-btn')) { qs('player-repeat-btn').style.opacity = '.4'; qs('player-repeat-btn').classList.remove('active'); }
   qs('music-player-bar').style.display = 'none';
   renderTrackList();
 }
 
 async function saveCurrentPlaylist() {
   if (musicTracks.length === 0) { tg.showAlert('Нет треков для сохранения'); return; }
-  const u = uid(); if (!u) { tg.showAlert('Нужен Telegram ID'); return; }
+  const u = uid();
   tg.HapticFeedback.impactOccurred('medium');
   const name = prompt('Название плейлиста:', 'Мой плейлист');
   if (!name) return;
@@ -1371,9 +1418,36 @@ async function saveCurrentPlaylist() {
   else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
 }
 
+async function showAiPlaylistModal() {
+  tg.HapticFeedback.impactOccurred('medium');
+  const q = prompt('Опиши музыку, которую хочешь:\nНапример: энергичный рок для массажа спины, или расслабляющий джаз для вечера');
+  if (!q || !q.trim()) return;
+  qs('music-track-title').textContent = '🤖 ' + q;
+  qs('music-track-count').textContent = 'AI подбирает...';
+  qs('music-track-total-dur').textContent = '';
+  qs('music-track-actions').style.display = 'none';
+  const d = await api('/api/music/ai-search', {query: q.trim()});
+  if (d.ok && d.tracks && d.tracks.length) {
+    musicTracks = d.tracks;
+    qs('music-track-count').textContent = musicTracks.length + ' треков · через AI';
+    if (d.total_duration) {
+      const hrs = Math.floor(d.total_duration / 3600);
+      const mins = Math.floor((d.total_duration % 3600) / 60);
+      qs('music-track-total-dur').textContent = (hrs ? hrs+'ч ':'') + mins + 'мин';
+    }
+    renderTrackList();
+    qs('music-genre-page').style.display = 'none';
+    qs('music-track-page').style.display = 'block';
+    qs('music-track-actions').style.display = 'flex';
+  } else {
+    qs('music-track-count').textContent = 'AI не смог подобрать. Попробуй иначе сформулировать запрос.';
+    qs('music-track-total-dur').textContent = '';
+  }
+}
+
 async function showSavedPlaylists() {
   tg.HapticFeedback.impactOccurred('medium');
-  const u = uid(); if (!u) { tg.showAlert('Нужен Telegram ID'); return; }
+  const u = uid();
   const d = await api('/api/music/playlists', {chat_id: u});
   if (!d.ok || !d.playlists) { tg.showAlert('Нет сохранённых плейлистов'); return; }
   const el = qs('music-playlist-list');
@@ -1393,7 +1467,7 @@ function closeMusicPlaylists() { qs('musicPlaylistsModal').style.display = 'none
 
 function loadPlaylistTracks(index) {
   tg.HapticFeedback.impactOccurred('medium');
-  const u = uid(); if (!u) return;
+  const u = uid();
   api('/api/music/playlists', {chat_id: u}).then(d => {
     if (d.ok && d.playlists[index]) {
       musicTracks = d.playlists[index].tracks;
@@ -1417,206 +1491,7 @@ function loadPlaylistTracks(index) {
 }
 
 async function deletePlaylist(index) {
-  const u = uid(); if (!u) return;
-  tg.HapticFeedback.impactOccurred('medium');
-  const d = await api('/api/music/delete_playlist', {chat_id: u, index: index});
-  if (d.ok) { showSavedPlaylists(); tg.showAlert('✅ Плейлист удалён'); }
-  else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
-}
-
-async function renderMusicGenres() {
-  const grid = qs('music-genre-grid');
-  if (!grid) return;
-  try {
-    const d = await api('/api/music/genres', {});
-    if (d.ok && d.genres) {
-      const entries = Object.entries(d.genres);
-      grid.innerHTML = entries.map(([key, g]) =>
-        `<div class="music-genre-card" onclick="loadGenreTracks('${key}')">
-          <div class="music-genre-icon">${g.icon}</div>
-          <div class="music-genre-name">${g.name}</div>
-        </div>`
-      ).join('');
-    } else {
-      grid.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center">Не удалось загрузить жанры</p>';
-    }
-  } catch(e) {
-    grid.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center">Ошибка загрузки</p>';
-  }
-}
-
-async function loadGenreTracks(genre) {
-  tg.HapticFeedback.impactOccurred('medium');
-  currentGenre = genre;
-  const genres = {ambient:'🌿Ambient', classic:'🎹Классика', nature:'🌊Природа', jazz:'🎷Jazz', spa:'💆Спа', thai:'🧘Тайский', acoustic:'🎸Акустика', binaural:'🧘Бины'};
-  qs('music-track-title').textContent = genres[genre] || genre;
-  qs('music-track-count').textContent = 'Загрузка...';
   const u = uid();
-  const d = await api('/api/music/tracks', {chat_id: u || 0, genre: genre});
-  if (d.ok && d.tracks) {
-    musicTracks = d.tracks;
-    qs('music-track-count').textContent = musicTracks.length + ' треков';
-    renderTrackList();
-    qs('music-genre-page').style.display = 'none';
-    qs('music-track-page').style.display = 'block';
-  } else {
-    qs('music-track-count').textContent = 'Не удалось загрузить';
-  }
-}
-
-function renderTrackList() {
-  const el = qs('music-track-list');
-  if (!el) return;
-  el.innerHTML = musicTracks.map((t, i) =>
-    `<div class="music-track-item ${i === currentTrackIndex ? 'playing' : ''}" onclick="playTrack(${i})">
-      <div class="music-track-num">${i === currentTrackIndex ? '🔊' : (i + 1)}</div>
-      <div class="music-track-info">
-        <div class="music-track-title">${t.title || 'Без названия'}</div>
-        <div class="music-track-dur">${t.artist || ''}${t.duration ? ' · ' + formatTime(t.duration) : ''}</div>
-      </div>
-      <div class="music-track-play">${i === currentTrackIndex ? '⏸' : '▶'}</div>
-    </div>`
-  ).join('');
-}
-
-function showMusicGenres() {
-  qs('music-track-page').style.display = 'none';
-  qs('music-genre-page').style.display = 'block';
-  currentTrackIndex = -1;
-}
-
-function formatTime(s) {
-  if (!s || s <= 0) return '';
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return m + ':' + (sec < 10 ? '0' : '') + sec;
-}
-
-function playTrack(index) {
-  if (index < 0 || index >= musicTracks.length) return;
-  const t = musicTracks[index];
-
-  // Same track → toggle
-  if (index === currentTrackIndex) { togglePlay(); return; }
-
-  currentTrackIndex = index;
-  const audio = qs('player-audio');
-  audio.src = t.url;
-  audio.play().catch(() => {});
-  qs('player-track-title').textContent = t.title || 'Без названия';
-  qs('player-track-artist').textContent = t.artist || '';
-  qs('player-play-btn').textContent = '⏸';
-  qs('music-player-bar').style.display = 'flex';
-  renderTrackList();
-
-  // Update progress
-  audio.ontimeupdate = () => {
-    if (audio.duration) {
-      qs('player-progress-fill').style.width = (audio.currentTime / audio.duration * 100) + '%';
-      qs('player-time-current').textContent = formatTime(audio.currentTime);
-      qs('player-time-total').textContent = formatTime(audio.duration);
-    }
-  };
-  audio.onended = () => nextTrack();
-}
-
-function togglePlay() {
-  const audio = qs('player-audio');
-  if (audio.paused) {
-    if (!audio.src) { if (musicTracks.length > 0) playTrack(0); return; }
-    audio.play().catch(() => {});
-    qs('player-play-btn').textContent = '⏸';
-  } else {
-    audio.pause();
-    qs('player-play-btn').textContent = '▶️';
-  }
-}
-
-function nextTrack() {
-  if (musicTracks.length === 0) return;
-  const next = (currentTrackIndex + 1) % musicTracks.length;
-  playTrack(next);
-}
-
-function prevTrack() {
-  if (musicTracks.length === 0) return;
-  const prev = (currentTrackIndex - 1 + musicTracks.length) % musicTracks.length;
-  playTrack(prev);
-}
-
-function seekTrack(e) {
-  const bar = qs('player-progress');
-  const audio = qs('player-audio');
-  if (!audio.duration) return;
-  const rect = bar.getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
-  audio.currentTime = pct * audio.duration;
-}
-
-function closePlayer() {
-  const audio = qs('player-audio');
-  audio.pause();
-  audio.src = '';
-  currentTrackIndex = -1;
-  qs('music-player-bar').style.display = 'none';
-  renderTrackList();
-}
-
-async function saveCurrentPlaylist() {
-  if (musicTracks.length === 0) { tg.showAlert('Нет треков для сохранения'); return; }
-  const u = uid(); if (!u) { tg.showAlert('Нужен Telegram ID'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
-  const name = prompt('Название плейлиста:', 'Мой плейлист');
-  if (!name) return;
-  const d = await api('/api/music/save_playlist', {chat_id: u, name: name, tracks: musicTracks});
-  if (d.ok) tg.showAlert('✅ Плейлист сохранён: ' + name);
-  else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
-}
-
-async function showSavedPlaylists() {
-  tg.HapticFeedback.impactOccurred('medium');
-  const u = uid(); if (!u) { tg.showAlert('Нужен Telegram ID'); return; }
-  const d = await api('/api/music/playlists', {chat_id: u});
-  if (!d.ok || !d.playlists) { tg.showAlert('Нет сохранённых плейлистов'); return; }
-  const el = qs('music-playlist-list');
-  if (!d.playlists.length) {
-    el.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Нет сохранённых плейлистов</p>';
-  } else {
-    el.innerHTML = d.playlists.map((pl, i) =>
-      `<div class="sp-item" onclick="loadPlaylistTracks(${i})">
-        <div class="sp-item-info">
-          <div class="sp-item-name">💾 ${pl.name}</div>
-          <div class="sp-item-role">${pl.tracks.length} треков</div>
-        </div>
-        <button class="btn btn-secondary" onclick="event.stopPropagation(); deletePlaylist(${i})" style="width:auto;padding:4px 10px;min-width:0;font-size:11px;margin:0">🗑️</button>
-      </div>`
-    ).join('');
-  }
-  qs('musicPlaylistsModal').style.display = 'flex';
-}
-
-function closeMusicPlaylists() { qs('musicPlaylistsModal').style.display = 'none'; }
-
-function loadPlaylistTracks(index) {
-  tg.HapticFeedback.impactOccurred('medium');
-  const u = uid(); if (!u) return;
-  api('/api/music/playlists', {chat_id: u}).then(d => {
-    if (d.ok && d.playlists[index]) {
-      musicTracks = d.playlists[index].tracks;
-      currentTrackIndex = -1;
-      currentGenre = 'playlist';
-      qs('music-track-title').textContent = d.playlists[index].name;
-      qs('music-track-count').textContent = musicTracks.length + ' треков';
-      renderTrackList();
-      qs('music-genre-page').style.display = 'none';
-      qs('music-track-page').style.display = 'block';
-      closeMusicPlaylists();
-    }
-  });
-}
-
-async function deletePlaylist(index) {
-  const u = uid(); if (!u) return;
   tg.HapticFeedback.impactOccurred('medium');
   const d = await api('/api/music/delete_playlist', {chat_id: u, index: index});
   if (d.ok) { showSavedPlaylists(); tg.showAlert('✅ Плейлист удалён'); }

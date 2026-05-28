@@ -236,6 +236,55 @@ def search_tracks(query: str, max_results: int = 15) -> List[dict]:
     return tracks
 
 
+def ai_search_tracks(query: str) -> List[dict]:
+    """
+    Use AI to interpret a free-text music request and find matching tracks.
+    Uses HF Router (no Gemini quota consumed) to generate search queries,
+    then searches IA for each.
+    """
+    import re
+    clean = re.sub(r'[<>:"/\\|?*]', ' ', query).strip()
+    if not clean:
+        return []
+
+    # Try AI interpretation
+    try:
+        from core.ai_engine import get_hf_response
+        ai_prompt = (
+            f"Пользователь хочет найти музыку. Его запрос: \"{clean}\"\n\n"
+            f"Напиши 3-5 поисковых запросов на английском для поиска на Internet Archive.\n"
+            f"Каждый запрос с новой строки. Без номеров, без пояснений, только запросы.\n"
+            f"Пример: ambient relaxation ocean sounds\n"
+            f"Пример: rock guitar instrumental energetic"
+        )
+        ai_result = get_hf_response(ai_prompt)
+        if ai_result:
+            lines = [l.strip() for l in ai_result.split('\n') if l.strip() and len(l.strip()) > 5]
+            queries = lines[:5]
+        else:
+            queries = [clean]
+    except Exception as e:
+        logger.warning(f"AI music search error: {e}")
+        queries = [clean]
+
+    # Fallback: just use the cleaned query
+    if not queries:
+        queries = [clean]
+
+    # Search IA for each query, deduplicate
+    seen_urls = set()
+    all_tracks = []
+    for q in queries:
+        tracks = _search_ia(q, max_items=3)
+        for t in tracks:
+            url = t.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                all_tracks.append(t)
+
+    return all_tracks[:20]
+
+
 def get_tracks_duration(tracks: List[dict]) -> int:
     """Return total duration in seconds for a list of tracks."""
     return sum(t.get("duration", 0) or 0 for t in tracks)
