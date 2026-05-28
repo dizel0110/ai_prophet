@@ -156,6 +156,33 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold)}
 .form-group textarea{resize:vertical;min-height:80px}
 
+/* Loading dots */
+@keyframes dotPulse { 0%,20%{opacity:.3} 50%{opacity:1} 80%,100%{opacity:.3} }
+.loading-dots { display:inline-flex;gap:3px;align-items:center }
+.loading-dots span { width:6px;height:6px;border-radius:50%;background:var(--gold);animation:dotPulse 1.4s infinite both }
+.loading-dots span:nth-child(1) { animation-delay:0s }
+.loading-dots span:nth-child(2) { animation-delay:.2s }
+.loading-dots span:nth-child(3) { animation-delay:.4s }
+
+/* Staggered track appearance */
+.music-track-item { animation:fadeSlideIn .3s ease both }
+@keyframes fadeSlideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.music-track-item:nth-child(1) { animation-delay:0s }
+.music-track-item:nth-child(2) { animation-delay:.04s }
+.music-track-item:nth-child(3) { animation-delay:.08s }
+.music-track-item:nth-child(4) { animation-delay:.12s }
+.music-track-item:nth-child(5) { animation-delay:.16s }
+.music-track-item:nth-child(6) { animation-delay:.2s }
+.music-track-item:nth-child(7) { animation-delay:.24s }
+.music-track-item:nth-child(8) { animation-delay:.28s }
+.music-track-item:nth-child(9) { animation-delay:.32s }
+.music-track-item:nth-child(10) { animation-delay:.36s }
+.music-track-item:nth-child(11) { animation-delay:.4s }
+.music-track-item:nth-child(12) { animation-delay:.44s }
+.music-track-item:nth-child(13) { animation-delay:.48s }
+.music-track-item:nth-child(14) { animation-delay:.52s }
+.music-track-item:nth-child(15) { animation-delay:.56s }
+
 /* Utilities */
 .text-center{text-align:center}
 .mt-8{margin-top:8px}
@@ -483,6 +510,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     </div>
     <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
       <input type="text" id="chat-input" placeholder="Напиши сообщение..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:20px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">
+      <button class="btn btn-secondary" id="voice-btn" onclick="startVoiceInput()" style="white-space:nowrap;padding:10px 14px;min-width:auto;border-radius:20px;font-size:16px" title="Голосовой ввод (рус/eng)">🎤</button>
       <button class="btn btn-primary" onclick="sendSpecialistMessage()" style="white-space:nowrap;padding:10px 18px;min-width:auto;border-radius:20px">➤</button>
     </div>
   </div>
@@ -531,7 +559,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
       <div style="display:flex;gap:6px;margin-bottom:12px">
         <input type="text" id="music-search-input" placeholder="Найти музыку: Rock Legends, Jazz, Lo-Fi..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text)" onkeydown="if(event.key==='Enter')searchMusic()">
         <button class="btn btn-secondary" onclick="searchMusic()" style="width:auto;padding:10px 12px;min-width:0;font-size:13px;margin:0">🔍</button>
-        <button class="btn btn-primary" onclick="showAiPlaylistModal()" style="width:auto;padding:10px 12px;min-width:0;font-size:13px;margin:0">🤖 AI</button>
+        <button class="btn btn-primary" onclick="openAiMusicModal()" style="width:auto;padding:10px 12px;min-width:0;font-size:13px;margin:0">🤖 AI</button>
       </div>
       <div id="music-genre-grid" class="music-grid"></div>
     </div>
@@ -561,6 +589,32 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
         <input type="file" id="uploadAudioInput" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.aac,.wma,.opus" style="display:none" onchange="uploadUserAudio(this)">
       </div>
     </div>
+  </div>
+</div>
+
+<!-- AI MUSIC SEARCH MODAL -->
+<div class="modal-overlay" id="aiMusicModal" style="display:none">
+  <div class="modal" style="max-height:80vh">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">🤖 AI-подбор музыки</h3>
+      <button class="modal-close" onclick="closeAiMusicModal()">✕</button>
+    </div>
+    <div class="form-group"><label>🎯 Настроение <span style="color:var(--gold)">*</span></label>
+      <input type="text" id="aim-mood" placeholder="Расслабляющая, энергичная, мечтательная..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box"></div>
+    <div class="form-group"><label>🎵 Жанр (необязательно)</label>
+      <input type="text" id="aim-genre" placeholder="Классика, рок, джаз, эмбиент..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box"></div>
+    <div class="form-group"><label>⏱ Темп (необязательно)</label>
+      <select id="aim-tempo" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box">
+        <option value="">Любой</option>
+        <option value="медленный">Медленный</option>
+        <option value="средний">Средний</option>
+        <option value="быстрый">Быстрый</option>
+      </select></div>
+    <div class="form-group"><label>🚫 Противопоказания / исключить (необязательно)</label>
+      <input type="text" id="aim-exclude" placeholder="Без вокала, без ударных, без гитары..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box"></div>
+    <div class="form-group"><label>💬 Дополнительные пожелания (необязательно)</label>
+      <textarea id="aim-extra" rows="2" placeholder="Например: для тайского массажа, фоном для беседы..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text);box-sizing:border-box;resize:none;font-family:inherit"></textarea></div>
+    <button class="btn btn-primary" onclick="runAiMusicSearch()" style="width:100%;margin-top:8px">🤖 Подобрать музыку</button>
   </div>
 </div>
 
@@ -888,7 +942,12 @@ function uid() {
     const id = tg.initDataUnsafe?.user?.id;
     if (typeof id === 'number') return id;
   } catch(e) {}
-  return null;
+  let fallback = sessionStorage.getItem('_uid');
+  if (!fallback) {
+    fallback = 'local_' + Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem('_uid', fallback);
+  }
+  return fallback;
 }
 
 function qs(id) { const e = document.getElementById(id); return e ? e : null; }
@@ -1184,6 +1243,31 @@ async function sendSpecialistMessage() {
   else { addMsg('ai','❌ '+(d.error||'Не удалось получить ответ')); }
 }
 
+function startVoiceInput() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { tg.showAlert('❌ Голосовой ввод не поддерживается в этом браузере'); return; }
+  const r = new SR();
+  r.lang = 'ru-RU';
+  r.interimResults = false;
+  r.continuous = false;
+  const btn = qs('voice-btn');
+  btn.textContent = '🔴';
+  btn.style.opacity = '1';
+  r.onresult = function(e) {
+    const t = Array.from(e.results).map(r => r[0].transcript).join(' ');
+    const inp = qs('chat-input');
+    if (inp) inp.value = t;
+  };
+  r.onend = function() {
+    btn.textContent = '🎤';
+    btn.style.opacity = '';
+    const inp = qs('chat-input');
+    if (inp && inp.value.trim()) sendSpecialistMessage();
+  };
+  r.onerror = function() { btn.textContent = '🎤'; btn.style.opacity = ''; };
+  r.start();
+}
+
 document.addEventListener('keydown', function(e) {
   if(e.key==='Enter'){ const m=qs('specialistChatModal'); if(m&&m.style.display==='flex') sendSpecialistMessage(); }
 });
@@ -1234,7 +1318,7 @@ async function searchMusic() {
   tg.HapticFeedback.impactOccurred('medium');
   currentSearchQuery = q;
   qs('music-track-title').textContent = '🔍 ' + q;
-  qs('music-track-count').textContent = 'Поиск...';
+  qs('music-track-count').innerHTML = 'Поиск <span class="loading-dots"><span></span><span></span><span></span></span>';
   qs('music-track-total-dur').textContent = '';
   qs('music-track-actions').style.display = 'none';
   const u = uid();
@@ -1262,7 +1346,7 @@ async function loadGenreTracks(genre) {
   currentSearchQuery = '';
   const genres = {ambient:'🌿Ambient', classic:'🎹Классика', nature:'🌊Природа', jazz:'🎷Jazz', spa:'💆Спа', thai:'🧘Тайский', acoustic:'🎸Акустика', binaural:'🧘Бины'};
   qs('music-track-title').textContent = genres[genre] || genre;
-  qs('music-track-count').textContent = 'Загрузка...';
+  qs('music-track-count').innerHTML = '<span class="loading-dots"><span></span><span></span><span></span></span>';
   qs('music-track-total-dur').textContent = '';
   qs('music-track-actions').style.display = 'none';
   const u = uid();
@@ -1464,18 +1548,42 @@ async function uploadUserAudio(input) {
   input.value = '';
 }
 
-async function showAiPlaylistModal() {
+function openAiMusicModal() {
   tg.HapticFeedback.impactOccurred('medium');
-  const q = prompt('Опиши музыку, которую хочешь:\nНапример: энергичный рок для массажа спины, или расслабляющий джаз для вечера');
-  if (!q || !q.trim()) return;
-  qs('music-track-title').textContent = '🤖 ' + q;
-  qs('music-track-count').textContent = 'AI подбирает...';
+  qs('aim-mood').value = '';
+  qs('aim-genre').value = '';
+  qs('aim-tempo').value = '';
+  qs('aim-exclude').value = '';
+  qs('aim-extra').value = '';
+  qs('aiMusicModal').style.display = 'flex';
+  setTimeout(() => { const el = qs('aim-mood'); if (el) el.focus(); }, 200);
+}
+
+function closeAiMusicModal() { qs('aiMusicModal').style.display = 'none'; }
+
+async function runAiMusicSearch() {
+  const mood = qsv('aim-mood');
+  if (!mood) { tg.showAlert('🎯 Заполни поле "Настроение"'); return; }
+  closeAiMusicModal();
+  const parts = [mood];
+  const genre = qsv('aim-genre');
+  if (genre) parts.push('жанр: ' + genre);
+  const tempo = qsv('aim-tempo');
+  if (tempo) parts.push('темп: ' + tempo);
+  const exclude = qsv('aim-exclude');
+  if (exclude) parts.push('без: ' + exclude);
+  const extra = qsv('aim-extra');
+  if (extra) parts.push(extra);
+  const query = parts.join(', ');
+  qs('music-track-title').textContent = '🤖 ' + mood;
+  qs('music-track-count').innerHTML = 'AI подбирает <span class="loading-dots"><span></span><span></span><span></span></span>';
   qs('music-track-total-dur').textContent = '';
   qs('music-track-actions').style.display = 'none';
-  const d = await api('/api/music/ai-search', {query: q.trim()});
+  showMusicGenres();
+  const d = await api('/api/music/ai-search', {query: query});
   if (d.ok && d.tracks && d.tracks.length) {
     musicTracks = d.tracks;
-    qs('music-track-count').textContent = musicTracks.length + ' треков · через AI';
+    qs('music-track-count').textContent = '🎵 ' + musicTracks.length + ' треков · через AI';
     if (d.total_duration) {
       const hrs = Math.floor(d.total_duration / 3600);
       const mins = Math.floor((d.total_duration % 3600) / 60);

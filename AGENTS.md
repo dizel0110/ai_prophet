@@ -271,6 +271,23 @@ Test pattern: unit tests mock all network calls (`@patch`), test core logic only
 **Бесплатно:** 100k запросов/день, без карты
 **На HF Spaces:** установить `TELEGRAM_API_URL` = URL воркера в Secrets
 
+## Client-Side AI (future)
+
+Возможность подгружать легковесные нейронки на устройство клиента (с согласия):
+
+| Технология | Модели | Размер | Требования |
+|-----------|--------|--------|-----------|
+| **WebLLM (MLC)** | Llama/Qwen 7B (int4) | ~3-4GB | WebGPU (Chrome 113+, Edge) |
+| **Transformers.js** | Whisper-tiny, distill-bert | ~150MB | Браузер с Web Workers |
+| **llama.cpp (WASM)** | TinyLlama 1.1B | ~1GB | SharedArrayBuffer |
+
+**Когда имеет смысл:**
+- Клиент на десктопе с WebGPU → можно запустить 7B-модель локально
+- Офлайн-режим (Whisper-tiny для транскрибации)
+- Снятие нагрузки с сервера
+
+**Пока не реализовано** — требует определения устройства клиента (+ User-Agent / navigator), загрузки ~ГБ весов, и UI для согласия.
+
 ## MCP (Model Context Protocol)
 
 Playwright MCP сервер установлен для opencode. Конфигурация: `~/.config/opencode/opencode.jsonc`
