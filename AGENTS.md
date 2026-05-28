@@ -212,7 +212,23 @@ HF Spaces **CPU Basic** (бесплатный):
 
 ## Testing
 
-No test framework configured. Test files (`test_*.py`) are manual scripts excluded from Docker.
+**pytest** in `tests/` (gitignored, not deployed). Run before any push:
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+Test pattern: unit tests mock all network calls (`@patch`), test core logic only (parsing, caching, genre data). No tests that hit real APIs or Telegram.
+
+### Push Policy
+| Change Type | Action |
+|-------------|--------|
+| 🐛 Bug fix, text/copy change, config/dep update, refactoring | **Auto-push** after tests pass |
+| ✨ New feature, API change, architecture change, breaking change | **Ask user** for confirmation |
+| 🚑 Hotfix (prod broken) | **Auto-push** immediately, then report |
+
+**Flow:** pytest passes → `git add/commit/push` → HF Spaces auto-deploy. If tests fail, fix before push.
 
 ## Env Variables
 
@@ -285,3 +301,86 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - **Two python processes** on local run: FastAPI (uvicorn) + aiogram polling. This is normal.
 - **`app.py` is stale** — references `start_bot` which doesn't exist. Only `main.py` works.
 - **Gemini quota exhaustion** — free tier hits 429 quickly. HF fallback handles it, but session creation is retried across all 5 models before giving up.
+
+## Feature Spec #6: Музыкальный плеер / Музыкальная система
+
+Музыка — **сквозная функция** AI Prophet, проходящая через все фазы взаимодействия с клиентом. Ниже — полная картина.
+
+### Фазы музыки в проекте
+
+| Фаза | Где сейчас | Статус |
+|------|-----------|--------|
+| **1. Поиск** — найти треки по запросу, жанру, типу массажа | `core/tools.py` — `search_media_content()` (4 источника: SoundCloud, Jamendo, Internet Archive, YouTube via yt-dlp) | ✅ Built |
+| **2. Скачивание** — загрузить MP3 через yt-dlp с FFmpeg | `core/tools.py` — `download_audio()` + `send_playlist()` | ✅ Built |
+| **3. Каталог** — кураторская база проверенных ссылок | `core/agents/music_db.py` — 8 жанров × 3 ссылки | ⚠️ Есть, но мелко |
+| **4. Рекомендация** — AI подбирает музыку под тип массажа/клиента | Через AI-консультацию (Final Expert может упомянуть) | ❌ No dedicated engine |
+| **5. Воспроизведение** — где и как играет музыка | **Вне платформы** — YouTube-ссылки (кликабельные) или скачанный MP3-файл в Telegram | ⚠️ Нет встроенного плеера |
+| **6. Встроенный плеер** — в Mini App или в боте | Mini App: только кнопки «🎵 Музыка» → редирект в бота с `/playlist`. Бот: отправляет MP3-файлы | ❌ Вкладки Музыка нет |
+| **7. Интеграция с консультацией** — музыку на выходе из `/massage` | После анализа в `massage.py`: кнопка «🎵 Музыка для сеанса» → выбор жанра → YouTube ссылки + параллельный поиск и скачивание | ✅ Built |
+
+### Что нужно для #6 (Music Player)
+
+**Суть:** дать пользователю возможность **слушать музыку не выходя из Mini App**, а не переходить в бота или YouTube.
+
+**Компоненты:**
+
+#### Фаза A: Вкладка «Музыка» в Mini App
+- Новая 8-я вкладка 🎵 в таб-баре `index.html`
+- Сетка 8 жанров (иконки + название)
+- При выборе жанра:
+  - Показывает список треков (из `music_db.py` + результаты поиска)
+  - Каждый трек: название + кнопка **Play/Пауза**
+  - Встроенный аудиоплеер (HTML `<audio>`)
+  - Плейлист (очередь, следующий/предыдущий)
+- API endpoint: `GET /api/music/{chat_id}/{genre}` → возвращает треки
+
+#### Фаза B: `/music` команда в Telegram
+- Пока не сделана (в GUIDE.md упоминается, но хендлера нет)
+- Должна показывать те же 8 жанров + поиск
+- Интегрировать в `/massage` flow (после заключения)
+
+#### Фаза C: Рекомендательная система
+- После AI-консультации (/massage): Final Expert рекомендует жанр/конкретную музыку
+- Автоматический поиск и плейлист под тип массажа
+- Связь: `music_db.py` + результат `Final Expert` → `search_media_content()` → очередь треков
+
+#### Фаза D: Плеер в Telegram (альтернатива)
+- Inline-клавиатура с кнопками: ⏮ ⏯ ⏭ 🔊 (управление через callback)
+- Очередь: много треков подряд без ручного запуска каждого
+- Прогресс-бар (длительность, позиция)
+
+### Как это коррелирует с проектом
+
+```
+massage.py (консультация) ──→ music_db.py (жанры/ссылки)
+       │                            │
+       ▼                            ▼
+  Final Expert ──→ search_media_content() ──→ download_audio()
+       │                                            │
+       ▼                                            ▼
+  [🎵 Музыка для сеанса]                send_playlist() → бот отправляет MP3
+       │
+       ▼
+  Mini App: вкладка Музыка 🎵
+       │
+       ▼
+  index.html + API → HTML Audio Player
+```
+
+**Принцип «кратчайшего пути»:**
+- Сейчас: нажать «🎵 Музыка» → открыть Telegram → `/playlist жанр 5` → ждать скачивания → открыть файл
+- Цель: нажать жанр → треки загрузились в плеер → нажать Play → слушать
+
+### Зависимости
+- `index.html` + новый JS-код для плеера (не внешние библиотеки — HF Spaces ограничен)
+- `main.py`: новый endpoint `/api/music/{chat_id}/{genre}`
+- `messages.py`: новый хендлер `/music`
+- `handlers/massage.py`: доработка пост-консультации (авто-музыка)
+- `music_db.py`: расширение (больше треков на жанр)
+- `agent_base.py`: доработка Final Expert prompt для рекомендации музыки
+
+### Приоритет реализации
+1. **A** — вкладка + плеер в Mini App (самый заметный эффект)
+2. **B** — `/music` команда (быстрая, простой хендлер)
+3. **C** — рекомендации (глубокая интеграция, но высокий impact)
+4. **D** — плеер в Telegram (низкий приоритет, только если пользователи просят)

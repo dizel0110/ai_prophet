@@ -5,6 +5,8 @@
 # -----------------------------------------------------------------------------
 
 import os
+import json
+import time
 import asyncio
 import logging
 import multiprocessing
@@ -147,6 +149,88 @@ async def api_specialist_edit(req: dict):
         return {"ok": False, "error": "Provide new_name or new_role"}
     ok = update_specialist(chat_id, old_name, new_name, new_role)
     return {"ok": ok}
+
+
+# ──────────────────── Music Player API ────────────────────
+
+MUSIC_SETTINGS_FILE = os.path.join("temp", "user_music.json")
+
+
+def _load_music_settings() -> dict:
+    if not os.path.exists(MUSIC_SETTINGS_FILE):
+        return {}
+    try:
+        with open(MUSIC_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_music_settings(data: dict):
+    os.makedirs("temp", exist_ok=True)
+    try:
+        with open(MUSIC_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save music settings: {e}")
+
+
+@app.get("/api/music/genres")
+async def api_music_genres():
+    from core.music_player import get_all_genres
+    return {"ok": True, "genres": get_all_genres()}
+
+
+@app.post("/api/music/tracks")
+async def api_music_tracks(req: dict):
+    from core.music_player import get_tracks
+    chat_id = req.get("chat_id", 0)
+    genre = req.get("genre", "")
+    if not genre:
+        return {"ok": False, "error": "Missing genre"}
+    tracks = get_tracks(genre, chat_id)
+    return {"ok": True, "tracks": tracks, "genre": genre}
+
+
+@app.post("/api/music/save_playlist")
+async def api_music_save_playlist(req: dict):
+    chat_id = str(req.get("chat_id", ""))
+    name = req.get("name", "Мой плейлист")
+    tracks = req.get("tracks", [])
+    if not chat_id or not tracks:
+        return {"ok": False, "error": "Missing chat_id or tracks"}
+    data = _load_music_settings()
+    if chat_id not in data:
+        data[chat_id] = {"playlists": []}
+    playlist = {"name": name, "tracks": tracks, "created": time.time()}
+    data[chat_id]["playlists"].append(playlist)
+    _save_music_settings(data)
+    return {"ok": True, "playlist": playlist}
+
+
+@app.post("/api/music/playlists")
+async def api_music_playlists(req: dict):
+    chat_id = str(req.get("chat_id", ""))
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    data = _load_music_settings()
+    playlists = data.get(chat_id, {}).get("playlists", [])
+    return {"ok": True, "playlists": playlists}
+
+
+@app.post("/api/music/delete_playlist")
+async def api_music_delete_playlist(req: dict):
+    chat_id = str(req.get("chat_id", ""))
+    index = req.get("index", -1)
+    if not chat_id or index < 0:
+        return {"ok": False, "error": "Missing chat_id or index"}
+    data = _load_music_settings()
+    playlists = data.get(chat_id, {}).get("playlists", [])
+    if index < len(playlists):
+        playlists.pop(index)
+        _save_music_settings(data)
+        return {"ok": True}
+    return {"ok": False, "error": "Invalid index"}
 
 
 def start_web():
