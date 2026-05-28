@@ -311,7 +311,7 @@ class SpecialistFactory:
         return old_memory + "; " + "; ".join(new_parts)
 
     @classmethod
-    def chat(cls, chat_id: int, specialist: DynamicSpecialist, user_message: str) -> AgentResult:
+    def chat(cls, chat_id: int, specialist: DynamicSpecialist, user_message: str, user_context: str = "") -> AgentResult:
         cls._ensure_clients()
         history = _load_conversation(chat_id, specialist.name)
 
@@ -319,6 +319,8 @@ class SpecialistFactory:
         memory_block = ""
         if specialist.client_memory:
             memory_block = f"\n[Память о клиенте: {specialist.client_memory}]\n\n"
+        if user_context:
+            memory_block += f"\n[Данные клиента из анкеты:\n{user_context}]\n\n"
 
         # Gemini first — лучше следует system prompt
         if cls._gemini_client:

@@ -510,7 +510,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     </div>
     <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
       <input type="text" id="chat-input" placeholder="Напиши сообщение..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:20px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">
-      <button class="btn btn-secondary" id="voice-btn" onclick="startVoiceInput()" style="white-space:nowrap;padding:10px 14px;min-width:auto;border-radius:20px;font-size:16px" title="Голосовой ввод (рус/eng)">🎤</button>
+      <button class="btn btn-secondary" id="voice-btn" onmousedown="voiceBtnDown(event)" onmouseup="voiceBtnUp(event)" ontouchstart="voiceBtnDown(event)" ontouchend="voiceBtnUp(event)" style="white-space:nowrap;padding:10px 14px;min-width:auto;border-radius:20px;font-size:16px;user-select:none" title="🖱 Нажать — текст в поле / Задержать — авто-отправка">🎤</button>
       <button class="btn btn-primary" onclick="sendSpecialistMessage()" style="white-space:nowrap;padding:10px 18px;min-width:auto;border-radius:20px">➤</button>
     </div>
   </div>
@@ -1471,15 +1471,22 @@ async function submitSpForm() {
 
 function closeSpecialistChat() { qs('specialistChatModal').style.display='none'; currentSP=null; }
 
+function stripMarkdown(t) {
+  return t
+    .replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1')
+    .replace(/`{3}[\s\S]*?`{3}/g, '').replace(/`([^`]+)`/g, '$1')
+    .replace(/__([\s\S]+?)__/g, '$1').replace(/~~(.+?)~~/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '').replace(/^[-*+]\s+/gm, '').replace(/^\d+\.\s+/gm, '').replace(/^>\s+/gm, '');
+}
 function addMsg(role, text, name) {
   const c = qs('chat-messages'); if(!c) return;
+  text = stripMarkdown(text);
   const b = document.createElement('div'); b.className='chat-bubble '+role;
   if(role==='ai'){ const n=document.createElement('div'); n.className='chat-name'; n.textContent=name||'Специалист'; b.appendChild(n); }
   const t=document.createElement('div'); t.textContent=text; b.appendChild(t);
   c.appendChild(b); c.scrollTop=c.scrollHeight;
-  // Clear old suggestions
   const old = qs('chat-suggestions'); if(old) old.remove();
-  // Parse questions from AI response
   if(role==='ai'){
     const qs = text.match(/[^.!?]*\?/g);
     if(qs && qs.length){
@@ -1522,7 +1529,7 @@ async function sendSpecialistMessage() {
   else { addMsg('ai','❌ '+(d.error||'Не удалось получить ответ')); }
 }
 
-function startVoiceInput() {
+function startVoiceInput(autoSend) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { tg.showAlert('❌ Голосовой ввод не поддерживается в этом браузере'); return; }
   const r = new SR();
@@ -1530,6 +1537,7 @@ function startVoiceInput() {
   r.interimResults = false;
   r.continuous = false;
   const btn = qs('voice-btn');
+  const origText = btn.textContent;
   btn.textContent = '🔴';
   btn.style.opacity = '1';
   r.onresult = function(e) {
@@ -1538,13 +1546,22 @@ function startVoiceInput() {
     if (inp) inp.value = t;
   };
   r.onend = function() {
-    btn.textContent = '🎤';
+    btn.textContent = origText;
     btn.style.opacity = '';
     const inp = qs('chat-input');
-    if (inp && inp.value.trim()) sendSpecialistMessage();
+    if (autoSend && inp && inp.value.trim()) sendSpecialistMessage();
   };
-  r.onerror = function() { btn.textContent = '🎤'; btn.style.opacity = ''; };
+  r.onerror = function() { btn.textContent = origText; btn.style.opacity = ''; };
   r.start();
+}
+let voiceLongPressTimer = null;
+function voiceBtnDown(e) {
+  voiceLongPressTimer = setTimeout(function() { voiceLongPressTimer = null; startVoiceInput(true); }, 400);
+  e.preventDefault();
+}
+function voiceBtnUp(e) {
+  if (voiceLongPressTimer) { clearTimeout(voiceLongPressTimer); voiceLongPressTimer = null; startVoiceInput(false); }
+  e.preventDefault();
 }
 
 document.addEventListener('keydown', function(e) {

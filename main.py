@@ -77,6 +77,7 @@ async def root():
 @app.post("/api/specialist/chat")
 async def api_specialist_chat(req: dict):
     from core.agents.agent_factory import SpecialistFactory, get_specialist, get_specialists
+    from core.questionnaire import MassageQuestionnaire
     chat_id = req.get("chat_id")
     name = req.get("name", "")
     message_text = req.get("message", "")
@@ -85,7 +86,15 @@ async def api_specialist_chat(req: dict):
     specialist = get_specialist(chat_id, name)
     if not specialist:
         return {"ok": False, "error": f"Specialist '{name}' not found"}
-    result = SpecialistFactory.chat(chat_id, specialist, message_text)
+    # Load questionnaire context for this user
+    user_context = ""
+    try:
+        q = massage._get_questionnaire(chat_id)
+        if q and (q.full_name or q.complaints):
+            user_context = q.to_text()
+    except Exception:
+        pass
+    result = SpecialistFactory.chat(chat_id, specialist, message_text, user_context=user_context)
     if result.is_success():
         return {"ok": True, "response": result.content, "name": result.agent_name}
     return {"ok": False, "error": "AI engine failed"}
