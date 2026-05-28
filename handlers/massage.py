@@ -7,9 +7,14 @@ from aiogram.filters import Command, BaseFilter
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from config import get_base_url, GEM_BOT_URL, TEMP_DIR
 
-from core.agents import MassageConsultationOrchestrator, format_consultation_results, get_massage_music, MASSAGE_MUSIC_GENRES
+from core.agents import (
+    MassageConsultationOrchestrator, format_consultation_results,
+    get_massage_music, MASSAGE_MUSIC_GENRES,
+    get_agent_def, AgentBase,
+)
+import asyncio
 from core.agents.agent_factory import SpecialistFactory, get_specialists, remove_specialist
-from core.questionnaire import MassageQuestionnaire, QUESTIONNAIRE_STEPS
+from core.questionnaire import MassageQuestionnaire, QUESTIONNAIRE_STEPS, QUESTIONNAIRE_STEPS_OPTIONAL, load_steps
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -336,31 +341,83 @@ async def on_mc_stop(message: types.Message):
 async def _ask_question(chat_id, message: types.Message):
     data = _get_user_data(chat_id)
     step_idx = data.get("massage_q_index", 0)
+    is_optional = data.get("massage_optional_mode", False)
+    steps = QUESTIONNAIRE_STEPS_OPTIONAL if is_optional else QUESTIONNAIRE_STEPS
+    total = len(steps)
 
-    if step_idx >= len(QUESTIONNAIRE_STEPS):
-        await _finish_questionnaire(chat_id, message)
+    if step_idx >= total:
+        if is_optional:
+            await _finish_questionnaire(chat_id, message)
+        else:
+            await _ask_optional_trigger(chat_id, message)
         return
 
-    step = QUESTIONNAIRE_STEPS[step_idx]
+    step = steps[step_idx]
 
     if step["type"] == "choice":
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=opt, callback_data=f"mc_q_{step['key']}:{opt}")] for opt in step["options"]
         ])
-        await message.answer(f"*Вопрос {step_idx + 1}/{len(QUESTIONNAIRE_STEPS)}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
+        await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
 
     elif step["type"] == "multi_choice":
+        skip_label = "⏭ Нет заболеваний" if step["key"] in ("chronic_diseases", "contraindications_absolute") else "⏭ Ничего из списка"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=f"☐ {opt}", callback_data=f"mc_q_toggle:{opt}")] for opt in step["options"]
         ] + [
             [InlineKeyboardButton(text="✅ Готово", callback_data="mc_q_done")],
-            [InlineKeyboardButton(text="⏭ Нет заболеваний", callback_data="mc_q_skip")]
+            [InlineKeyboardButton(text=skip_label, callback_data="mc_q_skip")]
         ])
-        await message.answer(f"*Вопрос {step_idx + 1}/{len(QUESTIONNAIRE_STEPS)}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
+        await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
+
+    elif step["type"] == "consent":
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Подтверждаю", callback_data=f"mc_q_{step['key']}:yes")],
+            [InlineKeyboardButton(text="❌ Отказываюсь", callback_data=f"mc_q_{step['key']}:no")]
+        ])
+        await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
+
+    elif step["type"] == "group":
+        child_labels = [f"  • {c['label']}" for c in step.get("children", [])]
+        hint = "\n".join(child_labels)
+        _set_user_data(chat_id, "massage_waiting_input", step["key"])
+        await message.answer(
+            f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}\n\n{hint}\n\n_Введи всё через запятую_",
+            parse_mode="Markdown"
+        )
 
     else:
         _set_user_data(chat_id, "massage_waiting_input", step["key"])
-        await message.answer(f"*Вопрос {step_idx + 1}/{len(QUESTIONNAIRE_STEPS)}*\n\n{step['question']}\n\n_Просто напиши ответ_", parse_mode="Markdown")
+        await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}\n\n_Просто напиши ответ_", parse_mode="Markdown")
+
+
+async def _ask_optional_trigger(chat_id, message: types.Message):
+    if not QUESTIONNAIRE_STEPS_OPTIONAL:
+        await _finish_questionnaire(chat_id, message)
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Да, добавить детали", callback_data="mc_optional_yes")],
+        [InlineKeyboardButton(text="⏭ Нет, всё указал", callback_data="mc_optional_no")]
+    ])
+    await message.answer(
+        "✅ *Основная анкета заполнена!*\n\n"
+        "Хочешь добавить дополнительную информацию для более точной диагностики?\n"
+        "_(сон, стресс, активность, травмы, состояние кожи и т.д.)_",
+        parse_mode="Markdown",
+        reply_markup=kb
+    )
+
+
+@router.callback_query(lambda c: c.data in ("mc_optional_yes", "mc_optional_no"))
+async def on_mc_optional_choice(callback: types.CallbackQuery):
+    await callback.answer()
+    chat_id = callback.message.chat.id
+    if callback.data == "mc_optional_yes":
+        _set_user_data(chat_id, "massage_optional_mode", True)
+        _set_user_data(chat_id, "massage_q_index", 0)
+        await _ask_question(chat_id, callback.message)
+    else:
+        await _finish_questionnaire(chat_id, callback.message)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("mc_q_"))
@@ -382,21 +439,30 @@ async def on_mc_q_callback(callback: types.CallbackQuery):
 
     if data.startswith("mc_q_toggle:"):
         opt = data.replace("mc_q_toggle:", "")
-        diseases = q.chronic_diseases.copy()
-        if opt in diseases:
-            diseases.remove(opt)
-        else:
-            diseases.append(opt)
-        q.chronic_diseases = diseases
+        step_idx = _get_user_data(chat_id).get("massage_q_index", 0)
+        is_optional = _get_user_data(chat_id).get("massage_optional_mode", False)
+        steps = QUESTIONNAIRE_STEPS_OPTIONAL if is_optional else QUESTIONNAIRE_STEPS
+        step = steps[step_idx]
+        target_key = step["key"]
+
+        if target_key == "chronic_diseases":
+            items = list(q.chronic_diseases)
+            if opt in items: items.remove(opt)
+            else: items.append(opt)
+            q.chronic_diseases = items
+        elif target_key == "contraindications_absolute":
+            items = list(q.contraindications_absolute)
+            if opt in items: items.remove(opt)
+            else: items.append(opt)
+            q.contraindications_absolute = items
+
         _save_questionnaire(chat_id, q)
 
-        step_idx = _get_user_data(chat_id).get("massage_q_index", 0)
-        step = QUESTIONNAIRE_STEPS[step_idx]
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"{'✅' if opt in diseases else '☐'} {opt}", callback_data=f"mc_q_toggle:{opt}")] for opt in step["options"]
+            [InlineKeyboardButton(text=f"{'✅' if c in items else '☐'} {c}", callback_data=f"mc_q_toggle:{c}")] for c in step["options"]
         ] + [
             [InlineKeyboardButton(text="✅ Готово", callback_data="mc_q_done")],
-            [InlineKeyboardButton(text="⏭ Нет заболеваний", callback_data="mc_q_skip")]
+            [InlineKeyboardButton(text="⏭ Ничего из списка", callback_data="mc_q_skip")]
         ])
         await callback.message.edit_reply_markup(reply_markup=kb)
         return
@@ -405,17 +471,25 @@ async def on_mc_q_callback(callback: types.CallbackQuery):
         _, value = data.split(":", 1)
         key = data.replace(f"mc_q_", "").split(":")[0]
         actual_key = None
-        for s in QUESTIONNAIRE_STEPS:
+        all_steps = QUESTIONNAIRE_STEPS + QUESTIONNAIRE_STEPS_OPTIONAL
+        for s in all_steps:
             if s["key"] == key:
                 actual_key = key
                 break
         if not actual_key:
-            for s in QUESTIONNAIRE_STEPS:
+            for s in all_steps:
                 if s["key"].startswith(key):
                     actual_key = s["key"]
                     break
         if actual_key:
-            setattr(q, actual_key, value)
+            if actual_key == "informed_consent":
+                setattr(q, actual_key, value == "yes")
+            elif actual_key in ("is_pregnant", "has_fever", "has_inflammation"):
+                setattr(q, actual_key, value.lower() in ("да", "yes", "true"))
+            elif actual_key == "gender":
+                setattr(q, actual_key, value)
+            else:
+                setattr(q, actual_key, value)
             _save_questionnaire(chat_id, q)
 
     _set_user_data(chat_id, "massage_q_index", _get_user_data(chat_id).get("massage_q_index", 0) + 1)
@@ -438,31 +512,59 @@ async def on_mc_text_input(message: types.Message):
         return
 
     q = _get_questionnaire(chat_id)
+    is_optional = data.get("massage_optional_mode", False)
+    steps = QUESTIONNAIRE_STEPS_OPTIONAL if is_optional else QUESTIONNAIRE_STEPS
 
-    if waiting_key == "contraindications" and text.lower() != "/skip":
-        lines = text.split("\n")
-        for line in lines:
-            lower = line.lower()
-            if "беремен" in lower: q.is_pregnant = True
-            if "температур" in lower or "воспален" in lower: q.has_fever = True
-            if "операц" in lower: q.recent_surgery = line
-            if "аллерг" in lower: q.has_allergies = True; q.allergies_description = line
-        q.additional_info = text
-    elif waiting_key == "diseases" and text.lower() != "/skip":
-        for d in ["гипертония", "диабет", "сердечно", "варикоз", "тромбоз", "онколог", "кожн"]:
-            if d in text.lower() and d not in q.chronic_diseases:
-                q.chronic_diseases.append(d)
-    elif waiting_key == "lifestyle":
-        q.work_type = text
-        q.physical_activity = text
+    step = None
+    for s in steps:
+        if s["key"] == waiting_key:
+            step = s
+            break
+
+    if step and step["type"] == "group":
+        children = step.get("children", [])
+        parts = [p.strip() for p in text.split(",")]
+        for i, child in enumerate(children):
+            val = parts[i] if i < len(parts) else ""
+            ckey = child["key"]
+            ctype = child["type"]
+            if ctype == "number":
+                try:
+                    setattr(q, ckey, int(val))
+                except ValueError:
+                    pass
+            elif ctype == "choice":
+                setattr(q, ckey, val)
+            else:
+                setattr(q, ckey, val)
     elif waiting_key == "additional":
         q.additional_info = text
-    elif waiting_key == "medications":
-        q.medications = text
     elif waiting_key == "complaints":
         q.complaints = text
     elif waiting_key == "pain_location":
         q.pain_location = text
+    elif waiting_key == "pain_radiation":
+        q.pain_radiation = text
+    elif waiting_key == "allergies":
+        q.allergies = text
+    elif waiting_key == "medications":
+        q.medications = text
+    elif waiting_key == "trauma_surgery_history":
+        q.trauma_surgery_history = text
+    elif waiting_key == "ticklish_areas":
+        q.ticklish_areas = text
+    elif waiting_key == "skin_condition":
+        q.skin_condition = text
+    elif waiting_key == "vascular_issues":
+        q.vascular_issues = text
+    elif waiting_key == "doctor_diagnosis":
+        q.doctor_diagnosis = text
+    elif waiting_key == "work_schedule":
+        q.work_schedule = text
+    elif waiting_key == "physical_activity":
+        q.physical_activity = text
+    elif waiting_key == "recent_surgery":
+        q.recent_surgery = text
     elif waiting_key == "full_name":
         q.full_name = text
     elif waiting_key == "age":
@@ -471,6 +573,16 @@ async def on_mc_text_input(message: types.Message):
         except ValueError:
             await message.answer("Пожалуйста, введите число (ваш возраст)")
             return
+    else:
+        if step and step["type"] == "number":
+            try:
+                name = step["key"]
+                setattr(q, name, int(text))
+            except ValueError:
+                await message.answer("Пожалуйста, введите число")
+                return
+        elif step and step["type"] == "text":
+            setattr(q, step["key"], text)
 
     _save_questionnaire(chat_id, q)
     _set_user_data(chat_id, "massage_waiting_input", None)
@@ -584,18 +696,168 @@ async def on_mc_analyze(callback: types.CallbackQuery):
     formatted = format_consultation_results(results)
     await callback.message.answer(formatted, parse_mode="Markdown")
 
-    await callback.message.answer(
-        "💡 *Что дальше?*\n\n"
-        "1. Запишись на сеанс через салон\n"
-        "2. Создай плейлист для массажа 🎵\n"
-        "3. Спроси у AI Prophet в общем чате\n\n"
-        "Или начни новую консультацию: /massage",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+    final_text = results.get("final_expert", {}).get("content", "")
+
+    # Парсим рекомендованных врачей из финального эксперта
+    referred_doctors = _parse_doctor_referrals(final_text)
+    is_approved = "не допущен" not in final_text.lower() and "требуется консультация врача" not in final_text.lower()
+
+    if is_approved:
+        next_text = (
+            "💡 *Что дальше?*\n\n"
+            "1. 📅 Запишись на сеанс — открой салон ниже\n"
+            "2. 🎵 Создай плейлист для массажа\n"
+            "3. 💬 Спроси у AI Prophet в общем чате\n\n"
+            "Или начни новую консультацию: /massage"
+        )
+        buttons = [
             [InlineKeyboardButton(text="🖐 Открыть салон", web_app=WebAppInfo(url=_massage_url()))],
             [InlineKeyboardButton(text="🎵 Музыка для сеанса", callback_data="massage_music")],
-        ])
+        ]
+    else:
+        # Авто-создание ИИ-специалистов из рекомендаций
+        created = []
+        for role in referred_doctors:
+            try:
+                sp = await asyncio.to_thread(SpecialistFactory.create, chat_id, role)
+                if sp:
+                    created.append(sp.name)
+            except Exception as e:
+                logger.warning(f"Failed to create specialist for '{role}': {e}")
+
+        _set_user_data(chat_id, "massage_referral_specialists", created)
+        _set_user_data(chat_id, "massage_questionnaire_text", q.to_text())
+
+        next_text = (
+            "💡 *Что дальше?*\n\n"
+            "1. 🩺 Проконсультируйся с созданными ИИ-специалистами\n"
+            "2. ✅ После консультаций нажми «Запросить итог»\n"
+            "3. 🔄 Пройди консультацию заново: /massage\n"
+        )
+        buttons = [
+            [InlineKeyboardButton(text="🧑‍⚕️ Мои специалисты", callback_data="mc_specialist")],
+            [InlineKeyboardButton(text="✅ Запросить итог", callback_data="mc_final_review")],
+            [InlineKeyboardButton(text="🎵 Музыка для сеанса", callback_data="massage_music")],
+        ]
+
+        if created:
+            next_text = (
+                f"🧑‍⚕️ *Рекомендованные консультации*\n\n"
+                f"Финальный эксперт направил к: {', '.join(referred_doctors)}.\n\n"
+                f"✨ Я создал ИИ-специалистов: {', '.join(created)}.\n\n"
+                "Напиши каждому свой вопрос в чате — они ответят на основе твоих данных.\n"
+                "После консультаций нажми «Запросить итог» для окончательного решения."
+            )
+
+    await callback.message.answer(
+        next_text,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
     )
+
+
+def _parse_doctor_referrals(final_text: str) -> list:
+    """Извлечь список врачей из финального заключения."""
+    doctors = []
+    for line in final_text.split("\n"):
+        lower = line.strip().lower()
+        if "к какому врачу" not in lower and "обратиться" not in lower:
+            continue
+        # Убираем нумерованный префикс и текст до ":"
+        text = line.split(":", 1)[-1].strip() if ":" in line else line
+        # После "обратиться" берём остаток (регистронезависимо)
+        idx = text.lower().find("обратиться")
+        if idx >= 0:
+            text = text[idx + len("обратиться"):].strip()
+        # Разбиваем по ","
+        for part in text.split(","):
+            part = part.strip().strip(".")
+            # Берём текст до "—" если есть
+            name = part.split("—")[0].strip() if "—" in part else part
+            # Убираем предлоги "к ", "ко "
+            for prefix in ["к ", "ко "]:
+                if name.lower().startswith(prefix):
+                    name = name[len(prefix):].strip()
+                    break
+            # Пропускаем остаточные стоп-слова
+            if not name or name.lower() in ("что", "для", "на", "с", "и", "в", "о"):
+                continue
+            if name and len(name) > 2 and name not in doctors:
+                doctors.append(name)
+    return doctors
+
+
+@router.callback_query(lambda c: c.data == "mc_final_review")
+async def on_mc_final_review(callback: types.CallbackQuery):
+    """Повторный запуск финального эксперта после консультаций со специалистами."""
+    await callback.answer("⏳ Собираю результаты...")
+    chat_id = callback.message.chat.id
+    msg = await callback.message.answer("⏳ *Анализирую консультации специалистов...*", parse_mode="Markdown")
+
+    q_text = _get_user_data(chat_id).get("massage_questionnaire_text", "")
+    specialist_names = _get_user_data(chat_id).get("massage_referral_specialists", [])
+
+    # Собираем историю консультаций
+    convs_file = os.path.join(TEMP_DIR, "specialist_convs.json")
+    specialist_context = ""
+    if os.path.exists(convs_file):
+        try:
+            with open(convs_file, "r", encoding="utf-8") as f:
+                all_convs = json.load(f)
+            chat_str = str(chat_id)
+            for sp_name in specialist_names:
+                key = f"{chat_str}:{sp_name}"
+                conv = all_convs.get(key, [])
+                if conv:
+                    lines = [f"\n=== Консультация с {sp_name} ==="]
+                    for turn in conv[-10:]:
+                        role = "Клиент" if turn.get("role") == "user" else sp_name
+                        lines.append(f"{role}: {turn.get('content', '')[:300]}")
+                    specialist_context += "\n".join(lines) + "\n"
+        except Exception as e:
+            logger.warning(f"Failed to load specialist convs: {e}")
+
+    try:
+        from core.agents.agent_base import AgentBase
+        final_def = get_agent_def("final_expert")
+        qa_def = get_agent_def("questionnaire_analyst")
+        expert = AgentBase("final_expert", "Финальный Эксперт", final_def.get("role", ""), "text")
+
+        context = f"=== ИСХОДНАЯ АНКЕТА ===\n{q_text}\n"
+        if specialist_context:
+            context += f"\n=== РЕЗУЛЬТАТЫ КОНСУЛЬТАЦИЙ СО СПЕЦИАЛИСТАМИ ==={specialist_context}\n"
+        context += "\nНа основе всех данных, включая консультации специалистов, дай ОКОНЧАТЕЛЬНОЕ ЗАКЛЮЧЕНИЕ."
+
+        result = await asyncio.to_thread(expert.process_text, context)
+        content = result.get("content", "") if isinstance(result, dict) else str(result)
+
+        await msg.delete()
+
+        is_approved_final = "не допущен" not in content.lower() and "требуется консультация врача" not in content.lower()
+
+        lines = ["✅ *ИТОГ ПОСЛЕ КОНСУЛЬТАЦИЙ СПЕЦИАЛИСТОВ*\n", content]
+        await callback.message.answer("\n".join(lines), parse_mode="Markdown")
+
+        if is_approved_final:
+            await callback.message.answer(
+                "💡 *Теперь ты допущен к массажу!*\n\nЗапишись на сеанс через салон.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🖐 Открыть салон", web_app=WebAppInfo(url=_massage_url()))],
+                    [InlineKeyboardButton(text="🎵 Музыка для сеанса", callback_data="massage_music")],
+                ])
+            )
+        else:
+            await callback.message.answer(
+                "💡 *К сожалению, противопоказания сохраняются.*\n\n"
+                "Рекомендую обратиться к профильному врачу очно.\n"
+                "Можешь начать новую консультацию: /massage",
+                parse_mode="Markdown"
+            )
+
+    except Exception as e:
+        logger.error(f"Final review failed: {e}", exc_info=True)
+        await msg.edit_text("😔 Не удалось получить итог. Попробуй позже или /massage заново.")
 
 
 # === ОБРАБОТКА ДАННЫХ ИЗ MINI APP ===
@@ -611,20 +873,16 @@ async def on_massage_webapp_data(message: types.Message):
         return
 
     chat_id = message.chat.id
-    q = MassageQuestionnaire(
-        full_name=data.get("name", ""),
-        age=int(data.get("age", 0)) if data.get("age") else 0,
-        gender=data.get("gender", ""),
-        complaints=data.get("complaints", ""),
-        pain_location=data.get("pain_location", ""),
-        chronic_diseases=data.get("diseases", []),
-        medications=data.get("medications", ""),
-        additional_info=data.get("extra", ""),
-    )
-    for ci in data.get("contraindications", []):
-        ci_lower = ci.lower()
-        if "беремен" in ci_lower: q.is_pregnant = True
-        if "температур" in ci_lower or "воспален" in ci_lower: q.has_fever = True
+    q = MassageQuestionnaire.from_dict({k: v for k, v in data.items() if k != "type"})
+    if data.get("age"):
+        try: q.age = int(data["age"])
+        except ValueError: pass
+    if data.get("height"):
+        try: q.height = int(data["height"])
+        except ValueError: pass
+    if data.get("weight"):
+        try: q.weight = int(data["weight"])
+        except ValueError: pass
 
     _cleanup_massage_temp(chat_id)
     _save_questionnaire(chat_id, q)

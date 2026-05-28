@@ -1,0 +1,278 @@
+[
+  {
+    "key": "personal",
+    "question": "👤 Личные данные\n\nНапиши через запятую:\n- Имя и фамилию\n- Возраст\n- Пол (М/Ж)\n- Телефон для связи",
+    "type": "group",
+    "required": true,
+    "group": "personal",
+    "source": "shmm_client_card",
+    "children": [
+      {"key": "full_name", "label": "ФИО", "type": "text"},
+      {"key": "age", "label": "Возраст", "type": "number"},
+      {"key": "gender", "label": "Пол", "type": "text"},
+      {"key": "phone", "label": "Телефон", "type": "text"}
+    ]
+  },
+  {
+    "key": "body_metrics",
+    "question": "📏 Рост и вес\n\nНапиши через запятую:\n- Рост (см)\n- Вес (кг)",
+    "type": "group",
+    "required": true,
+    "group": "personal",
+    "source": "shmm_client_card",
+    "children": [
+      {"key": "height", "label": "Рост (см)", "type": "number"},
+      {"key": "weight", "label": "Вес (кг)", "type": "number"}
+    ]
+  },
+  {
+    "key": "complaints",
+    "question": "💭 Что беспокоит?\n\nОпиши подробно:\n- Какие боли, напряжение, ограничения?\n- Что хочется исправить, улучшить?\n- За какой срок?",
+    "type": "text",
+    "required": true,
+    "group": "complaints",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "pain_location",
+    "question": "📍 Где именно болит?\n\nШея, спина, поясница, ноги, плечи, всё тело? Укажи конкретные зоны.",
+    "type": "text",
+    "required": true,
+    "group": "complaints",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "pain_type",
+    "question": "🔥 Характер боли?",
+    "type": "choice",
+    "required": true,
+    "group": "complaints",
+    "source": "shmm_client_card",
+    "options": ["Острая", "Хроническая/ноющая", "Пульсирующая", "Тянущая", "Жгучая", "Другое"]
+  },
+  {
+    "key": "pain_duration",
+    "question": "⏳ Как давно беспокоит?",
+    "type": "choice",
+    "required": true,
+    "group": "complaints",
+    "source": "shmm_client_card",
+    "options": ["Несколько дней", "Несколько недель", "Несколько месяцев", "Больше года"]
+  },
+  {
+    "key": "pain_radiation",
+    "question": "🌊 Боль отдаёт куда-то?\n\nНапример: в руку, ногу, лопатку, голову. Или никуда не отдаёт.",
+    "type": "text",
+    "required": true,
+    "group": "complaints",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "chronic_diseases",
+    "question": "🏥 Хронические заболевания\n\nВыбери из списка (можно несколько). Если нет — нажми «Нет заболеваний».",
+    "type": "multi_choice",
+    "required": true,
+    "group": "health",
+    "source": "shmm_client_card",
+    "options": [
+      "Гипертония", "Диабет", "Сердечно-сосудистые", "Варикоз",
+      "Тромбоз/Тромбофлебит", "Онкология", "Кожные заболевания",
+      "Астма", "Эпилепсия", "Аутоиммунные", "Остеопороз",
+      "Гепатит", "ВИЧ/СПИД", "Другое"
+    ]
+  },
+  {
+    "key": "allergies",
+    "question": "🤧 Аллергии\n\nЕсть ли аллергия на что-то?\nЕсли да — напиши на что и какая реакция.\nЕсли нет — напиши «Нет».",
+    "type": "text",
+    "required": true,
+    "group": "health",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "medications",
+    "question": "💊 Принимаешь лекарства?\n\nКакие? (препараты, дозировки). Если нет — напиши «Нет».",
+    "type": "text",
+    "required": true,
+    "group": "health",
+    "source": "shmm_informed_consent"
+  },
+  {
+    "key": "vitals",
+    "question": "💓 Витальные показатели\n\nНапиши через запятую:\n- Давление (систолическое/диастолическое, например 120/80)\n- Пульс (уд/мин)\n- Температура тела (°C)\n\nЕсли не знаешь — напиши «Не знаю».",
+    "type": "group",
+    "required": true,
+    "group": "vitals",
+    "source": "shmm_client_card",
+    "children": [
+      {"key": "blood_pressure_systolic", "label": "АД систолическое", "type": "number"},
+      {"key": "blood_pressure_diastolic", "label": "АД диастолическое", "type": "number"},
+      {"key": "pulse", "label": "Пульс (уд/мин)", "type": "number"},
+      {"key": "body_temperature", "label": "Температура (°C)", "type": "number"}
+    ]
+  },
+  {
+    "key": "contraindications_absolute",
+    "question": "⚠️ Противопоказания\n\nОтметь, если у тебя есть что-то из списка (выбери все подходящие):",
+    "type": "multi_choice",
+    "required": true,
+    "group": "contraindications",
+    "source": "shmm_contraindications",
+    "options": [
+      "Злокачественные болезни крови/гемофилия",
+      "Злокачественные опухоли",
+      "Гангрена",
+      "Тромбоз/тромбофлебит",
+      "Ангиит",
+      "Аневризма сосудов/сердца",
+      "Психические заболевания",
+      "Активный туберкулёз",
+      "Остеомиелит",
+      "Каузальгический синдром",
+      "Недостаточность кровообращения/почечная/печёночная III ст",
+      "Пороки клапанов сердца (декомпенсация)",
+      "Острая ишемия миокарда",
+      "Склероз мозговых сосудов",
+      "Венерические заболевания",
+      "СПИД",
+      "Ничего из перечисленного"
+    ]
+  },
+  {
+    "key": "temp_contraindications",
+    "question": "🤒 Временные состояния\n\nНапиши через запятую:\n- Есть ли беременность? (да/нет)\n- Есть ли температура/лихорадка? (да/нет)\n- Есть ли воспаление/обострение? (да/нет)\n- Были ли недавно операции, травмы?",
+    "type": "group",
+    "required": true,
+    "group": "contraindications",
+    "source": "shmm_contraindications",
+    "children": [
+      {"key": "is_pregnant", "label": "Беременность", "type": "choice", "options": ["Да", "Нет"]},
+      {"key": "has_fever", "label": "Температура/лихорадка", "type": "choice", "options": ["Да", "Нет"]},
+      {"key": "has_inflammation", "label": "Воспаление/обострение", "type": "choice", "options": ["Да", "Нет"]},
+      {"key": "recent_surgery", "label": "Недавние операции/травмы", "type": "text"}
+    ]
+  },
+  {
+    "key": "informed_consent",
+    "question": "✅ Информированное согласие\n\nЯ ознакомлен(а) с полным списком абсолютных, временных и локальных противопоказаний к массажу.\nЯ подтверждаю, что предоставил(а) достоверные данные о своём здоровье.\nЯ согласен(а) на проведение массажной процедуры на основе предоставленной информации.\n\nПодтверждаешь?",
+    "type": "consent",
+    "required": true,
+    "group": "consent",
+    "source": "shmm_informed_consent"
+  },
+  {
+    "key": "work_type",
+    "question": "💼 Тип работы\n\nПреимущественно сидячая, стоячая или физическая работа?",
+    "type": "choice",
+    "required": false,
+    "group": "lifestyle",
+    "source": "shmm_client_card",
+    "options": ["Сидячая", "Стоячая", "Физическая", "Смешанная"]
+  },
+  {
+    "key": "work_schedule",
+    "question": "📅 График работы\n\nКакой у тебя график? (5/2, сменный, удалёнка и т.д.)",
+    "type": "text",
+    "required": false,
+    "group": "lifestyle",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "physical_activity",
+    "question": "🏃 Физическая активность\n\nЗанимаешься спортом? Что именно и как часто?",
+    "type": "text",
+    "required": false,
+    "group": "lifestyle",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "daily_steps",
+    "question": "🚶 Шаги в день\n\nСколько примерно шагов проходишь в день?",
+    "type": "number",
+    "required": false,
+    "group": "lifestyle",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "sleep_hours",
+    "question": "😴 Сон\n\nСколько часов спишь в среднем?",
+    "type": "number",
+    "required": false,
+    "group": "lifestyle",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "stress_level",
+    "question": "📊 Уровень стресса\n\nОцени от 0 до 10 (0 — нет стресса, 10 — максимальный):",
+    "type": "number",
+    "required": false,
+    "group": "lifestyle",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "trauma_surgery_history",
+    "question": "🦴 Травмы и операции в анамнезе\n\nБыли ли серьёзные травмы, переломы, операции? Какие и когда?",
+    "type": "text",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "pain_threshold",
+    "question": "😣 Порог болевой чувствительности\n\nКакой у тебя порог боли по твоим ощущениям?",
+    "type": "choice",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card",
+    "options": ["Низкий (больно от лёгких прикосновений)", "Средний", "Высокий (терплю сильную боль)"]
+  },
+  {
+    "key": "ticklish_areas",
+    "question": "😅 Зоны щекотки/чувствительности\n\nЕсть зоны, которые вызывают щекотку, или массаж которых психологически неприятен?",
+    "type": "text",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "skin_condition",
+    "question": "🧴 Состояние кожи\n\nЕсть особенности: сухая/жирная, шелушения, стрии (растяжки), покраснения? Где?",
+    "type": "text",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "vascular_issues",
+    "question": "🕸️ Сосудистые проблемы\n\nЕсть сосудистые звёздочки, варикоз, близко расположенные сосуды? Где именно?",
+    "type": "text",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "widow_hump",
+    "question": "🧠 Вдовий горбик\n\nЕсть ли уплотнение/выпуклость в области перехода шеи в спину (C7-Th1)?",
+    "type": "choice",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card",
+    "options": ["Да", "Нет", "Не уверен(а)"]
+  },
+  {
+    "key": "doctor_diagnosis",
+    "question": "🩺 Диагноз от врача\n\nЕсть ли официальный диагноз от врача, связанный с твоими жалобами?",
+    "type": "text",
+    "required": false,
+    "group": "health",
+    "source": "shmm_client_card"
+  },
+  {
+    "key": "additional_info",
+    "question": "📝 Что ещё важно знать?\n\nАллергии (если не указал), пожелания, особые зоны, что угодно.",
+    "type": "text",
+    "required": false,
+    "group": "additional",
+    "source": "general"
+  }
+]

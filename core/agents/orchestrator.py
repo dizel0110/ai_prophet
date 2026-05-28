@@ -102,7 +102,22 @@ class MassageConsultationOrchestrator:
 
 def format_consultation_results(results: dict) -> str:
     """Форматирование результатов для Telegram."""
-    lines = ["🧑‍⚕️ *РЕЗУЛЬТАТЫ КОНСУЛЬТАЦИИ*\n"]
+    lines = []
+
+    # Решение финального эксперта — сразу в начало
+    final = results.get("final_expert", {}).get("content", "")
+    decision_emoji = "✅" if "допущен" in final.lower() else "❌" if "не допущен" in final.lower() else "⚠️"
+    lines.append(f"{decision_emoji} *РЕЗУЛЬТАТЫ КОНСУЛЬТАЦИИ*\n")
+
+    # Выдернуть решение если есть
+    for line in final.split("\n"):
+        lower = line.lower().strip()
+        if lower.startswith("1.") and "решение" in lower:
+            lines.append(f"*{line.strip()}*\n")
+            break
+        if lower.startswith("статус") or lower.startswith("решение"):
+            lines.append(f"*{line.strip()}*\n")
+            break
 
     for key, val in results.items():
         if key == "final_expert":
@@ -114,13 +129,13 @@ def format_consultation_results(results: dict) -> str:
                 texts.append(v.get("content", ""))
         elif isinstance(val, dict):
             texts.append(val.get("content", ""))
-        content = "\n".join(texts)[:500]
+        content = "\n".join(texts)[:300]
         if content:
             lines.append(f"*{name}:*\n{content}...\n")
 
-    if "final_expert" in results:
+    if final:
         lines.append(f"\n{'═' * 40}")
         lines.append("*📋 ЗАКЛЮЧЕНИЕ ФИНАЛЬНОГО ЭКСПЕРТА:*\n")
-        lines.append(results["final_expert"].get("content", ""))
+        lines.append(final)
 
     return "\n".join(lines)

@@ -695,38 +695,13 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
   <div class="modal" style="max-height:85vh">
     <button class="modal-close" onclick="hideConsultForm()">✕</button>
     <h3>📝 Анкета AI-консультации</h3>
-    <p style="font-size:12px;color:var(--hint);margin-bottom:12px">Заполни анкету — бот продолжит в чате</p>
-    <div class="form-group"><label>Ваше имя</label><input type="text" id="cName" placeholder="Анна"></div>
-    <div class="form-group"><label>Возраст</label><input type="number" id="cAge" placeholder="25"></div>
-    <div class="form-group"><label>Пол</label>
-      <select id="cGender"><option value="">Выберите</option><option>Мужской</option><option>Женский</option></select>
+    <p style="font-size:12px;color:var(--hint);margin-bottom:12px">По стандарту Школы Мастеров Массажа</p>
+    <div id="consultFormDynamic"></div>
+    <div id="consultOptionalToggle" style="display:none;margin:8px 0">
+      <button class="btn btn-secondary" onclick="toggleConsultOptional()" style="width:100%;font-size:12px">➕ Дополнительные детали</button>
     </div>
-    <div class="form-group"><label>Что беспокоит?</label><textarea id="cComplaints" placeholder="Боли в спине, напряжение в шее, скованность..."></textarea></div>
-    <div class="form-group"><label>Где болит?</label>
-      <select id="cPainLocation">
-        <option value="">Выберите зону</option><option>Шея</option><option>Воротниковая зона</option><option>Спина (верх)</option><option>Спина (низ)</option><option>Поясница</option><option>Ноги</option><option>Всё тело</option>
-      </select>
-    </div>
-    <div class="form-group"><label>Хронические заболевания</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_hyper"> Гипертония</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_diabet"> Диабет</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_heart"> Сердечно-сосудистые</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_varicose"> Варикоз</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_thromb"> Тромбоз</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_onco"> Онкология</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cd_skin"> Кожные заболевания</label>
-      </div>
-    </div>
-    <div class="form-group"><label>Противопоказания</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ci_pregnant"> Беременность</label>
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ci_fever"> Температура/воспаление</label>
-      </div>
-    </div>
-    <div class="form-group"><label>Лекарства</label><input type="text" id="cMedications" placeholder="Какие лекарства принимаете?"></div>
-    <div class="form-group"><label>Дополнительно</label><textarea id="cExtra" placeholder="Аллергии, операции, пожелания..."></textarea></div>
-    <button class="btn btn-primary" onclick="submitConsultForm()">📩 Отправить боту</button>
+    <div id="consultOptionalFields" style="display:none"></div>
+    <button class="btn btn-primary" onclick="submitConsultForm()" style="margin-top:8px">📩 Отправить боту</button>
     <button class="btn btn-secondary" onclick="hideConsultForm()">Отмена</button>
   </div>
 </div>
@@ -885,46 +860,167 @@ function startConsultation() {
   tg.showAlert('🧑‍⚕️ Открой чат с ботом и нажми /massage для AI-консультации');
 }
 
+let consultSteps = null;
+
 function openConsultForm() {
   tg.HapticFeedback.impactOccurred('medium');
   document.getElementById('consultModal').classList.add('show');
+  loadConsultSteps();
 }
 
 function hideConsultForm() {
   document.getElementById('consultModal').classList.remove('show');
 }
 
+async function loadConsultSteps() {
+  if (consultSteps) { renderConsultForm(); return; }
+  try {
+    const r = await fetch('/api/questionnaire/steps_full');
+    consultSteps = await r.json();
+  } catch(e) {
+    consultSteps = null;
+  }
+  renderConsultForm();
+}
+
+function renderConsultForm() {
+  const container = document.getElementById('consultFormDynamic');
+  container.innerHTML = '';
+  const optContainer = document.getElementById('consultOptionalFields');
+  optContainer.innerHTML = '';
+  document.getElementById('consultOptionalToggle').style.display = 'none';
+
+  if (!consultSteps) {
+    container.innerHTML = '<p style="color:var(--hint);font-size:13px">⚠️ Не удалось загрузить анкету. Попробуй позже.</p>';
+    return;
+  }
+
+  const all = [...consultSteps.required, ...consultSteps.optional];
+  all.forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'form-group';
+    div.setAttribute('data-step-key', s.key);
+
+    if (s.type === 'group') {
+      const full = [...(consultSteps.required || []), ...(consultSteps.optional || [])].find(x => x.key === s.key);
+      const children = (full && full.children) || [];
+      div.innerHTML = `<label>${s.question}</label>`;
+      children.forEach(c => {
+        const childDiv = document.createElement('div');
+        childDiv.style.marginTop = '4px';
+        const inputId = 'cf_' + c.key;
+        if (c.type === 'number') {
+          childDiv.innerHTML = `<span style="font-size:11px;color:var(--hint)">${c.label}</span><input type="number" id="${inputId}" placeholder="${c.label}" style="font-size:13px">`;
+        } else if (c.type === 'choice') {
+          childDiv.innerHTML = `<span style="font-size:11px;color:var(--hint)">${c.label}</span><select id="${inputId}"><option value="">Выберите</option>${(c.options||[]).map(o => `<option>${o}</option>`).join('')}</select>`;
+        } else {
+          childDiv.innerHTML = `<span style="font-size:11px;color:var(--hint)">${c.label}</span><input type="text" id="${inputId}" placeholder="${c.label}" style="font-size:13px">`;
+        }
+        div.appendChild(childDiv);
+      });
+    } else if (s.type === 'choice') {
+      const opts = (s.options || []).map(o => `<option>${o}</option>`).join('');
+      div.innerHTML = `<label>${s.question}</label><select id="cf_${s.key}"><option value="">Выберите</option>${opts}</select>`;
+    } else if (s.type === 'multi_choice') {
+      div.innerHTML = `<label>${s.question}</label>`;
+      const mcDiv = document.createElement('div');
+      mcDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:4px';
+      (s.options || []).forEach(o => {
+        const cbId = 'cf_mc_' + s.key + '_' + o.replace(/[^a-zA-Zа-яА-Я0-9]/g, '_');
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer';
+        lbl.innerHTML = `<input type="checkbox" id="${cbId}" value="${o}"> ${o}`;
+        mcDiv.appendChild(lbl);
+      });
+      div.appendChild(mcDiv);
+    } else if (s.type === 'consent') {
+      div.innerHTML = `<label>${s.question}</label>
+        <div style="margin-top:4px">
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="cf_${s.key}"> ✅ Я подтверждаю
+          </label>
+        </div>`;
+    } else if (s.type === 'text') {
+      div.innerHTML = `<label>${s.question}</label><textarea id="cf_${s.key}" placeholder="Введите ответ" style="min-height:48px"></textarea>`;
+    } else if (s.type === 'number') {
+      div.innerHTML = `<label>${s.question}</label><input type="number" id="cf_${s.key}" placeholder="0">`;
+    }
+
+    if (s.required) {
+      container.appendChild(div);
+    } else {
+      optContainer.appendChild(div);
+      document.getElementById('consultOptionalToggle').style.display = 'block';
+    }
+  });
+}
+
+let consultOptionalVisible = false;
+function toggleConsultOptional() {
+  consultOptionalVisible = !consultOptionalVisible;
+  document.getElementById('consultOptionalFields').style.display = consultOptionalVisible ? 'block' : 'none';
+  const btn = document.querySelector('#consultOptionalToggle button');
+  if (btn) btn.textContent = consultOptionalVisible ? '➖ Скрыть детали' : '➕ Дополнительные детали';
+}
+
+function getConsultFormData() {
+  const data = {};
+  if (!consultSteps) return data;
+
+  const all = [...consultSteps.required, ...consultSteps.optional];
+  all.forEach(s => {
+    if (s.type === 'group') {
+      const full = [...(consultSteps.required || []), ...(consultSteps.optional || [])].find(x => x.key === s.key);
+      const children = (full && full.children) || [];
+      children.forEach(c => {
+        const el = document.getElementById('cf_' + c.key);
+        if (el) {
+          if (c.type === 'number') data[c.key] = el.value ? Number(el.value) : 0;
+          else data[c.key] = el.value;
+        }
+      });
+    } else if (s.type === 'multi_choice') {
+      const selected = [];
+      (s.options || []).forEach(o => {
+        const cbId = 'cf_mc_' + s.key + '_' + o.replace(/[^a-zA-Zа-яА-Я0-9]/g, '_');
+        const cb = document.getElementById(cbId);
+        if (cb && cb.checked) selected.push(o);
+      });
+      data[s.key] = selected;
+    } else if (s.type === 'consent') {
+      const el = document.getElementById('cf_' + s.key);
+      data[s.key] = !!(el && el.checked);
+    } else {
+      const el = document.getElementById('cf_' + s.key);
+      if (el) {
+        if (s.type === 'number') data[s.key] = el.value ? Number(el.value) : 0;
+        else data[s.key] = el.value;
+      }
+    }
+  });
+  return data;
+}
+
 function submitConsultForm() {
-  const name = document.getElementById('cName').value.trim();
-  const age = document.getElementById('cAge').value.trim();
-  if (!name || !age) { tg.showAlert('Заполните имя и возраст'); return; }
-  
-  const diseases = [];
-  if (document.getElementById('cd_hyper').checked) diseases.push('Гипертония');
-  if (document.getElementById('cd_diabet').checked) diseases.push('Диабет');
-  if (document.getElementById('cd_heart').checked) diseases.push('Сердечно-сосудистые');
-  if (document.getElementById('cd_varicose').checked) diseases.push('Варикоз');
-  if (document.getElementById('cd_thromb').checked) diseases.push('Тромбоз');
-  if (document.getElementById('cd_onco').checked) diseases.push('Онкология');
-  if (document.getElementById('cd_skin').checked) diseases.push('Кожные заболевания');
-  
-  const contraindications = [];
-  if (document.getElementById('ci_pregnant').checked) contraindications.push('Беременность');
-  if (document.getElementById('ci_fever').checked) contraindications.push('Температура/воспаление');
-  
-  const formData = {
-    type: 'massage_consult',
-    name: name,
-    age: age,
-    gender: document.getElementById('cGender').value,
-    complaints: document.getElementById('cComplaints').value.trim(),
-    pain_location: document.getElementById('cPainLocation').value,
-    diseases: diseases,
-    contraindications: contraindications,
-    medications: document.getElementById('cMedications').value.trim(),
-    extra: document.getElementById('cExtra').value.trim()
-  };
-  
+  const data = getConsultFormData();
+  const required = consultSteps ? consultSteps.required : [];
+  for (const s of required) {
+    if (s.type === 'group') {
+      const full = [...(consultSteps.required || []), ...(consultSteps.optional || [])].find(x => x.key === s.key);
+      const children = (full && full.children) || [];
+      for (const c of children) {
+        if (!data[c.key] && data[c.key] !== 0) { tg.showAlert('Заполните: ' + c.label); return; }
+      }
+    } else if (s.type === 'consent') {
+      if (!data[s.key]) { tg.showAlert('Подтвердите информированное согласие'); return; }
+    } else if (s.type === 'multi_choice') {
+      // optional
+    } else {
+      if (!data[s.key] && data[s.key] !== 0) { tg.showAlert('Заполните все обязательные поля'); return; }
+    }
+  }
+
+  const formData = { type: 'massage_consult', ...data };
   tg.HapticFeedback.notificationOccurred('success');
   hideConsultForm();
   tg.sendData(JSON.stringify(formData));

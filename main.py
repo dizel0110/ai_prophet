@@ -351,6 +351,49 @@ async def serve_user_audio(chat_id: str, filename: str):
     return FileResponse(path, media_type="audio/mpeg")
 
 
+# ──────────────────── Questionnaire API ────────────────────
+
+@app.get("/api/questionnaire/steps")
+async def api_questionnaire_steps():
+    from core.questionnaire import QUESTIONNAIRE_STEPS, QUESTIONNAIRE_STEPS_OPTIONAL
+    return {
+        "required": [{k: v for k, v in s.items() if k != "children"} for s in QUESTIONNAIRE_STEPS],
+        "optional": [{k: v for k, v in s.items() if k != "children"} for s in QUESTIONNAIRE_STEPS_OPTIONAL],
+    }
+
+
+@app.get("/api/questionnaire/steps_full")
+async def api_questionnaire_steps_full():
+    from core.questionnaire import QUESTIONNAIRE_STEPS, QUESTIONNAIRE_STEPS_OPTIONAL
+    return {
+        "required": QUESTIONNAIRE_STEPS,
+        "optional": QUESTIONNAIRE_STEPS_OPTIONAL,
+    }
+
+
+@app.post("/api/questionnaire/submit")
+async def api_questionnaire_submit(req: dict):
+    chat_id = str(req.get("chat_id", ""))
+    data = req.get("data", {})
+    if not chat_id or not data:
+        return {"ok": False, "error": "Missing chat_id or data"}
+
+    from core.questionnaire import MassageQuestionnaire
+    q = MassageQuestionnaire.from_dict(data)
+    if data.get("age"):
+        try: q.age = int(data["age"])
+        except ValueError: pass
+
+    from handlers.massage import _save_questionnaire, _set_user_data, _cleanup_massage_temp
+    _cleanup_massage_temp(chat_id)
+    _save_questionnaire(chat_id, q)
+    _set_user_data(chat_id, "massage_step", "media")
+    _set_user_data(chat_id, "massage_photos", [])
+    _set_user_data(chat_id, "massage_videos", [])
+    return {"ok": True}
+
+# ──────────────────── Server ────────────────────
+
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
