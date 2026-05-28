@@ -211,6 +211,36 @@ def get_tracks(genre: str, chat_id: int = 0) -> List[dict]:
     return tracks
 
 
+def search_tracks(query: str, max_results: int = 15) -> List[dict]:
+    """
+    Search for tracks by arbitrary text query (not limited to massage genres).
+    Uses Internet Archive.
+    """
+    import re
+    clean = re.sub(r'[<>:"/\\|?*]', ' ', query).strip()
+    if not clean:
+        return []
+
+    cache = _load_cache()
+    cache_key = f"search_{clean.lower()[:50]}"
+    cached = cache.get(cache_key)
+    if cached and time.time() - cached.get("ts", 0) < CACHE_TTL:
+        return cached.get("tracks", [])
+
+    tracks = _search_ia(clean, max_items=min(max_results, 8))
+    tracks = tracks[:max_results]
+
+    cache[cache_key] = {"ts": time.time(), "tracks": tracks}
+    _save_cache(cache)
+
+    return tracks
+
+
+def get_tracks_duration(tracks: List[dict]) -> int:
+    """Return total duration in seconds for a list of tracks."""
+    return sum(t.get("duration", 0) or 0 for t in tracks)
+
+
 def get_all_genres() -> dict:
     """Return all genre definitions (without tracks)."""
     return {k: {"name": v["name"], "icon": v["icon"]} for k, v in GENRES.items()}

@@ -527,7 +527,11 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
   <div id="music-genre-page">
     <div class="sec">
       <div class="sec-title">🎵 Музыка для массажа</div>
-      <div class="sec-sub">Выбери жанр для прослушивания</div>
+      <div class="sec-sub">Выбери жанр или найди свою музыку</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input type="text" id="music-search-input" placeholder="Найти музыку: Rock Legends, Jazz, Lo-Fi..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:12px;font-size:13px;outline:none;background:var(--bg);color:var(--text)" onkeydown="if(event.key==='Enter')searchMusic()">
+        <button class="btn btn-secondary" onclick="searchMusic()" style="width:auto;padding:10px 16px;min-width:0;font-size:13px;margin:0">🔍</button>
+      </div>
       <div id="music-genre-grid" class="music-grid"></div>
     </div>
     <div class="sec">
@@ -543,12 +547,16 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
     <div class="sec">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <button class="btn btn-secondary" onclick="showMusicGenres()" style="width:auto;padding:6px 12px;min-width:0;font-size:13px">← Назад</button>
-        <div>
+        <div style="flex:1">
           <div class="sec-title" id="music-track-title" style="margin:0">Жанр</div>
           <div style="font-size:12px;color:var(--hint)" id="music-track-count">Загрузка...</div>
         </div>
+        <div style="font-size:11px;color:var(--gold);font-weight:600" id="music-track-total-dur"></div>
       </div>
       <div id="music-track-list" class="music-track-list"></div>
+      <div style="margin-top:12px;display:flex;gap:6px;display:none" id="music-track-actions">
+        <button class="btn btn-secondary" onclick="saveCurrentPlaylist()" style="width:auto;padding:8px 14px;min-width:0;font-size:12px;flex:1;margin:0">💾 Сохранить плейлист</button>
+      </div>
     </div>
   </div>
 </div>
@@ -759,7 +767,8 @@ function openLink(url) {
 function musicPlaylist(query) {
   tg.HapticFeedback.impactOccurred('medium');
   const text = '/playlist ' + encodeURIComponent(query) + ' 5';
-  tg.openTelegramLink('https://t.me/' + BOT_USERNAME + '?text=' + text);
+  const url = 'https://t.me/' + BOT_USERNAME + '?text=' + text;
+  try { tg.openTelegramLink(url); } catch(e) { window.open(url, '_blank'); }
 }
 
 function showBookingForm() {
@@ -1169,9 +1178,250 @@ loadSpecialists();
 let musicTracks = [];
 let currentTrackIndex = -1;
 let currentGenre = '';
+let currentSearchQuery = '';
 
 async function loadMusicPage() {
   renderMusicGenres();
+  qs('music-search-input').value = '';
+  currentSearchQuery = '';
+  showMusicGenres();
+}
+
+async function renderMusicGenres() {
+  const grid = qs('music-genre-grid');
+  if (!grid) return;
+  try {
+    const d = await api('/api/music/genres', {});
+    if (d.ok && d.genres) {
+      const entries = Object.entries(d.genres);
+      grid.innerHTML = entries.map(([key, g]) =>
+        `<div class="music-genre-card" onclick="loadGenreTracks('${key}')">
+          <div class="music-genre-icon">${g.icon}</div>
+          <div class="music-genre-name">${g.name}</div>
+        </div>`
+      ).join('');
+    } else {
+      grid.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center">Не удалось загрузить жанры</p>';
+    }
+  } catch(e) {
+    grid.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center">Ошибка загрузки</p>';
+  }
+}
+
+async function searchMusic() {
+  const inp = qs('music-search-input');
+  const q = inp.value.trim();
+  if (!q) { tg.showAlert('Введи запрос (например: Rock Legends)'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  currentSearchQuery = q;
+  qs('music-track-title').textContent = '🔍 ' + q;
+  qs('music-track-count').textContent = 'Поиск...';
+  qs('music-track-total-dur').textContent = '';
+  qs('music-track-actions').style.display = 'none';
+  const u = uid();
+  const d = await api('/api/music/search', {chat_id: u || 0, query: q});
+  if (d.ok && d.tracks) {
+    musicTracks = d.tracks;
+    qs('music-track-count').textContent = musicTracks.length + ' треков';
+    if (d.total_duration) {
+      const hrs = Math.floor(d.total_duration / 3600);
+      const mins = Math.floor((d.total_duration % 3600) / 60);
+      qs('music-track-total-dur').textContent = (hrs ? hrs+'ч ':'') + mins + 'мин';
+    }
+    renderTrackList();
+    qs('music-genre-page').style.display = 'none';
+    qs('music-track-page').style.display = 'block';
+    qs('music-track-actions').style.display = 'flex';
+  } else {
+    qs('music-track-count').textContent = 'Ничего не найдено';
+  }
+}
+
+async function loadGenreTracks(genre) {
+  tg.HapticFeedback.impactOccurred('medium');
+  currentGenre = genre;
+  currentSearchQuery = '';
+  const genres = {ambient:'🌿Ambient', classic:'🎹Классика', nature:'🌊Природа', jazz:'🎷Jazz', spa:'💆Спа', thai:'🧘Тайский', acoustic:'🎸Акустика', binaural:'🧘Бины'};
+  qs('music-track-title').textContent = genres[genre] || genre;
+  qs('music-track-count').textContent = 'Загрузка...';
+  qs('music-track-total-dur').textContent = '';
+  qs('music-track-actions').style.display = 'none';
+  const u = uid();
+  const d = await api('/api/music/tracks', {chat_id: u || 0, genre: genre});
+  if (d.ok && d.tracks) {
+    musicTracks = d.tracks;
+    qs('music-track-count').textContent = musicTracks.length + ' треков';
+    const totalSec = musicTracks.reduce((s, t) => s + (t.duration || 0), 0);
+    if (totalSec) {
+      const hrs = Math.floor(totalSec / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      qs('music-track-total-dur').textContent = (hrs ? hrs+'ч ':'') + mins + 'мин';
+    }
+    renderTrackList();
+    qs('music-genre-page').style.display = 'none';
+    qs('music-track-page').style.display = 'block';
+    qs('music-track-actions').style.display = 'flex';
+  } else {
+    qs('music-track-count').textContent = 'Не удалось загрузить';
+  }
+}
+
+function renderTrackList() {
+  const el = qs('music-track-list');
+  if (!el) return;
+  el.innerHTML = musicTracks.map((t, i) =>
+    `<div class="music-track-item ${i === currentTrackIndex ? 'playing' : ''}" onclick="playTrack(${i})">
+      <div class="music-track-num">${i === currentTrackIndex ? '🔊' : (i + 1)}</div>
+      <div class="music-track-info">
+        <div class="music-track-title">${t.title || 'Без названия'}</div>
+        <div class="music-track-dur">${t.artist || ''}${t.duration ? ' · ' + formatTime(t.duration) : ''}</div>
+      </div>
+      <div class="music-track-play">${i === currentTrackIndex ? '⏸' : '▶'}</div>
+    </div>`
+  ).join('');
+}
+
+function showMusicGenres() {
+  qs('music-track-page').style.display = 'none';
+  qs('music-genre-page').style.display = 'block';
+  currentTrackIndex = -1;
+  qs('music-track-actions').style.display = 'none';
+}
+
+function formatTime(s) {
+  if (!s || s <= 0) return '';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function playTrack(index) {
+  if (index < 0 || index >= musicTracks.length) return;
+  const t = musicTracks[index];
+  if (index === currentTrackIndex) { togglePlay(); return; }
+  currentTrackIndex = index;
+  const audio = qs('player-audio');
+  audio.src = t.url;
+  audio.play().catch(() => {});
+  qs('player-track-title').textContent = t.title || 'Без названия';
+  qs('player-track-artist').textContent = t.artist || '';
+  qs('player-play-btn').textContent = '⏸';
+  qs('music-player-bar').style.display = 'flex';
+  renderTrackList();
+  audio.ontimeupdate = () => {
+    if (audio.duration) {
+      qs('player-progress-fill').style.width = (audio.currentTime / audio.duration * 100) + '%';
+      qs('player-time-current').textContent = formatTime(audio.currentTime);
+      qs('player-time-total').textContent = formatTime(audio.duration);
+    }
+  };
+  audio.onended = () => nextTrack();
+}
+
+function togglePlay() {
+  const audio = qs('player-audio');
+  if (audio.paused) {
+    if (!audio.src) { if (musicTracks.length > 0) playTrack(0); return; }
+    audio.play().catch(() => {});
+    qs('player-play-btn').textContent = '⏸';
+  } else {
+    audio.pause();
+    qs('player-play-btn').textContent = '▶️';
+  }
+}
+
+function nextTrack() {
+  if (musicTracks.length === 0) return;
+  const next = (currentTrackIndex + 1) % musicTracks.length;
+  playTrack(next);
+}
+
+function prevTrack() {
+  if (musicTracks.length === 0) return;
+  const prev = (currentTrackIndex - 1 + musicTracks.length) % musicTracks.length;
+  playTrack(prev);
+}
+
+function seekTrack(e) {
+  const bar = qs('player-progress');
+  const audio = qs('player-audio');
+  if (!audio.duration) return;
+  const rect = bar.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  audio.currentTime = pct * audio.duration;
+}
+
+function closePlayer() {
+  const audio = qs('player-audio');
+  audio.pause();
+  audio.src = '';
+  currentTrackIndex = -1;
+  qs('music-player-bar').style.display = 'none';
+  renderTrackList();
+}
+
+async function saveCurrentPlaylist() {
+  if (musicTracks.length === 0) { tg.showAlert('Нет треков для сохранения'); return; }
+  const u = uid(); if (!u) { tg.showAlert('Нужен Telegram ID'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  const name = prompt('Название плейлиста:', 'Мой плейлист');
+  if (!name) return;
+  const d = await api('/api/music/save_playlist', {chat_id: u, name: name, tracks: musicTracks});
+  if (d.ok) tg.showAlert('✅ Плейлист сохранён: ' + name);
+  else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
+}
+
+async function showSavedPlaylists() {
+  tg.HapticFeedback.impactOccurred('medium');
+  const u = uid(); if (!u) { tg.showAlert('Нужен Telegram ID'); return; }
+  const d = await api('/api/music/playlists', {chat_id: u});
+  if (!d.ok || !d.playlists) { tg.showAlert('Нет сохранённых плейлистов'); return; }
+  const el = qs('music-playlist-list');
+  el.innerHTML = d.playlists.length ? d.playlists.map((pl, i) =>
+    `<div class="sp-item" onclick="loadPlaylistTracks(${i})">
+      <div class="sp-item-info">
+        <div class="sp-item-name">💾 ${pl.name}</div>
+        <div class="sp-item-role">${pl.tracks.length} треков</div>
+      </div>
+      <button class="btn btn-secondary" onclick="event.stopPropagation(); deletePlaylist(${i})" style="width:auto;padding:4px 10px;min-width:0;font-size:11px;margin:0">🗑️</button>
+    </div>`
+  ).join('') : '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Нет сохранённых плейлистов</p>';
+  qs('musicPlaylistsModal').style.display = 'flex';
+}
+
+function closeMusicPlaylists() { qs('musicPlaylistsModal').style.display = 'none'; }
+
+function loadPlaylistTracks(index) {
+  tg.HapticFeedback.impactOccurred('medium');
+  const u = uid(); if (!u) return;
+  api('/api/music/playlists', {chat_id: u}).then(d => {
+    if (d.ok && d.playlists[index]) {
+      musicTracks = d.playlists[index].tracks;
+      currentTrackIndex = -1;
+      currentGenre = 'playlist';
+      qs('music-track-title').textContent = d.playlists[index].name;
+      qs('music-track-count').textContent = musicTracks.length + ' треков';
+      const totalSec = musicTracks.reduce((s, t) => s + (t.duration || 0), 0);
+      if (totalSec) {
+        const hrs = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        qs('music-track-total-dur').textContent = (hrs ? hrs+'ч ':'') + mins + 'мин';
+      }
+      renderTrackList();
+      qs('music-genre-page').style.display = 'none';
+      qs('music-track-page').style.display = 'block';
+      qs('music-track-actions').style.display = 'flex';
+      closeMusicPlaylists();
+    }
+  });
+}
+
+async function deletePlaylist(index) {
+  const u = uid(); if (!u) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  const d = await api('/api/music/delete_playlist', {chat_id: u, index: index});
+  if (d.ok) { showSavedPlaylists(); tg.showAlert('✅ Плейлист удалён'); }
+  else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
 }
 
 async function renderMusicGenres() {
@@ -1374,7 +1624,7 @@ async function deletePlaylist(index) {
 }
 
 // Version stamp for production verification
-(function(){ const v=document.createElement('div'); v.style.cssText='position:fixed;bottom:2px;right:4px;font-size:8px;color:var(--hint);opacity:0.4;z-index:999;pointer-events:none'; v.textContent='v2026.05.27'; document.body.appendChild(v); })();
+(function(){ const v=document.createElement('div'); v.style.cssText='position:fixed;bottom:2px;right:4px;font-size:8px;color:var(--hint);opacity:0.4;z-index:999;pointer-events:none'; v.textContent='v2026.05.28'; document.body.appendChild(v); })();
 </script>
 </body>
 </html>

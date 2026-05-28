@@ -224,11 +224,20 @@ Test pattern: unit tests mock all network calls (`@patch`), test core logic only
 ### Push Policy
 | Change Type | Action |
 |-------------|--------|
-| 🐛 Bug fix, text/copy change, config/dep update, refactoring | **Auto-push** after tests pass |
-| ✨ New feature, API change, architecture change, breaking change | **Ask user** for confirmation |
-| 🚑 Hotfix (prod broken) | **Auto-push** immediately, then report |
+| 🐛 Bug fix, text/copy change, config/dep update, refactoring | Work autonomously → **ask to push** |
+| ✨ New feature, API change, architecture change, breaking change | Work autonomously → **ask to push** |
+| 🚑 Hotfix (prod broken) | Fix + push immediately, then report |
 
-**Flow:** pytest passes → `git add/commit/push` → HF Spaces auto-deploy. If tests fail, fix before push.
+**Workflow:**
+1. Работаю безостановочно — код, тесты, итерации, без лишних вопросов
+2. `pytest` проходит → `git add/commit` (но не push)
+3. **Спрашиваю "Пушить?"** — ты решаешь, когда едет в прод
+4. Если молчишь → жду твоего сигнала
+
+**Исключение:** прод сломан — чиню и пушу сразу, потом докладываю.
+
+### Оценка времени (Estimations)
+Перед задачей >5 мин — пишу `≈N мин/ч`. После — `(факт: Nм)` если расхождение >20%. Итоги длинных задач (>1ч) — в HISTORY.md.
 
 ## Env Variables
 

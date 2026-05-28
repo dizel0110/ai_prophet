@@ -175,6 +175,17 @@ def _save_music_settings(data: dict):
         logger.warning(f"Failed to save music settings: {e}")
 
 
+@app.post("/api/music/search")
+async def api_music_search(req: dict):
+    from core.music_player import search_tracks, get_tracks_duration
+    query = req.get("query", "").strip()
+    if not query:
+        return {"ok": False, "error": "Missing query"}
+    tracks = search_tracks(query)
+    total_dur = get_tracks_duration(tracks)
+    return {"ok": True, "tracks": tracks, "query": query, "total_duration": total_dur}
+
+
 @app.get("/api/music/genres")
 async def api_music_genres():
     from core.music_player import get_all_genres
