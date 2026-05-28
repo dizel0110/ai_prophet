@@ -6,6 +6,7 @@ python-dotenv
 # API & DNS
 fastapi
 uvicorn
+python-multipart
 dnspython
 requests
 huggingface-hub
