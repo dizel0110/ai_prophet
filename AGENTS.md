@@ -363,6 +363,18 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - Кнопка 🔄 в шапке чата (`closeSpecialistChat(); navigate('chat'); loadChatList()`) — возвращает к списку специалистов, откуда можно снова открыть MC.
 - История диалога с MC сохраняется в `spMessages[uid]` и восстанавливается при повторном открытии.
 
+## 🚫 HF Spaces Binary Rejection Rule
+
+HF Spaces rejects **any git push containing binary files** (PNG, ZIP, pickles, etc.) with error:
+```
+Your push was rejected because it contains binary files.
+Please use https://huggingface.co/docs/hub/xet to store binary files.
+```
+
+**Решение:** любые бинарники, необходимые в рантайме, кодировать в base64 → хранить как текстовый JSON в git → декодировать на старте сервера (`main.py:decode_certs()`).
+
+**Правило:** ни один бинарный файл не должен попадать в git-историю HF Spaces. Если файл нужен на сервере — base64 в JSON + декод при старте.
+
 ## Certificate Management (Сертификаты/Дипломы)
 
 PNG-файлы сертификатов хранятся в `static/massage/certificates/`, но **не через git** — HF Spaces блокирует бинарники.
