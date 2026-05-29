@@ -85,8 +85,8 @@ def decode_certs():
         logger.warning(f"⚠️ Certificate decode failed: {e}")
 
 decode_certs()
-+
-+# Webhook routes (только на HF Spaces, после dp — чтобы не красть роутеры)
+
+# Webhook routes (только на HF Spaces, после dp — чтобы не красть роутеры)
 if IS_HF_SPACE:
     try:
         from webhook_only import setup_webhook_routes
