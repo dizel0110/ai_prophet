@@ -1658,10 +1658,11 @@ function stripMarkdown(t) {
     .replace(/__([\s\S]+?)__/g, '$1').replace(/~~(.+?)~~/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/^#{1,6}\s+/gm, '').replace(/^[-*+]\s+/gm, '').replace(/^\d+\.\s+/gm, '').replace(/^>\s+/gm, '')
-    .replace(/\[ACTION:[^\]]*\]/g, '');
+    .replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[ДЕЙСТВИЕ:[^\]]*\]/g, '');
 }
 function parseActions(text) {
   const acts = [];
+  text = text.replace(/\u201C|\u201D|\u00AB|\u00BB/g, '"');
   const re = /\[ACTION:\s*(\w+)(?:,\s*"([^"]*)")?\s*\]/g;
   let m;
   while ((m = re.exec(text)) !== null) acts.push({type:m[1], param:m[2]||''});
