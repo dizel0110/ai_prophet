@@ -60,7 +60,33 @@ dp.include_router(limits.router)
 dp.include_router(massage.router)
 dp.include_router(messages.router)
 
-# Webhook routes (только на HF Spaces, после dp — чтобы не красть роутеры)
+# ──────────────────── Certificate decoder ────────────────────
+CERTS_JSON = Path(__file__).parent / "static" / "massage" / "certificates" / "certs.json"
+CERTS_DIR = Path(__file__).parent / "static" / "massage" / "certificates"
+
+def decode_certs():
+    """Decode base64 certificate PNGs from certs.json on startup."""
+    if not CERTS_JSON.exists():
+        logger.info("📜 certs.json not found, skipping certificate decode")
+        return
+    try:
+        import base64
+        CERTS_DIR.mkdir(parents=True, exist_ok=True)
+        with open(CERTS_JSON, "r", encoding="utf-8") as f:
+            certs = json.load(f)
+        for name, b64 in certs.items():
+            path = CERTS_DIR / name
+            if not path.exists():
+                data = base64.b64decode(b64)
+                with open(path, "wb") as f:
+                    f.write(data)
+                logger.info(f"📜 Decoded certificate: {name}")
+    except Exception as e:
+        logger.warning(f"⚠️ Certificate decode failed: {e}")
+
+decode_certs()
++
++# Webhook routes (только на HF Spaces, после dp — чтобы не красть роутеры)
 if IS_HF_SPACE:
     try:
         from webhook_only import setup_webhook_routes

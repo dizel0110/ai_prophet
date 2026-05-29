@@ -365,25 +365,27 @@ Playwright MCP сервер установлен для opencode. Конфигу
 
 ## Certificate Management (Сертификаты/Дипломы)
 
-PNG-файлы сертификатов хранятся в `static/massage/certificates/`.
+PNG-файлы сертификатов хранятся в `static/massage/certificates/`, но **не через git** — HF Spaces блокирует бинарники.
+
+**Механизм:** base64-кодирование → `certs.json` (текстовый файл, проходит через git) → декодирование в PNG при старте сервера (`main.py:decode_certs()`).
 
 **Добавить новый:**
 1. Положить PNG рядом — я скопирую в `static/massage/certificates/`
-2. Добавить `<div class="cert-item">` в HTML в блок `.cert-grid` (раздел «Наши дипломы и сертификаты»)
+2. Добавить `<div class="cert-item">` в HTML в блок `.cert-grid`
 3. Вписать короткую подпись в `cert-label`
-4. Коммит + пуш → прод
+4. **Запустить encode:** `python -c "import base64,json; d=open(r'static/massage/certificates/новый.png','rb').read(); c=json.load(open(r'static/massage/certificates/certs.json')); c['новый.png']=base64.b64encode(d).decode(); json.dump(c, open(r'static/massage/certificates/certs.json','w'),ensure_ascii=False,indent=2)"`
+5. Коммит + пуш → прод
 
 **Удалить устаревший:**
-1. `git rm static/massage/certificates/старый_файл.png`
-2. Убрать соответствующий `<div class="cert-item">` из HTML
-3. Коммит + пуш
+1. Убрать `<div class="cert-item">` из HTML
+2. Удалить запись из `certs.json` (`del c['старый.png']`)
+3. `git rm` не нужен — PNG в `.gitignore`
+4. Коммит + пуш
 
 **Заменить (новое оформление):**
-1. Удалить старый PNG и HTML-блок
-2. Добавить новый PNG и HTML-блок (как при добавлении)
+1. Удалить старый PNG и HTML-блок + запись в `certs.json`
+2. Добавить новый PNG и HTML-блок + запись в `certs.json`
 3. Коммит + пуш
-
-**Важно:** HF Spaces не принимает бинарники через git (отклоняет push). PNG нужно загружать вручную через HF Spaces → Files → `static/massage/certificates/`. В HTML добавлен `onerror` — если PNG нет, показывается иконка-заглушка.
 
 ## Gotchas & Known Issues
 
