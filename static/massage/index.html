@@ -65,6 +65,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .cert-item{position:relative;border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .2s;aspect-ratio:1/1.4;background:var(--bg)}
 .cert-item:active{transform:scale(.95)}
 .cert-item img{width:100%;height:100%;object-fit:cover;border-radius:12px;border:1px solid var(--border)}
+.cert-fallback{display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:48px;background:var(--card);border-radius:12px;border:1px solid var(--border);position:absolute;top:0;left:0}
 .cert-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;font-size:11px;font-weight:600;padding:20px 8px 8px;text-align:center}
 .review-text{font-size:13px;color:var(--text);line-height:1.6;opacity:.85}
 
@@ -459,15 +460,18 @@ html{scroll-behavior:smooth}
       <div class="sec-sub" style="margin-bottom:10px">Постоянно учимся новому</div>
       <div class="cert-grid">
         <div class="cert-item" onclick="showCert('/static/massage/certificates/Сертификат%20Массаж%20стоп%20секретные%20точки%20здоровья%2C%20релакса%20и%20высокого%20дохода%2019.05.26.%20Диплом%20№98989.png')">
-          <img src="/static/massage/certificates/Сертификат%20Массаж%20стоп%20секретные%20точки%20здоровья%2C%20релакса%20и%20высокого%20дохода%2019.05.26.%20Диплом%20№98989.png" alt="Сертификат массаж стоп" loading="lazy">
+          <img src="/static/massage/certificates/Сертификат%20Массаж%20стоп%20секретные%20точки%20здоровья%2C%20релакса%20и%20высокого%20дохода%2019.05.26.%20Диплом%20№98989.png" onerror="this.style.display='none';this.parentElement.querySelector('.cert-fallback').style.display='flex'" alt="Сертификат массаж стоп" loading="lazy">
+          <div class="cert-fallback">🦶</div>
           <div class="cert-label">🦶 Массаж стоп</div>
         </div>
         <div class="cert-item" onclick="showCert('/static/massage/certificates/Сертификат%20Массаж%20ШВЗ%20в%20положении%20лежа%20на%20спине%20%2028.05.26.%20Диплом%20№99700.png')">
-          <img src="/static/massage/certificates/Сертификат%20Массаж%20ШВЗ%20в%20положении%20лежа%20на%20спине%20%2028.05.26.%20Диплом%20№99700.png" alt="Сертификат массаж ШВЗ" loading="lazy">
+          <img src="/static/massage/certificates/Сертификат%20Массаж%20ШВЗ%20в%20положении%20лежа%20на%20спине%20%2028.05.26.%20Диплом%20№99700.png" onerror="this.style.display='none';this.parentElement.querySelector('.cert-fallback').style.display='flex'" alt="Сертификат массаж ШВЗ" loading="lazy">
+          <div class="cert-fallback">💆</div>
           <div class="cert-label">💆 Массаж ШВЗ</div>
         </div>
         <div class="cert-item" onclick="showCert('/static/massage/certificates/Сертификат%20Мастер%20миофасциального%20массажа%20глубокотканные%20техники%20по%20лицу%20и%20телу%2013.05.26.%20Диплом%20№99695.png')">
-          <img src="/static/massage/certificates/Сертификат%20Мастер%20миофасциального%20массажа%20глубокотканные%20техники%20по%20лицу%20и%20телу%2013.05.26.%20Диплом%20№99695.png" alt="Сертификат миофасциальный массаж" loading="lazy">
+          <img src="/static/massage/certificates/Сертификат%20Мастер%20миофасциального%20массажа%20глубокотканные%20техники%20по%20лицу%20и%20телу%2013.05.26.%20Диплом%20№99695.png" onerror="this.style.display='none';this.parentElement.querySelector('.cert-fallback').style.display='flex'" alt="Сертификат миофасциальный массаж" loading="lazy">
+          <div class="cert-fallback">🔬</div>
           <div class="cert-label">🔬 Миофасциальный массаж</div>
         </div>
       </div>
@@ -777,7 +781,8 @@ html{scroll-behavior:smooth}
 <div class="modal-overlay" id="certModal" style="display:none;align-items:center" onclick="closeCertModal()">
   <div style="max-width:95vw;max-height:95vh;position:relative" onclick="event.stopPropagation()">
     <button class="modal-close" onclick="closeCertModal()" style="position:absolute;top:8px;right:8px;z-index:10;background:rgba(0,0,0,.5);color:#fff;border-radius:50%;width:32px;height:32px;font-size:18px;line-height:32px;text-align:center">✕</button>
-    <img id="certModalImg" src="" style="max-width:100%;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.4)" alt="Сертификат">
+    <img id="certModalImg" src="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="max-width:100%;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.4)" alt="Сертификат">
+    <div id="certModalFallback" style="display:none;width:280px;height:392px;background:var(--card);border-radius:12px;align-items:center;justify-content:center;font-size:80px;border:1px solid var(--border);box-shadow:0 8px 40px rgba(0,0,0,.4)">📜</div>
   </div>
 </div>
 

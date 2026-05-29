@@ -383,6 +383,8 @@ PNG-файлы сертификатов хранятся в `static/massage/cert
 2. Добавить новый PNG и HTML-блок (как при добавлении)
 3. Коммит + пуш
 
+**Важно:** HF Spaces не принимает бинарники через git (отклоняет push). PNG нужно загружать вручную через HF Spaces → Files → `static/massage/certificates/`. В HTML добавлен `onerror` — если PNG нет, показывается иконка-заглушка.
+
 ## Gotchas & Known Issues
 
 - **HF Spaces blocks outgoing Telegram API** — polling requires `PROXY_URL` secret on HF. Without it, bot crashes with `ClientConnectorError`.

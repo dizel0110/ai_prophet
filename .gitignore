@@ -21,3 +21,4 @@ docs/
 !artef/bot_avatar.svg
 .playwright-mcp/
 tests/
+static/massage/certificates/
