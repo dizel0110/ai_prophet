@@ -337,6 +337,32 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - **Final Expert always runs** — `orchestrator.py` runs Final Expert unconditionally (lines 63-65). `_build_context` with `include_all=True` passes all results including `technique_expert`. The `[:300]` truncation for questionnaire text passed to vision/video agents was removed — Final Expert now gets full data.
 - **`orchestrator.py` synchronous AI calls** — wrapped in `asyncio.to_thread()` for compatibility with aiogram handlers.
 
+## Master Consultant Actions (ACTION System)
+
+Мастер-консультант (MC) — единственный агент, который может выполнять действия в Mini App через `[ACTION: ...]` маркеры в ответе AI.
+
+**Доступные действия:**
+- `[ACTION: open_specialist, "Имя"]` — закрыть чат MC, открыть чат с другим специалистом
+- `[ACTION: play_music, "жанр"]` — перейти на вкладку Музыка, загрузить треки жанра
+- `[ACTION: start_consultation]` — открыть форму анкетирования (AI-диагностика)
+- `[ACTION: go_booking]` — перейти на страницу записи
+
+**Как работает:**
+1. MC system prompt (agent_factory.py) содержит инструкцию с примерами маркеров
+2. AI генерирует ответ с `[ACTION: ...]` в конце
+3. Frontend (`sendSpecialistMessage()` в index.html) парсит маркеры через `parseActions()`
+4. Маркеры удаляются из отображаемого текста (`stripMarkdown()`)
+5. Действия выполняются через 600ms после отображения ответа
+
+**Почему только MC:**
+- Остальные агенты — узкие профи (Диагност, Анкетолог и т.д.). Их задача — делать свою работу, не перенаправлять.
+- MC — единая точка входа и навигации. Граф поведения клиента: MC → нужный агент → (опционально 🔄 к MC).
+- Зацикленные переходы между агентами запутывают пользователя.
+
+**Возврат к MC:**
+- Кнопка 🔄 в шапке чата (`closeSpecialistChat(); navigate('chat'); loadChatList()`) — возвращает к списку специалистов, откуда можно снова открыть MC.
+- История диалога с MC сохраняется в `spMessages[uid]` и восстанавливается при повторном открытии.
+
 ## Certificate Management (Сертификаты/Дипломы)
 
 PNG-файлы сертификатов хранятся в `static/massage/certificates/`.

@@ -1652,7 +1652,15 @@ function stripMarkdown(t) {
     .replace(/`{3}[\s\S]*?`{3}/g, '').replace(/`([^`]+)`/g, '$1')
     .replace(/__([\s\S]+?)__/g, '$1').replace(/~~(.+?)~~/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '').replace(/^[-*+]\s+/gm, '').replace(/^\d+\.\s+/gm, '').replace(/^>\s+/gm, '');
+    .replace(/^#{1,6}\s+/gm, '').replace(/^[-*+]\s+/gm, '').replace(/^\d+\.\s+/gm, '').replace(/^>\s+/gm, '')
+    .replace(/\[ACTION:[^\]]*\]/g, '');
+}
+function parseActions(text) {
+  const acts = [];
+  const re = /\[ACTION:\s*(\w+)(?:,\s*"([^"]*)")?\s*\]/g;
+  let m;
+  while ((m = re.exec(text)) !== null) acts.push({type:m[1], param:m[2]||''});
+  return acts;
 }
 function addMsg(role, text, name) {
   const c = qs('chat-messages'); if(!c) return;
@@ -1700,8 +1708,30 @@ async function sendSpecialistMessage() {
   showTyping();
   const d = await api('/api/specialist/chat', {chat_id: u, name: currentSP, message: text});
   hideTyping();
-  if(d.ok) { spMessages[u][currentSP].push({role:'ai',text:d.response}); addMsg('ai',d.response,d.name||currentSP); }
-  else { addMsg('ai','❌ '+(d.error||'Не удалось получить ответ')); }
+  if(d.ok) {
+    spMessages[u][currentSP].push({role:'ai',text:d.response});
+    addMsg('ai',d.response,d.name||currentSP);
+    // Execute ACTION markers
+    const acts = parseActions(d.response);
+    acts.forEach(function(a) {
+      setTimeout(function() {
+        if (a.type==='open_specialist' && a.param) {
+          closeSpecialistChat();
+          setTimeout(function() { openSpecialistChat(a.param); }, 200);
+        } else if (a.type==='play_music' && a.param) {
+          closeSpecialistChat();
+          navigate('music');
+          setTimeout(function() { loadGenreTracks(a.param); }, 300);
+        } else if (a.type==='start_consultation') {
+          closeSpecialistChat();
+          openConsultForm();
+        } else if (a.type==='go_booking') {
+          closeSpecialistChat();
+          navigate('booking');
+        }
+      }, 600);
+    });
+  } else { addMsg('ai','❌ '+(d.error||'Не удалось получить ответ')); }
 }
 
 let voiceBusy = false;
