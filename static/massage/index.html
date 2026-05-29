@@ -79,6 +79,13 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .btn-bevel{clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px);border-radius:0}
 .btn-soft-cut{border-radius:20px 8px 20px 8px}
 .btn-skew{transform:skewX(-2deg)}
+/* Voice button states */
+#voice-btn{position:relative;transition:all .2s;user-select:none;-webkit-user-select:none}
+#voice-btn.voice-text{background:var(--accent);color:var(--accent-text);transform:scale(1.08);box-shadow:0 0 16px rgba(196,154,108,.35)}
+#voice-btn.voice-auto{background:var(--gold);color:#fff;transform:scale(1.15);box-shadow:0 0 24px rgba(196,154,108,.55);animation:voicePulse .8s ease-in-out infinite alternate}
+.voice-hint{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9px;white-space:nowrap;color:var(--hint);pointer-events:none;opacity:0;transition:opacity .2s}
+#voice-btn.voice-text .voice-hint,#voice-btn.voice-auto .voice-hint{opacity:1}
+@keyframes voicePulse{0%{box-shadow:0 0 16px rgba(196,154,108,.3)}100%{box-shadow:0 0 32px rgba(196,154,108,.7)}}
 /* Session items */
 .session-items{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .session-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;background:var(--bg);border-radius:12px;text-align:center;cursor:pointer;transition:all .2s}
@@ -646,7 +653,7 @@ html{scroll-behavior:smooth}
     </div>
     <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
       <input type="text" id="chat-input" placeholder="Напиши сообщение..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:20px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">
-      <button class="btn btn-secondary" id="voice-btn" onmousedown="voiceBtnDown(event)" onmouseup="voiceBtnUp(event)" ontouchstart="voiceBtnDown(event)" ontouchend="voiceBtnUp(event)" style="white-space:nowrap;padding:10px 14px;min-width:auto;border-radius:20px;font-size:16px;user-select:none" title="🖱 Нажать — текст в поле / Задержать — авто-отправка">🎤</button>
+      <button class="btn btn-secondary" id="voice-btn" onmousedown="voiceBtnDown(event)" onmouseup="voiceBtnUp(event)" onmouseleave="voiceBtnUp(event)" ontouchstart="voiceBtnDown(event)" ontouchend="voiceBtnUp(event)" style="white-space:nowrap;padding:10px 14px;min-width:auto;border-radius:20px;font-size:16px" title="🖱 Нажать — текст в поле / Задержать — авто-отправка">🎤<span class="voice-hint"></span></button>
       <button class="btn btn-primary" onclick="sendSpecialistMessage()" style="white-space:nowrap;padding:10px 18px;min-width:auto;border-radius:20px">➤</button>
     </div>
   </div>
@@ -1697,38 +1704,64 @@ async function sendSpecialistMessage() {
   else { addMsg('ai','❌ '+(d.error||'Не удалось получить ответ')); }
 }
 
+let voiceBusy = false;
+let voiceTimer = null;
+
 function startVoiceInput(autoSend) {
+  if (voiceBusy) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { tg.showAlert('❌ Голосовой ввод не поддерживается в этом браузере'); return; }
+  voiceBusy = true;
   const r = new SR();
   r.lang = 'ru-RU';
   r.interimResults = false;
   r.continuous = false;
   const btn = qs('voice-btn');
-  const origText = btn.textContent;
-  btn.textContent = '🔴';
-  btn.style.opacity = '1';
+  btn.innerHTML = (autoSend ? '🎤➤' : '🔴') + '<span class="voice-hint">' + (autoSend ? 'отправка' : 'ввод') + '</span>';
+  btn.className = 'btn btn-secondary ' + (autoSend ? 'voice-auto' : 'voice-text');
   r.onresult = function(e) {
     const t = Array.from(e.results).map(r => r[0].transcript).join(' ');
     const inp = qs('chat-input');
     if (inp) inp.value = t;
   };
   r.onend = function() {
-    btn.textContent = origText;
-    btn.style.opacity = '';
+    btn.innerHTML = '🎤<span class="voice-hint"></span>';
+    btn.className = 'btn btn-secondary';
     const inp = qs('chat-input');
     if (autoSend && inp && inp.value.trim()) sendSpecialistMessage();
+    voiceBusy = false;
   };
-  r.onerror = function() { btn.textContent = origText; btn.style.opacity = ''; };
+  r.onerror = function() {
+    btn.innerHTML = '🎤<span class="voice-hint"></span>';
+    btn.className = 'btn btn-secondary';
+    voiceBusy = false;
+  };
   r.start();
 }
-let voiceLongPressTimer = null;
+
 function voiceBtnDown(e) {
-  voiceLongPressTimer = setTimeout(function() { voiceLongPressTimer = null; startVoiceInput(true); }, 400);
+  if (voiceBusy) return;
+  const btn = qs('voice-btn');
+  btn.innerHTML = '🎤<span class="voice-hint">удержи</span>';
+  btn.classList.add('voice-text');
+  voiceTimer = setTimeout(function() {
+    btn.innerHTML = '🎤➤<span class="voice-hint">отправка</span>';
+    btn.className = 'btn btn-secondary voice-auto';
+    voiceTimer = null;
+    tg.HapticFeedback.impactOccurred('medium');
+  }, 350);
+  tg.HapticFeedback.impactOccurred('medium');
   e.preventDefault();
 }
+
 function voiceBtnUp(e) {
-  if (voiceLongPressTimer) { clearTimeout(voiceLongPressTimer); voiceLongPressTimer = null; startVoiceInput(false); }
+  if (voiceBusy) return;
+  if (voiceTimer) { clearTimeout(voiceTimer); voiceTimer = null; }
+  const isLong = document.querySelector('#voice-btn.voice-auto') !== null;
+  const btn = qs('voice-btn');
+  btn.innerHTML = '🎤<span class="voice-hint"></span>';
+  btn.className = 'btn btn-secondary';
+  startVoiceInput(isLong);
   e.preventDefault();
 }
 
