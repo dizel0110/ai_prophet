@@ -60,6 +60,12 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .review-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;flex-shrink:0}
 .review-name{font-size:13px;font-weight:600}
 .review-stars{color:var(--gold);font-size:12px}
+/* Certificates */
+.cert-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cert-item{position:relative;border-radius:12px;overflow:hidden;cursor:pointer;transition:transform .2s;aspect-ratio:1/1.4;background:var(--bg)}
+.cert-item:active{transform:scale(.95)}
+.cert-item img{width:100%;height:100%;object-fit:cover;border-radius:12px;border:1px solid var(--border)}
+.cert-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;font-size:11px;font-weight:600;padding:20px 8px 8px;text-align:center}
 .review-text{font-size:13px;color:var(--text);line-height:1.6;opacity:.85}
 
 /* Booking */
@@ -69,6 +75,17 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .contact-label{font-size:12px;color:var(--hint)}
 .contact-value{font-size:14px;font-weight:600}
 .btn{display:block;width:100%;padding:16px;border:none;border-radius:14px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .2s;text-align:center;text-decoration:none}
+.btn-cut{border-radius:4px 20px 4px 20px}
+.btn-bevel{clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px);border-radius:0}
+.btn-soft-cut{border-radius:20px 8px 20px 8px}
+.btn-skew{transform:skewX(-2deg)}
+/* Session items */
+.session-items{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.session-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;background:var(--bg);border-radius:12px;text-align:center;cursor:pointer;transition:all .2s}
+.session-item:active{transform:scale(.95)}
+.session-icon{font-size:28px;line-height:1}
+.session-name{font-size:12px;font-weight:600;color:var(--text)}
+.session-hint{font-size:10px;color:var(--hint);line-height:1.3}
 /* Music Player */
 .music-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .music-genre-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s}
@@ -323,21 +340,57 @@ html{scroll-behavior:smooth}
   </div>
   <div class="sec">
     <div class="sec-title">🎵 Музыка для массажа</div>
-    <div class="sec-sub">Подбери идеальный плейлист через нашего бота</div>
+    <div class="sec-sub">Выбери жанр и слушай прямо здесь</div>
     <div class="card" style="cursor:pointer">
       <div class="flex gap-8" style="flex-wrap:wrap">
-        <span class="tag" onclick="musicPlaylist('ambient spa relaxing')">🌿 Ambient</span>
-        <span class="tag" onclick="musicPlaylist('classical piano relaxing')">🎹 Классика</span>
-        <span class="tag" onclick="musicPlaylist('nature sounds meditation')">🌊 Природа</span>
-        <span class="tag" onclick="musicPlaylist('jazz lounge relax')">🎷 Jazz</span>
-        <span class="tag" onclick="musicPlaylist('acoustic guitar calm')">🎸 Акустика</span>
-        <span class="tag" onclick="musicPlaylist('binaural beats relaxation')">🧘 Бины</span>
+        <span class="tag" onclick="goMusicGenre('ambient')">🌿 Ambient</span>
+        <span class="tag" onclick="goMusicGenre('classic')">🎹 Классика</span>
+        <span class="tag" onclick="goMusicGenre('nature')">🌊 Природа</span>
+        <span class="tag" onclick="goMusicGenre('jazz')">🎷 Jazz</span>
+        <span class="tag" onclick="goMusicGenre('acoustic')">🎸 Акустика</span>
+        <span class="tag" onclick="goMusicGenre('binaural')">🧘 Бины</span>
       </div>
-      <div style="font-size:12px;color:var(--hint);margin-top:8px;text-align:center">Нажми на жанр — откроется чат с ботом для создания плейлиста</div>
+      <div style="font-size:12px;color:var(--hint);margin-top:8px;text-align:center">
+        Нажми на жанр — откроется плеер
+        <span onclick="event.stopPropagation();musicPlaylist('ambient spa relaxing')" style="color:var(--gold);text-decoration:underline;cursor:pointer;margin-left:4px">🎵 Telegram</span>
+      </div>
     </div>
   </div>
   <div class="sec">
-    <button class="btn btn-primary" onclick="navigate('booking')">✨ Записаться на сеанс</button>
+    <div class="sec-title">🛍 К сеансу</div>
+    <div class="sec-sub">Всё под рукой — что может пригодиться до и после массажа</div>
+    <div class="card" style="cursor:pointer">
+      <div class="session-items">
+        <div class="session-item" onclick="showSessionItem('oil')">
+          <div class="session-icon">🫒</div>
+          <div class="session-name">Масло</div>
+          <div class="session-hint">Натуральное, без отдушек</div>
+        </div>
+        <div class="session-item" onclick="showSessionItem('towel')">
+          <div class="session-icon">🧴</div>
+          <div class="session-name">Полотенце</div>
+          <div class="session-hint">Микрофибра, супервпитывание</div>
+        </div>
+        <div class="session-item" onclick="showSessionItem('candle')">
+          <div class="session-icon">🕯️</div>
+          <div class="session-name">Аромасвеча</div>
+          <div class="session-hint">Лаванда, сандал, эвкалипт</div>
+        </div>
+        <div class="session-item" onclick="showSessionItem('ball')">
+          <div class="session-icon">🔵</div>
+          <div class="session-name">Мяч-массажёр</div>
+          <div class="session-hint">Снять зажимы между сеансами</div>
+        </div>
+        <div class="session-item" onclick="showSessionItem('mat')">
+          <div class="session-icon">🧘</div>
+          <div class="session-name">Коврик</div>
+          <div class="session-hint">Для растяжки и йоги дома</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sec">
+    <button class="btn btn-primary btn-cut" onclick="navigate('booking')">✨ Записаться на сеанс</button>
   </div>
   <div class="sec">
     <div class="card channel-card" onclick="openLink('https://t.me/your_channel')" style="cursor:pointer">
@@ -397,14 +450,19 @@ html{scroll-behavior:smooth}
     <div class="card">
       <div class="sec-title" style="font-size:16px">Наши дипломы и сертификаты</div>
       <div class="sec-sub" style="margin-bottom:10px">Постоянно учимся новому</div>
-      <div class="flex gap-8" style="flex-wrap:wrap">
-        <span class="tag">Классический массаж</span>
-        <span class="tag">Спортивный массаж</span>
-        <span class="tag">Стоун-терапия</span>
-        <span class="tag">Тайский массаж</span>
-        <span class="tag">Лимфодренаж</span>
-        <span class="tag">Бамбуковый массаж</span>
-        <span class="tag">Ароматерапия</span>
+      <div class="cert-grid">
+        <div class="cert-item" onclick="showCert('/static/massage/certificates/Сертификат%20Массаж%20стоп%20секретные%20точки%20здоровья%2C%20релакса%20и%20высокого%20дохода%2019.05.26.%20Диплом%20№98989.png')">
+          <img src="/static/massage/certificates/Сертификат%20Массаж%20стоп%20секретные%20точки%20здоровья%2C%20релакса%20и%20высокого%20дохода%2019.05.26.%20Диплом%20№98989.png" alt="Сертификат массаж стоп" loading="lazy">
+          <div class="cert-label">🦶 Массаж стоп</div>
+        </div>
+        <div class="cert-item" onclick="showCert('/static/massage/certificates/Сертификат%20Массаж%20ШВЗ%20в%20положении%20лежа%20на%20спине%20%2028.05.26.%20Диплом%20№99700.png')">
+          <img src="/static/massage/certificates/Сертификат%20Массаж%20ШВЗ%20в%20положении%20лежа%20на%20спине%20%2028.05.26.%20Диплом%20№99700.png" alt="Сертификат массаж ШВЗ" loading="lazy">
+          <div class="cert-label">💆 Массаж ШВЗ</div>
+        </div>
+        <div class="cert-item" onclick="showCert('/static/massage/certificates/Сертификат%20Мастер%20миофасциального%20массажа%20глубокотканные%20техники%20по%20лицу%20и%20телу%2013.05.26.%20Диплом%20№99695.png')">
+          <img src="/static/massage/certificates/Сертификат%20Мастер%20миофасциального%20массажа%20глубокотканные%20техники%20по%20лицу%20и%20телу%2013.05.26.%20Диплом%20№99695.png" alt="Сертификат миофасциальный массаж" loading="lazy">
+          <div class="cert-label">🔬 Миофасциальный массаж</div>
+        </div>
       </div>
     </div>
   </div>
@@ -708,6 +766,27 @@ html{scroll-behavior:smooth}
   </div>
 </div>
 
+<!-- CERTIFICATE LIGHTBOX -->
+<div class="modal-overlay" id="certModal" style="display:none;align-items:center" onclick="closeCertModal()">
+  <div style="max-width:95vw;max-height:95vh;position:relative" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeCertModal()" style="position:absolute;top:8px;right:8px;z-index:10;background:rgba(0,0,0,.5);color:#fff;border-radius:50%;width:32px;height:32px;font-size:18px;line-height:32px;text-align:center">✕</button>
+    <img id="certModalImg" src="" style="max-width:100%;max-height:95vh;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.4)" alt="Сертификат">
+  </div>
+</div>
+
+<!-- SESSION ITEM MODAL -->
+<div class="modal-overlay" id="sessionModal" style="display:none">
+  <div class="modal" style="max-height:70vh">
+    <button class="modal-close" onclick="closeSessionModal()">✕</button>
+    <div id="session-modal-content">
+      <div style="font-size:48px;text-align:center;margin-bottom:12px" id="session-modal-icon"></div>
+      <h3 id="session-modal-title" style="text-align:center;margin-bottom:4px"></h3>
+      <div style="font-size:13px;color:var(--hint);text-align:center;margin-bottom:12px" id="session-modal-subtitle"></div>
+      <div style="font-size:14px;line-height:1.7;color:var(--text)" id="session-modal-desc"></div>
+    </div>
+  </div>
+</div>
+
 <!-- SAVED PLAYLISTS MODAL -->
 <div class="modal-overlay" id="musicPlaylistsModal" style="display:none">
   <div class="modal" style="max-height:70vh">
@@ -894,6 +973,11 @@ function openLink(url) {
   tg.openLink(url);
 }
 
+function goMusicGenre(genre) {
+  tg.HapticFeedback.impactOccurred('medium');
+  navigate('music');
+  setTimeout(function() { loadGenreTracks(genre); }, 200);
+}
 function musicPlaylist(query) {
   tg.HapticFeedback.impactOccurred('medium');
   const text = '/playlist ' + encodeURIComponent(query) + ' 5';
@@ -2076,11 +2160,29 @@ async function importPlaylists(input) {
   input.value = '';
 }
 
+// Session items
+const SESSION_ITEMS = {
+  oil:{icon:'🫒',title:'Масло для массажа',sub:'Натуральное, без отдушек',desc:'Миндальное, кокосовое, жожоба — выбирай под тип кожи. Не забивает поры, глубоко питает, не оставляет жирной плёнки. Идеально для классического и спа-массажа.'},
+  towel:{icon:'🧴',title:'Полотенце для массажа',sub:'Microfibre — впитывает в 3 раза быстрее',desc:'Мягкое, компактное, быстро сохнет. Удобно брать с собой. Для спа-салонов и домашнего использования. Гипоаллергенно.'},
+  candle:{icon:'🕯️',title:'Ароматическая свеча',sub:'Лаванда, сандал, эвкалипт',desc:'Помогает расслабиться, снижает тревожность, создаёт атмосферу уюта. Натуральный вощ, без парафина. Горит до 40 часов.'},
+  ball:{icon:'🔵',title:'Мяч для массажа',sub:'MFR — миофасциальный релиз',desc:'Снимает мышечные зажимы между сеансами. Подходит для спины, шеи, стоп. Разминает триггерные точки. 2 уровня жёсткости.'},
+  mat:{icon:'🧘',title:'Коврик для растяжки',sub:'Противоскользящий, 6 мм',desc:'Для растяжки, йоги, пилатеса после массажа. Экологичный TPE-материал. Не скользит по полу. Легко моется.'}
+};
+function showSessionItem(key) {
+  const item = SESSION_ITEMS[key];
+  if(!item) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  qs('session-modal-icon').textContent = item.icon;
+  qs('session-modal-title').textContent = item.title;
+  qs('session-modal-subtitle').textContent = item.sub;
+  qs('session-modal-desc').textContent = item.desc;
+  qs('sessionModal').style.display = 'flex';
+}
+function closeSessionModal() { qs('sessionModal').style.display = 'none'; }
+// Certificates
+function showCert(src) { tg.HapticFeedback.impactOccurred('medium'); qs('certModalImg').src = src; qs('certModal').style.display = 'flex'; }
+function closeCertModal() { qs('certModal').style.display = 'none'; }
 // Initial page entry animation for home
-setTimeout(function(){
-  var hp = document.getElementById('page-home');
-  if(hp){ hp.classList.add('page-enter'); setTimeout(function(){ hp.classList.remove('page-enter'); }, 500); }
-}, 60);
 
 // Version stamp for production verification
 (function(){ const v=document.createElement('div'); v.style.cssText='position:fixed;bottom:2px;right:4px;font-size:8px;color:var(--hint);opacity:0.4;z-index:999;pointer-events:none'; v.textContent='v2026.05.29'; document.body.appendChild(v); })();

@@ -337,6 +337,26 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - **Final Expert always runs** — `orchestrator.py` runs Final Expert unconditionally (lines 63-65). `_build_context` with `include_all=True` passes all results including `technique_expert`. The `[:300]` truncation for questionnaire text passed to vision/video agents was removed — Final Expert now gets full data.
 - **`orchestrator.py` synchronous AI calls** — wrapped in `asyncio.to_thread()` for compatibility with aiogram handlers.
 
+## Certificate Management (Сертификаты/Дипломы)
+
+PNG-файлы сертификатов хранятся в `static/massage/certificates/`.
+
+**Добавить новый:**
+1. Положить PNG рядом — я скопирую в `static/massage/certificates/`
+2. Добавить `<div class="cert-item">` в HTML в блок `.cert-grid` (раздел «Наши дипломы и сертификаты»)
+3. Вписать короткую подпись в `cert-label`
+4. Коммит + пуш → прод
+
+**Удалить устаревший:**
+1. `git rm static/massage/certificates/старый_файл.png`
+2. Убрать соответствующий `<div class="cert-item">` из HTML
+3. Коммит + пуш
+
+**Заменить (новое оформление):**
+1. Удалить старый PNG и HTML-блок
+2. Добавить новый PNG и HTML-блок (как при добавлении)
+3. Коммит + пуш
+
 ## Gotchas & Known Issues
 
 - **HF Spaces blocks outgoing Telegram API** — polling requires `PROXY_URL` secret on HF. Without it, bot crashes with `ClientConnectorError`.
