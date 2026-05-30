@@ -392,6 +392,14 @@ async def api_music_upload(chat_id: str = Form(...), file: UploadFile = File(...
     return {"ok": True, "track": {"title": title, "url": url, "source": "upload", "file_id": file_id}}
 
 
+@app.get("/api/music/recommendation/{chat_id}")
+async def api_music_recommendation(chat_id: int):
+    """Вернуть сохранённую музыкальную рекомендацию после консультации."""
+    ud = getattr(massage, "_get_user_data", lambda cid: {})(chat_id)
+    rec = ud.get("massage_music_recommendation", {})
+    return {"ok": True, "recommendation": rec}
+
+
 @app.get("/api/music/user_audio/{chat_id}/{filename}")
 async def serve_user_audio(chat_id: str, filename: str):
     import re
@@ -494,7 +502,14 @@ async def api_massage_analyze(req: dict):
         "formatted": formatted,
     })
 
-    return {"ok": True, "formatted": formatted, "has_photos": bool(photos), "has_videos": bool(videos)}
+    # Парсим и возвращаем музыкальную рекомендацию
+    from handlers.massage import _parse_music_recommendation
+    final_text = results.get("final_expert", {}).get("content", "")
+    music_rec = _parse_music_recommendation(final_text)
+    if music_rec:
+        _set_user_data(chat_id, "massage_music_recommendation", music_rec)
+
+    return {"ok": True, "formatted": formatted, "has_photos": bool(photos), "has_videos": bool(videos), "music_recommendation": music_rec}
 
 
 @app.get("/api/massage/results/{chat_id}")

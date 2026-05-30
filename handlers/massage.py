@@ -747,13 +747,32 @@ async def on_mc_analyze(callback: types.CallbackQuery):
 
     # Парсим рекомендованных врачей из финального эксперта
     referred_doctors = _parse_doctor_referrals(final_text)
+
+    # Сохраняем музыкальную рекомендацию в user_settings
+    music_rec = _parse_music_recommendation(final_text)
+    if music_rec:
+        _set_user_data(chat_id, "massage_music_recommendation", music_rec)
     is_approved = "не допущен" not in final_text.lower() and "требуется консультация врача" not in final_text.lower()
 
+    music_rec = _parse_music_recommendation(final_text)
+
     if is_approved:
+        music_line = ""
+        if music_rec.get("genre"):
+            genre_name = MASSAGE_MUSIC_GENRES.get(music_rec["genre"], {}).get("name", music_rec["genre"])
+            parts = []
+            if music_rec.get("session_duration"):
+                parts.append(f"🕐 Сеанс: ~{music_rec['session_duration']} мин")
+            parts.append(f"🎵 {genre_name}")
+            if music_rec.get("track_count"):
+                parts.append(f"{music_rec['track_count']} треков")
+            music_line = "\n".join(parts) + "\n\n"
+
         next_text = (
             "💡 *Что дальше?*\n\n"
+            + music_line +
             "1. 📅 Запишись на сеанс — открой салон ниже\n"
-            "2. 🎵 Создай плейлист для массажа\n"
+            "2. 🎵 Открой плейлист в Mini App — музыка уже подобрана\n"
             "3. 💬 Спроси у AI Prophet в общем чате\n\n"
             "Или начни новую консультацию: /massage"
         )
@@ -803,6 +822,51 @@ async def on_mc_analyze(callback: types.CallbackQuery):
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
     )
+
+
+def _parse_music_recommendation(final_text: str) -> dict:
+    """Извлечь рекомендацию по музыке из финального заключения.
+
+    Ищет паттерны вида: «МУЗЫКА: ambient, 12 треков» или
+    «7) МУЗЫКА — ambient, ~15 треков» или «жанр ambient» в контексте музыки.
+    Возвращает {genre, track_count, session_duration} или пустой dict.
+    """
+    import re
+    result = {}
+    text_lower = final_text.lower()
+
+    # Ищем упоминание длительности сеанса
+    dur_match = re.search(r'(?:сеанс[а-я]*|длительность|длится|продолжительность)\s*(?:—|:|-)?\s*(\d+)\s*мин', text_lower)
+    if dur_match:
+        result["session_duration"] = int(dur_match.group(1))
+
+    # Ищем блок МУЗЫКА или пункт 7
+    music_block = ""
+    for line in final_text.split("\n"):
+        lower_line = line.strip().lower()
+        if re.search(r'(?:музык[а-я]|плейлист|трек[а-я]|жанр|рекомендуем[а-я]?\s*музык)', lower_line):
+            music_block = line.strip()
+            break
+
+    if not music_block:
+        return result
+
+    # Жанры
+    genre_map = {"ambient": "ambient", "classic": "classic", "nature": "nature", "jazz": "jazz",
+                 "spa": "spa", "thai": "thai", "acoustic": "acoustic", "binaural": "binaural",
+                 "эмбиент": "ambient", "классик": "classic", "природ": "nature", "джаз": "jazz",
+                 "спа": "spa", "тайск": "thai", "акустик": "acoustic", "бинаур": "binaural"}
+    for alias, genre_key in genre_map.items():
+        if alias in music_block.lower():
+            result["genre"] = genre_key
+            break
+
+    # Количество треков
+    track_match = re.search(r'(\d+)\s*(?:трек|песн|композиц|шт)', music_block.lower())
+    if track_match:
+        result["track_count"] = int(track_match.group(1))
+
+    return result
 
 
 def _parse_doctor_referrals(final_text: str) -> list:

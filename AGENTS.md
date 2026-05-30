@@ -411,6 +411,7 @@ PNG-файлы сертификатов хранятся в `static/massage/cert
 - **Gemini quota exhaustion** — free tier hits 429 quickly. HF fallback handles it, but session creation is retried across all 5 models before giving up.
 - **`SpecialistFactory.chat()` и `create()` — синхронные, блокируют event loop** — в async-хендлерах всегда оборачивать через `await asyncio.to_thread(...)`. Без этого «Печатает...» висит вечно. Добавлять `asyncio.wait_for(..., timeout=120)` для защиты от зависаний Gemini.
 - **Русская запятая в number-полях** — пользователи пишут «36,6» вместо «36.6». В Python `float("36,6")` падает. В `massage.py:on_mc_text_input` делать `text.replace(",", ".")` перед парсингом числа.
+- **Music recommendation format is free-text** — Final Expert outputs in natural language (not structured JSON). `_parse_music_recommendation()` uses regex to extract genre, duration, and track count from any text format. Must cover both English (`ambient`) and Russian (`эмбиент`) genre names.
 
 ## Feature Spec #6: Музыкальный плеер / Музыкальная система
 
@@ -426,7 +427,7 @@ PNG-файлы сертификатов хранятся в `static/massage/cert
 | **4. Рекомендация** — AI подбирает музыку под тип массажа/клиента | 🤖 кнопка в плеере: естественный язык → HF Router → IA поиск | ✅ Built |
 | **5. Воспроизведение** — встроенный плеер в Mini App | HTML `<audio>` с play/pause/next/prev/shuffle/repeat/progress | ✅ Built |
 | **6. Встроенный плеер** — вкладка Музыка 🎵 в Mini App | Жанры → треки → плеер. Поиск 🔍, AI 🤖, загрузка своей музыки 📤, экспорт/импорт 📤📥 | ✅ Built |
-| **7. Интеграция с консультацией** — музыку на выходе из `/massage` | После анализа в `massage.py`: кнопка «🎵 Музыка для сеанса» → выбор жанра → плеер | ✅ Built |
+| **7. Интеграция с консультацией** — музыку на выходе из `/massage` | Final Expert → `_parse_music_recommendation` → кнопка «🎵 Собрать плейлист» в модале результатов (Mini App) / в «Что дальше?» (бот) | ✅ Built |
 
 ### Что нужно для #6 (Music Player)
 

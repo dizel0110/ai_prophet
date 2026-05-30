@@ -285,6 +285,24 @@ def ai_search_tracks(query: str) -> List[dict]:
     return all_tracks[:20]
 
 
+def get_tracks_by_duration(genre: str, target_minutes: int, chat_id: int = 0) -> List[dict]:
+    """Get tracks for a genre, limited to fit within target_minutes."""
+    tracks = get_tracks(genre, chat_id)
+    if not tracks:
+        return []
+    total = 0
+    result = []
+    for t in tracks:
+        dur = t.get("duration", 0) or 0
+        if total + dur > target_minutes * 60:
+            break
+        result.append(t)
+        total += dur
+    if not result and tracks:
+        return [tracks[0]]
+    return result
+
+
 def get_tracks_duration(tracks: List[dict]) -> int:
     """Return total duration in seconds for a list of tracks."""
     return sum(t.get("duration", 0) or 0 for t in tracks)

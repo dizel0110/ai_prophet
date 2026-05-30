@@ -157,3 +157,17 @@
   4. Talk to specialists
 - **"📤 Перейти к загрузке"** button → smooth scroll to upload section
 - **Persistence**: On re-entry, `checkQuestionnaireStatus()` via export endpoint detects existing data and shows the card
+
+## 2026-05-30: Music Recommendation from Final Expert (Massage → Music Integration)
+- **🔥 UX principle**: Show recommendation + one-tap "🎵 Собрать плейлист" button (not auto-apply, not buried in menus)
+- **Final Expert prompt** (`agent_factory.py`): Added пункт 7) МУЗЫКА — genre (ambient/classic/nature/jazz/spa/thai/acoustic/binaural) + track count based on session duration (4-5 min/track)
+- **Orchestrator hint** (`orchestrator.py:97`): Reminded to include duration + music in final output
+- **`_parse_music_recommendation(final_text)`** (`massage.py`): Extracts `{session_duration, genre, track_count}` via regex from any text format — supports both English and Russian genre aliases
+- **`get_tracks_by_duration(genre, target_minutes)`** (`music_player.py`): Filters track list to fit within target duration (first N tracks that sum to ≤ target)
+- **`GET /api/music/recommendation/{chat_id}`** (`main.py`): Returns saved music recommendation from `user_settings`
+- **`/api/massage/analyze`** (`main.py`): Now also returns `music_recommendation` in response body
+- **Mini App results modal** (`index.html`): New `#music-rec-bar` with genre/duration/track count + "🎵 Собрать плейлист" button → closes modal → opens Music tab → loads recommended genre tracks
+- **Mini App** `loadMassageResults()`: Parallel fetch of recommendation to show bar on "Посмотреть результаты" re-entry
+- **Telegram bot**: `on_mc_analyze` saves `massage_music_recommendation` to `user_settings` and shows recommendation in "Что дальше?" card
+- **Tests**: 12 new tests (4 × `get_tracks_by_duration`, 8 × `_parse_music_recommendation` with Russian/English/reduced coverage)
+- **Total tests**: 69 ✅
