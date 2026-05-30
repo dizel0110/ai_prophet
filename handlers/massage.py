@@ -521,14 +521,16 @@ async def on_mc_text_input(message: types.Message):
         return
 
     if step["type"] == "number":
+        normalized = text.replace(",", ".")
         try:
-            setattr(q, step["key"], int(text))
+            val = int(normalized)
         except ValueError:
             try:
-                setattr(q, step["key"], float(text))
+                val = float(normalized)
             except ValueError:
-                await message.answer("Пожалуйста, введите число")
+                await message.answer("Пожалуйста, введите число (например: 36.6 или 36,6)")
                 return
+        setattr(q, step["key"], val)
     elif step["type"] == "text":
         setattr(q, step["key"], text)
 

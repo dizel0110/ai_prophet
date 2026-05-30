@@ -120,10 +120,19 @@ async def api_specialist_chat(req: dict):
             user_context = q.to_text()
     except Exception:
         pass
-    result = SpecialistFactory.chat(chat_id, specialist, message_text, user_context=user_context)
-    if result.is_success():
-        return {"ok": True, "response": result.content, "name": result.agent_name}
-    return {"ok": False, "error": "AI engine failed"}
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(SpecialistFactory.chat, chat_id, specialist, message_text, user_context=user_context),
+            timeout=120
+        )
+        if result.is_success():
+            return {"ok": True, "response": result.content, "name": result.agent_name}
+        return {"ok": False, "error": "AI engine failed"}
+    except asyncio.TimeoutError:
+        return {"ok": False, "error": "Превышено время ожидания ответа от AI"}
+    except Exception as e:
+        return {"ok": False, "error": f"Ошибка AI: {str(e)}"}
+
 
 @app.post("/api/specialist/list")
 async def api_specialist_list(req: dict):
@@ -159,7 +168,7 @@ async def api_specialist_create(req: dict):
         return {"ok": False, "error": "Missing chat_id"}
     if not role and not name:
         return {"ok": False, "error": "Provide role or name"}
-    sp = SpecialistFactory.create(chat_id=chat_id, role_description=role, name=name or None)
+    sp = await asyncio.to_thread(SpecialistFactory.create, chat_id=chat_id, role_description=role, name=name or None)
     if sp:
         result = {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}
         if hasattr(sp, "communication_schema") and sp.communication_schema:
@@ -218,10 +227,18 @@ async def api_specialist_submit(req: dict):
     full_message = user_message
     if context_str:
         full_message = f"[Анкета клиента]\n{context_str}\n\n[Сообщение]\n{user_message}" if user_message else f"[Анкета клиента]\n{context_str}"
-    result = SpecialistFactory.chat(chat_id, specialist, full_message)
-    if result.is_success():
-        return {"ok": True, "response": result.content, "name": result.agent_name}
-    return {"ok": False, "error": "AI engine failed"}
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(SpecialistFactory.chat, chat_id, specialist, full_message),
+            timeout=120
+        )
+        if result.is_success():
+            return {"ok": True, "response": result.content, "name": result.agent_name}
+        return {"ok": False, "error": "AI engine failed"}
+    except asyncio.TimeoutError:
+        return {"ok": False, "error": "Превышено время ожидания ответа от AI"}
+    except Exception as e:
+        return {"ok": False, "error": f"Ошибка AI: {str(e)}"}
 
 
 # ──────────────────── Music Player API ────────────────────

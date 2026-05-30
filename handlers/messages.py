@@ -503,7 +503,7 @@ async def on_dsp_del_confirm(callback: types.CallbackQuery):
 
 async def _create_and_show_specialist(message: types.Message, chat_id: int, role: str):
     status = await message.answer(f"🧑‍⚕️ Создаю специалиста: _{role}_…")
-    specialist = SpecialistFactory.create(chat_id=int(chat_id), role_description=role)
+    specialist = await asyncio.to_thread(SpecialistFactory.create, chat_id=int(chat_id), role_description=role)
     if not specialist:
         await status.edit_text("❌ Не удалось создать специалиста. Попробуй позже.")
         return
@@ -772,12 +772,17 @@ async def handle_audio(message: types.Message, bot: Bot):
                 if specialist:
                     await status_msg.delete()
                     try:
-                        result = SpecialistFactory.chat(chat_id=int_chat_id, specialist=specialist, user_message=text)
+                        result = await asyncio.wait_for(
+                            asyncio.to_thread(SpecialistFactory.chat, chat_id=int_chat_id, specialist=specialist, user_message=text),
+                            timeout=120
+                        )
                         if result.is_success():
                             await message.answer(f"👤 *Распознано:* _{text}_", parse_mode="Markdown")
                             await message.answer(f"🧑‍⚕️ *{result.agent_name}:*\n\n{result.content}", parse_mode="Markdown")
                         else:
                             await message.answer("❌ Ошибка связи со специалистом.")
+                    except asyncio.TimeoutError:
+                        await message.answer("⏱️ Специалист не отвечает. Попробуй позже.")
                     except Exception as e:
                         logger.error(f"Voice specialist chat error: {e}")
                         await message.answer("❌ Ошибка при общении со специалистом.")
@@ -906,7 +911,10 @@ async def handle_text(message: types.Message, bot: Bot):
             logger.info(f"get_specialist result: {specialist}")
             if specialist:
                 try:
-                    result = SpecialistFactory.chat(chat_id=int(chat_id), specialist=specialist, user_message=text)
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(SpecialistFactory.chat, chat_id=int(chat_id), specialist=specialist, user_message=text),
+                        timeout=120
+                    )
                     if result.is_success():
                         global _qr_counter
                         qs = _extract_questions(result.content)
@@ -926,6 +934,9 @@ async def handle_text(message: types.Message, bot: Bot):
                             await message.answer("Отправь `/exit_specialist` чтобы выйти из диалога.")
                     else:
                         await message.answer("❌ Ошибка связи со специалистом.")
+                    return
+                except asyncio.TimeoutError:
+                    await message.answer("⏱️ Специалист временно недоступен. Попробуй позже.")
                     return
                 except Exception as e:
                     logger.error(f"Specialist chat error: {e}")

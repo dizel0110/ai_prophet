@@ -358,6 +358,8 @@ class SpecialistFactory:
                         _save_specialist(specialist)
                         _save_conversation(chat_id, specialist.name, user_message, resp.text.strip())
                         return AgentResult(f"s_{chat_id}", specialist.name, resp.text.strip())
+                    else:
+                        logger.warning(f"Gemini specialist chat {model}: empty response (safety filter?)")
                 except Exception as e:
                     logger.warning(f"Gemini specialist chat {model}: {e}")
 
