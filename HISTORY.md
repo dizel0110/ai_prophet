@@ -105,3 +105,55 @@
 - **SpecialistFactory.chat()**: Gemini first (better persona), HF fallback
 - **Bug fixes**: `user_settings.setdefault` KeyError, specialist logging, `agent_factory.py:99` f-string SyntaxError, duplicate click listeners (module-level `_chatListHandler`), `createSpecialist()` now opens chat after creation, Final Expert `[:300]` truncation removed
 - **Event delegation**: replaced inline `onclick` with `data-*` attributes + delegated click listeners
+
+## 2026-05-30: Critical Bug Fixes & Mini App Analyze Flow
+- **🐛 Bot buttons not responding**: `@router.message()` decorator was on wrong function (`_extract_questions` instead of `handle_text`). Fixed in `messages.py:885-893`.
+- **🐛 Prophet Mini App ignored by massage router**: `F.web_app_data` handler in `massage.py` caught all WebApp data. Added `_handle_prophet_action()` to route `daily_prediction`/`vision_info` correctly.
+- **🐛 Questionnaire hangs at Q17**: Two root causes fixed:
+  - Russian comma in `body_temperature` (`36,6` → `36.6`) — `text.replace(",", ".")` in `massage.py:523-531`
+  - Callback data >64B for long multi_choice options — switched from `mc_q_toggle:{text}` to `mc_q_toggle:{index}` (always ≤14B). Full option texts restored in `questionnaire_steps.json`.
+- **🐛 AI agents eternal "Печатает..."**: `SpecialistFactory.chat()`/`create()` are synchronous, blocked the event loop. Wrapped in `asyncio.to_thread()` + `asyncio.wait_for(timeout=120)` across `messages.py` and `main.py`.
+- **📸 Photo/video upload in Mini App**: New `POST /api/massage/upload` (format/size validation, save to temp/, update `massage_photos`/`massage_videos`). Upload buttons on AI page with status indicators and counters.
+
+## 2026-05-30: End-to-End Photo→AI Agents in Mini App
+- **`POST /api/massage/analyze`**: Runs orchestrator (5 AI agents), saves results to `user_settings`, returns formatted JSON
+- **`GET /api/massage/results/{chat_id}`**: Re-view results from previous analysis
+- **Mini App**: "🧑‍⚕️ Запустить анализ" button on AI page → loading indicator → results modal with markdown→HTML rendering
+- **Auto-load**: `loadMassageResults()` runs on AI page navigation — shows "📋 Посмотреть результаты" if analysis exists
+- **`renderMarkdown(t)`**: Converts Telegram Markdown to HTML for safe display in Mini App (`*bold*`, `_italic_`, links, code blocks)
+
+## 2026-05-30: Phone Validation with Country Flags (Mini App only)
+- **15 countries** with flags in a compact button row: 🇷🇺🇪🇬🇺🇸🇬🇧🇩🇪🇫🇷🇮🇹🇪🇸🇹🇷🇦🇪🇸🇦🇺🇦🇧🇾🇰🇿🇬🇪
+- Click a flag → country code auto-selected (+7, +20, etc.)
+- Preview line below input: `🇷🇺 +7 9xx-xxx-xx-xx` (updates on input)
+- Supports home/landline phones — no strict mask, only country code hint
+- On revisit: country code restored from saved answer (`+77` vs `+7` collision fixed via `startsWith(code + ' ')`)
+- Telegram bot unchanged (no fancy UI possible there)
+
+## 2026-05-30: Informed Consent (Step 20) — Interactive Link
+- **Mini App**: "📄 Ознакомиться с полным текстом" button → full-screen modal with 8-point consent (contraindications, data processing, voluntary agreement) → "← Вернуться к анкете"
+- **Telegram bot**: "📄 Ознакомиться" inline button → sends full consent text via Markdown message
+- Consent text covers: 16 absolute contraindications, 7 temporary contraindications, data processing, voluntary nature, post-surgery states
+
+## 2026-05-30: Semantic Matching for Questionnaire Answers
+- **`YES_WORDS`/`NO_WORDS`/`UNCLEAR_WORDS`** sets: `ага`, `угу`, `неа`, `конечно`, `разумеется`, `неет` etc.
+- **`semantic_normalize(text)`**: Returns `(canonical, is_binary, original)` — maps casual to canonical without altering stored data
+- **Telegram bot**: On informal answer → confirms: *«Понял. Твой ответ → **да/нет**»*
+- **Mini App**: Same normalization with `tg.showAlert()` confirmation
+- **Principle**: Original text preserved (legal audit trail), user gets understanding confirmation
+
+## 2026-05-30: Consultation Export to JSON
+- **`GET /api/massage/export/{chat_id}`**: Returns JSON file download: questionnaire + photos/videos + analysis results + specialists
+- **Mini App results modal**: "📤 Экспорт JSON" button → downloads file via Blob
+- **Telegram bot**: "📤 Экспорт JSON" button in post-analysis message → sends JSON file
+- **Export format**: `{ exported_at, chat_id, questionnaire, photos, videos, analysis_results, specialists }`
+
+## 2026-05-30: Clear Post-Questionnaire Flow (no more "Открой чат с ботом")
+- **Before**: questionnaire → `tg.sendData()` → "✅ Открой чат с ботом" — user forced to leave Mini App
+- **After**: questionnaire → API save (`/api/questionnaire/submit`) + `tg.sendData()` (bot notification) → gold card "✅ Анкета заполнена! Что дальше?" with 4 numbered steps:
+  1. Upload back/ posture photos
+  2. Upload gait video
+  3. Start AI analysis
+  4. Talk to specialists
+- **"📤 Перейти к загрузке"** button → smooth scroll to upload section
+- **Persistence**: On re-entry, `checkQuestionnaireStatus()` via export endpoint detects existing data and shows the card

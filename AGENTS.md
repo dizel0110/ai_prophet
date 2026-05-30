@@ -325,7 +325,7 @@ Playwright MCP сервер установлен для opencode. Конфигу
 
 - **Agents use `generate_content()` NOT chat sessions** — каждый агент создаёт свой запрос, не использует `get_ai_chat()`. Это важно — агенты одноразовые, а не диалоговые.
 - **Custom Filter `InQuestionnaireFilter`** — текст от пользователя во время анкетирования перехватывается кастомным фильтром, который проверяет `massage_step == "questionnaire"` в `user_settings.json`. Это не даёт catch-all handler в messages.py перехватить ввод. Для создания специалиста тоже используется этот фильтр (проверка `massage_step == "create_specialist"`).
-- **Callback data (64 bytes)** — все `mc_*` префиксы должны быть короткими. Cyrillic в callback_data занимает 2 байта/символ.
+- **Callback data (64 bytes)** — Telegram жёстко режет callback_data длиннее 64 байт (сервер, не клиент). Cyrillic — 2 байта/символ, так что длинные опции в `mc_q_toggle:{текст}` легко вылетают за лимит. **Решение:** передавать индекс опции вместо полного текста: `mc_q_toggle:{i}`. Код сам достаёт текст из `step["options"][i]`.
 - **Music DB — fallback** — `music_db.py` содержит проверенные ссылки, но всегда запускает и `search_media_content()` как fallback.
 - **Orchestrator synchronous calls** — AI вызовы синхронные (`requests.post`, `genai.Client.models.generate_content`), обёрнуты в `asyncio.to_thread()`.
 - **Temp files (massage photos/videos)** — сохраняются как `massage_photo_{chat_id}_{file_id}.ext` и `massage_video_{chat_id}_{file_id}.ext`. Удаляются после анализа.
@@ -409,6 +409,8 @@ PNG-файлы сертификатов хранятся в `static/massage/cert
 - **Two python processes** on local run: FastAPI (uvicorn) + aiogram polling. This is normal.
 - **`app.py` is stale** — references `start_bot` which doesn't exist. Only `main.py` works.
 - **Gemini quota exhaustion** — free tier hits 429 quickly. HF fallback handles it, but session creation is retried across all 5 models before giving up.
+- **`SpecialistFactory.chat()` и `create()` — синхронные, блокируют event loop** — в async-хендлерах всегда оборачивать через `await asyncio.to_thread(...)`. Без этого «Печатает...» висит вечно. Добавлять `asyncio.wait_for(..., timeout=120)` для защиты от зависаний Gemini.
+- **Русская запятая в number-полях** — пользователи пишут «36,6» вместо «36.6». В Python `float("36,6")` падает. В `massage.py:on_mc_text_input` делать `text.replace(",", ".")` перед парсингом числа.
 
 ## Feature Spec #6: Музыкальный плеер / Музыкальная система
 

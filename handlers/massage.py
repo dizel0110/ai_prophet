@@ -372,10 +372,15 @@ async def _ask_question(chat_id, message: types.Message):
         await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
 
     elif step["type"] == "consent":
-        kb = InlineKeyboardMarkup(inline_keyboard=[
+        buttons = [
+            [InlineKeyboardButton(text="📄 Ознакомиться", callback_data="mc_show_consent")],
             [InlineKeyboardButton(text="✅ Подтверждаю", callback_data=f"mc_q_{step['key']}:yes")],
             [InlineKeyboardButton(text="❌ Отказываюсь", callback_data=f"mc_q_{step['key']}:no")]
-        ])
+        ] if step["key"] == "informed_consent" else [
+            [InlineKeyboardButton(text="✅ Подтверждаю", callback_data=f"mc_q_{step['key']}:yes")],
+            [InlineKeyboardButton(text="❌ Отказываюсь", callback_data=f"mc_q_{step['key']}:no")]
+        ]
+        kb = InlineKeyboardMarkup(inline_keyboard=buttons)
         await message.answer(f"*Вопрос {step_idx + 1}/{total}*\n\n{step['question']}", parse_mode="Markdown", reply_markup=kb)
 
     elif step["type"] == "number":
@@ -414,6 +419,31 @@ async def on_mc_optional_choice(callback: types.CallbackQuery):
         await _ask_question(chat_id, callback.message)
     else:
         await _finish_questionnaire(chat_id, callback.message)
+
+
+@router.callback_query(lambda c: c.data == "mc_show_consent")
+async def on_mc_show_consent(callback: types.CallbackQuery):
+    await callback.answer()
+    consent_text = (
+        "📄 *ИНФОРМИРОВАННОЕ СОГЛАСИЕ НА МАССАЖ*\n\n"
+        "1. Я проинформирован(а) о целях, методах и ожидаемых результатах массажной процедуры.\n\n"
+        "2. Мне разъяснены *абсолютные противопоказания*: онкология, тромбозы, острые инфекции, "
+        "кровотечения, заболевания крови, психические расстройства, сердечно-сосудистая недостаточность III ст., "
+        "гипертонический криз, туберкулёз (активный), кожные заболевания в обострении, "
+        "гнойные процессы, аневризмы, варикоз с трофическими нарушениями, "
+        "заболевания лимфатической системы, аутоиммунные заболевания в обострении, "
+        "тяжёлые травмы позвоночника в острой стадии.\n\n"
+        "3. *Временные противопоказания*: беременность (I и III триместры), ОРЗ с температурой, "
+        "острые воспаления, обострения хронических заболеваний, "
+        "алкогольное/наркотическое опьянение, состояние после операций.\n\n"
+        "4. Я подтверждаю достоверность предоставленных данных о здоровье.\n\n"
+        "5. Массаж — вспомогательная процедура, не заменяет медицинскую помощь.\n\n"
+        "6. Я согласен(а) на обработку персональных данных.\n\n"
+        "7. При изменении состояния здоровья обязуюсь информировать массажиста.\n\n"
+        "8. Я имел(а) возможность задать вопросы и получил(а) ответы.\n\n"
+        "⬆️ *Прочитав, вернись к анкете и выбери «Подтверждаю» или «Отказываюсь»*"
+    )
+    await callback.message.answer(consent_text, parse_mode="Markdown")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("mc_q_"))
@@ -493,6 +523,24 @@ async def on_mc_q_callback(callback: types.CallbackQuery):
     await _ask_question(chat_id, callback.message)
 
 
+# Семантическая карта: неформальные ответы → канонические
+YES_WORDS = {"да", "ага", "угу", "конечно", "есть", "ну да", "давай", "ок", "ok", "yes", "yep", "yeah", "разумеется", "безусловно", "верно", "так", "точно", "именно"}
+NO_WORDS = {"нет", "неа", "не", "ни в коем случае", "не-а", "нее", "неет", "no", "nope", "never", "никак", "нету", "нисколько", "отнюдь"}
+UNCLEAR_WORDS = {"не знаю", "хз", "не помню", "затрудняюсь", "возможно", "может быть", "наверное", "не уверен"}
+
+def semantic_normalize(text: str) -> tuple:
+    """Return (canonical_form, is_binary, original) where is_binary indicates
+    the answer maps cleanly to yes/no."""
+    t = text.strip().lower().rstrip(".!?")
+    if t in YES_WORDS:
+        return "да", True, text
+    if t in NO_WORDS:
+        return "нет", True, text
+    if t in UNCLEAR_WORDS:
+        return "не уверен", False, text
+    return text, False, text
+
+
 @router.message(InQuestionnaireFilter())
 async def on_mc_text_input(message: types.Message):
     chat_id = message.chat.id
@@ -533,7 +581,23 @@ async def on_mc_text_input(message: types.Message):
                 return
         setattr(q, step["key"], val)
     elif step["type"] == "text":
-        setattr(q, step["key"], text)
+        canonical, is_binary, original = semantic_normalize(text)
+        if is_binary and canonical == "нет":
+            setattr(q, step["key"], text)
+            await message.answer(
+                f"✅ Понял. Твой ответ: «{text}» → **{canonical}**.\n"
+                "Сохраню как есть. Если передумаешь — вернись назад.",
+                parse_mode="Markdown"
+            )
+        elif is_binary and canonical == "да":
+            setattr(q, step["key"], text)
+            await message.answer(
+                f"✅ Принято. Твой ответ: «{text}» → **{canonical}**.\n"
+                "Расскажи подробнее в следующем шаге.",
+                parse_mode="Markdown"
+            )
+        else:
+            setattr(q, step["key"], text)
 
     _save_questionnaire(chat_id, q)
     _set_user_data(chat_id, "massage_waiting_input", None)
@@ -609,6 +673,38 @@ async def on_mc_video(message: types.Message):
     await message.answer(f"✅ Файл #{count} сохранён. Можешь загрузить ещё или нажми «Запустить анализ».")
 
 
+@router.callback_query(lambda c: c.data == "mc_export")
+async def on_mc_export(callback: types.CallbackQuery):
+    import datetime, json
+    await callback.answer("📤 Формирую экспорт...")
+    chat_id = callback.message.chat.id
+    q = _get_questionnaire(chat_id)
+    data = _get_user_data(chat_id)
+
+    export = {
+        "exported_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "chat_id": chat_id,
+        "questionnaire": q.to_dict() if q.full_name else None,
+        "photos": data.get("massage_photos", []),
+        "videos": data.get("massage_videos", []),
+        "analysis_results": data.get("massage_results"),
+        "specialists": data.get("massage_specialists", {}),
+        "referral_specialists": data.get("massage_referral_specialists", []),
+    }
+
+    has_data = any(v for v in [export["questionnaire"], export["analysis_results"]])
+    if not has_data:
+        await callback.message.answer("❌ Нет данных консультации для экспорта.")
+        return
+
+    from aiogram.types import FSInputFile
+    export_path = os.path.join(TEMP_DIR, f"export_{chat_id}_{datetime.datetime.utcnow().strftime('%Y%m%d')}.json")
+    with open(export_path, "w", encoding="utf-8") as f:
+        json.dump(export, f, ensure_ascii=False, indent=2, default=str)
+    doc = FSInputFile(export_path, filename=f"consultation_{chat_id}_{datetime.datetime.utcnow().strftime('%Y%m%d')}.json")
+    await callback.message.answer_document(doc, caption="📤 Экспорт консультации")
+
+
 @router.callback_query(lambda c: c.data == "mc_analyze")
 async def on_mc_analyze(callback: types.CallbackQuery):
     await callback.answer("🧑‍⚕️ Запускаю анализ...")
@@ -664,6 +760,7 @@ async def on_mc_analyze(callback: types.CallbackQuery):
         buttons = [
             [InlineKeyboardButton(text="🖐 Открыть салон", web_app=WebAppInfo(url=_massage_url()))],
             [InlineKeyboardButton(text="🎵 Музыка для сеанса", callback_data="massage_music")],
+            [InlineKeyboardButton(text="📤 Экспорт JSON", callback_data="mc_export")],
         ]
     else:
         # Авто-создание ИИ-специалистов из рекомендаций
@@ -689,6 +786,7 @@ async def on_mc_analyze(callback: types.CallbackQuery):
             [InlineKeyboardButton(text="🧑‍⚕️ Мои специалисты", callback_data="mc_specialist")],
             [InlineKeyboardButton(text="✅ Запросить итог", callback_data="mc_final_review")],
             [InlineKeyboardButton(text="🎵 Музыка для сеанса", callback_data="massage_music")],
+            [InlineKeyboardButton(text="📤 Экспорт JSON", callback_data="mc_export")],
         ]
 
         if created:

@@ -455,6 +455,90 @@ async def api_massage_upload(chat_id: str = Form(...), file: UploadFile = File(.
     return {"ok": True, "file_path": path, "count": len(existing)}
 
 
+# ──────────────────── Massage Analyze API ────────────────────
+
+@app.post("/api/massage/analyze")
+async def api_massage_analyze(req: dict):
+    chat_id = str(req.get("chat_id", ""))
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    from handlers.massage import _get_user_data, _set_user_data, _get_questionnaire, _cleanup_massage_temp
+    from core.agents import MassageConsultationOrchestrator, format_consultation_results
+
+    q = _get_questionnaire(chat_id)
+    if not q or not q.full_name:
+        return {"ok": False, "error": "Сначала заполни анкету. Начни с /massage или открой анкету в Mini App"}
+
+    data = _get_user_data(chat_id)
+    photos = data.get("massage_photos", [])
+    videos = data.get("massage_videos", [])
+
+    try:
+        orchestrator = MassageConsultationOrchestrator()
+        results = await orchestrator.run_consultation(
+            questionnaire_text=q.to_text(),
+            photo_paths=photos if photos else None,
+            video_paths=videos if videos else None,
+        )
+    except Exception as e:
+        _set_user_data(chat_id, "massage_step", "done")
+        _cleanup_massage_temp(chat_id)
+        return {"ok": False, "error": f"Ошибка анализа: {str(e)}"}
+
+    _set_user_data(chat_id, "massage_step", "done")
+    _cleanup_massage_temp(chat_id)
+
+    formatted = format_consultation_results(results)
+    _set_user_data(chat_id, "massage_results", {
+        "raw": results,
+        "formatted": formatted,
+    })
+
+    return {"ok": True, "formatted": formatted, "has_photos": bool(photos), "has_videos": bool(videos)}
+
+
+@app.get("/api/massage/results/{chat_id}")
+async def api_massage_results(chat_id: str):
+    from handlers.massage import _get_user_data
+    data = _get_user_data(chat_id)
+    results = data.get("massage_results")
+    if not results:
+        return {"ok": False, "error": "Анализ ещё не проведён"}
+    return {"ok": True, "formatted": results.get("formatted", ""), "has_results": True}
+
+
+@app.get("/api/massage/export/{chat_id}")
+async def api_massage_export(chat_id: str):
+    from handlers.massage import _get_user_data, _get_questionnaire
+    import datetime
+
+    data = _get_user_data(chat_id)
+    q = _get_questionnaire(chat_id)
+
+    export = {
+        "exported_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "chat_id": chat_id,
+        "questionnaire": q.to_dict() if q.full_name else None,
+        "photos": data.get("massage_photos", []),
+        "videos": data.get("massage_videos", []),
+        "analysis_results": data.get("massage_results"),
+        "specialists": data.get("massage_specialists", {}),
+        "referral_specialists": data.get("massage_referral_specialists", []),
+    }
+
+    has_data = any(v for v in [export["questionnaire"], export["analysis_results"]])
+    if not has_data:
+        return {"ok": False, "error": "Нет данных консультации для экспорта"}
+
+    from fastapi.responses import Response
+    json_str = json.dumps(export, ensure_ascii=False, indent=2, default=str)
+    return Response(
+        content=json_str,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="consultation_{chat_id}_{datetime.datetime.utcnow().strftime("%Y%m%d")}.json"'}
+    )
+
+
 # ──────────────────── Questionnaire API ────────────────────
 
 @app.get("/api/questionnaire/steps")

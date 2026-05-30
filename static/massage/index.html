@@ -612,7 +612,7 @@ html{scroll-behavior:smooth}
       <button class="btn btn-primary" onclick="startConsultation()">🧑‍⚕️ Начать консультацию</button>
       <button class="btn btn-secondary" onclick="openConsultForm()">📝 Заполнить анкету</button>
     </div>
-    <div class="card">
+    <div class="card" id="massage-upload-section">
       <div class="sec-title" style="font-size:15px">📤 Загрузить для диагностики</div>
       <div style="margin-top:8px;font-size:13px;line-height:2">
         <div>📸 <strong>Фото спины / осанки</strong> — JPG, PNG, WebP (до 10 МБ)</div>
@@ -631,6 +631,9 @@ html{scroll-behavior:smooth}
         </label>
       </div>
       <div id="massage-upload-status" style="font-size:12px;color:var(--accent);margin-top:6px"></div>
+      <button class="btn btn-primary" id="btn-analyze" onclick="startMassageAnalysis()" style="margin-top:10px;width:100%">🧑‍⚕️ Запустить анализ</button>
+      <div id="massage-analyze-loading" style="display:none;text-align:center;padding:16px;color:var(--accent);font-size:14px">⏳ Анализирую... это займёт 1-2 минуты</div>
+      <div id="massage-results" style="display:none;margin-top:10px"></div>
     </div>
     <!-- SPECIALISTS SECTION -->
     <div class="card">
@@ -641,6 +644,85 @@ html{scroll-behavior:smooth}
       </div>
       <button class="btn btn-secondary" onclick="showCreateSpecialist()">➕ Создать специалиста</button>
     </div>
+    <div class="card" id="massage-next-steps" style="display:none;border:2px solid var(--gold);background:linear-gradient(135deg,rgba(196,154,108,.08),rgba(166,124,78,.04))">
+      <div class="sec-title" style="font-size:15px">✅ Анкета заполнена! Что дальше?</div>
+      <div style="margin-top:8px;font-size:13px;line-height:2">
+        <div>1️⃣ Загрузи <strong>фото спины/осанки</strong> выше — для визуальной диагностики</div>
+        <div>2️⃣ Или загрузи <strong>видео походки</strong> — для анализа движений</div>
+        <div>3️⃣ Нажми <strong>«🧑‍⚕️ Запустить анализ»</strong> — AI-специалисты изучат все данные</div>
+        <div>4️⃣ Или просто <strong>общайся со специалистами</strong> ниже</div>
+      </div>
+      <button class="btn btn-primary" onclick="qs('massage-upload-section').scrollIntoView({behavior:'smooth',block:'center'})" style="width:100%;margin-top:10px">📤 Перейти к загрузке</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONSENT MODAL -->
+<div class="modal-overlay" id="consentModal" style="display:none">
+  <div class="modal" style="height:90dvh;display:flex;flex-direction:column;padding:16px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-bottom:12px">
+      <div class="sec-title" style="font-size:16px;margin:0">📄 Информированное согласие</div>
+      <button class="modal-close" onclick="closeConsentModal()" style="position:static;font-size:20px">✕</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;white-space:pre-wrap;padding-right:4px">
+      <b>ИНФОРМИРОВАННОЕ ДОБРОВОЛЬНОЕ СОГЛАСИЕ НА ПРОВЕДЕНИЕ МАССАЖА</b>
+
+Я, нижеподписавшийся(аяся), настоящим подтверждаю:
+
+1. Я проинформирован(а) о целях, методах и ожидаемых результатах массажной процедуры.
+
+2. Мне разъяснены <b>абсолютные противопоказания</b> к массажу:
+   — Онкологические заболевания (включая в анамнезе);
+   — Тромбозы, тромбофлебиты;
+   — Острые инфекционные заболевания, лихорадка;
+   — Кровотечения и склонность к ним;
+   — Заболевания крови;
+   — Тяжёлые психические расстройства;
+   — Сердечно-сосудистая недостаточность III степени;
+   — Гипертонический криз;
+   — Активная форма туберкулёза;
+   — Кожные заболевания в стадии обострения (экзема, псориаз, грибок);
+   — Гнойные процессы любой локализации;
+   — Аневризмы сосудов;
+   — Варикозная болезнь с трофическими нарушениями;
+   — Заболевания лимфатической системы;
+   — Аутоиммунные заболевания в стадии обострения;
+   — Тяжёлые травмы позвоночника в острой стадии.
+
+3. Мне разъяснены <b>временные противопоказания</b>:
+   — Беременность (I и III триместры);
+   — Острые респираторные заболевания с температурой;
+   — Острые воспалительные процессы;
+   — Обострение хронических заболеваний;
+   — Алкогольное/наркотическое опьянение;
+   — Состояние после операций (до полного заживления);
+   — Менструация (для некоторых видов массажа).
+
+4. Я подтверждаю, что предоставил(а) достоверные сведения о состоянии моего здоровья.
+
+5. Я осознаю, что массаж является вспомогательной процедурой и не заменяет квалифицированную медицинскую помощь.
+
+6. Я согласен(а) на обработку моих персональных данных в рамках оказания услуги.
+
+7. В случае изменения состояния здоровья я обязуюсь проинформировать массажиста до начала сеанса.
+
+8. Я имел(а) возможность задать все интересующие вопросы и получил(а) на них ответы.
+
+Настоящее согласие действует на весь период проведения массажных процедур.
+    </div>
+    <button class="btn btn-primary" onclick="closeConsentModal()" style="margin-top:12px;flex-shrink:0">← Вернуться к анкете</button>
+  </div>
+</div>
+
+<!-- RESULTS MODAL -->
+<div class="modal-overlay" id="resultsModal" style="display:none">
+  <div class="modal" style="height:85dvh;display:flex;flex-direction:column;padding:16px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-bottom:12px">
+      <div class="sec-title" style="font-size:16px;margin:0">🧑‍⚕️ Результаты диагностики</div>
+      <button class="modal-close" onclick="closeResultsModal()" style="position:static;font-size:20px">✕</button>
+    </div>
+    <div id="results-content" style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;white-space:pre-wrap"></div>
+    <button class="btn btn-secondary" onclick="exportConsultation()" style="margin-top:10px;flex-shrink:0;font-size:13px">📤 Экспорт JSON</button>
   </div>
 </div>
 
@@ -984,6 +1066,7 @@ function navigate(page) {
   document.querySelector('.tab[data-page="' + page + '"]').classList.add('active');
   tg.HapticFeedback.impactOccurred('light');
   window.scrollTo(0, 0);
+  if (page === 'ai') { loadMassageResults(); checkQuestionnaireStatus(); }
 }
 
 const BOT_USERNAME = 'ai_prophet_io_bot';
@@ -1142,16 +1225,38 @@ function showConsultStep() {
     container.appendChild(div);
   } else if (step.type === 'consent') {
     const val = consultFormAnswers[step.key];
+    const isConsent = step.key === 'informed_consent';
     div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+      ${isConsent ? '<button class="btn btn-outline" onclick="openConsentModal()" style="width:100%;margin-bottom:10px;font-size:13px">📄 Ознакомиться с полным текстом</button>' : ''}
       <div style="display:flex;gap:8px">${['Да', 'Нет'].map(o => {
         const isSel = val === (o === 'Да');
         return `<button class="btn ${isSel ? 'btn-primary' : 'btn-outline'}" style="flex:1;margin:0" onclick="selectConsultChoice('${step.key}',${o === 'Да'});renderConsultNav()">${o === 'Да' ? '✅ Подтверждаю' : '❌ Отказываюсь'}</button>`;
       }).join('')}</div>`;
     container.appendChild(div);
   } else if (step.type === 'text') {
-    div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
-      <textarea id="cf_input" placeholder="Напишите ответ" style="min-height:60px;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;resize:vertical">${consultFormAnswers[step.key] || ''}</textarea>`;
-    container.appendChild(div);
+    if (step.key === 'phone') {
+      const savedPhone = consultFormAnswers[step.key] || '';
+      const savedCode = COUNTRY_CODES.find(c => savedPhone.startsWith(c.code + ' ')) || selectedCountry;
+      selectedCountry = savedCode;
+      const numPart = savedPhone.startsWith(selectedCountry.code) ? savedPhone.slice(selectedCountry.code.length).trim() : savedPhone;
+      div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px" id="country-codes-row">${COUNTRY_CODES.map(c =>
+          `<button class="btn ${c.code === selectedCountry.code ? 'btn-primary' : 'btn-outline'}" style="font-size:11px;padding:4px 8px;margin:0;min-width:0" onclick="selectedCountry=COUNTRY_CODES[${COUNTRY_CODES.indexOf(c)}];showConsultStep()">${c.flag} ${c.code}</button>`
+        ).join('')}</div>
+        <input type="tel" id="cf_phone" placeholder="Номер телефона" value="${numPart}" style="width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">
+        <div style="font-size:12px;color:var(--hint);margin-top:6px">${selectedCountry.flag} ${selectedCountry.code} <span id="phone-preview">${numPart || '...'}</span></div>`;
+      container.appendChild(div);
+      setTimeout(() => {
+        const inp = document.getElementById('cf_phone');
+        if (inp) inp.oninput = () => {
+          document.getElementById('phone-preview').textContent = inp.value || '...';
+        };
+      }, 50);
+    } else {
+      div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
+        <textarea id="cf_input" placeholder="Напишите ответ" style="min-height:60px;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;resize:vertical">${consultFormAnswers[step.key] || ''}</textarea>`;
+      container.appendChild(div);
+    }
   } else if (step.type === 'number') {
     div.innerHTML = `<label style="font-size:14px;margin-bottom:8px">${step.question}</label>
       <input type="number" id="cf_input" placeholder="0" value="${consultFormAnswers[step.key] ?? ''}" style="width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none">`;
@@ -1233,14 +1338,26 @@ function renderConsultNav() {
     next.textContent = isLast ? '✅ Готово' : 'Далее →';
     next.onclick = () => {
       saveCurrentStep();
-      const el = document.getElementById('cf_input');
-      if (!el) { consultStepIndex++; showConsultStep(); return; }
-      const val = el.value.trim();
-      if (step.type === 'number') {
-        if (val === '' || isNaN(Number(val))) { tg.showAlert('Введите число'); return; }
-        consultFormAnswers[step.key] = Number(val);
+      if (step.key === 'phone') {
+        const el = document.getElementById('cf_phone');
+        if (!el) { consultStepIndex++; showConsultStep(); return; }
+        const num = el.value.trim();
+        if (!num) { tg.showAlert('Введите номер телефона'); return; }
+        consultFormAnswers[step.key] = selectedCountry.code + ' ' + num;
       } else {
-        consultFormAnswers[step.key] = val;
+        const el = document.getElementById('cf_input');
+        if (!el) { consultStepIndex++; showConsultStep(); return; }
+        const val = el.value.trim();
+        if (step.type === 'number') {
+          if (val === '' || isNaN(Number(val))) { tg.showAlert('Введите число'); return; }
+          consultFormAnswers[step.key] = Number(val);
+        } else {
+          const sn = semanticNormalize(val);
+          if (sn.isBinary) {
+            tg.showAlert(`✅ Понял. Твой ответ: «${val}» → «${sn.canonical}».`);
+          }
+          consultFormAnswers[step.key] = val;
+        }
       }
       consultStepIndex++;
       showConsultStep();
@@ -1254,7 +1371,13 @@ function saveCurrentStep() {
   const all = getConsultAllSteps();
   const step = all[consultStepIndex];
   if (!step) return;
-  if (step.type === 'text') {
+  if (step.key === 'phone') {
+    const el = document.getElementById('cf_phone');
+    if (el) {
+      const num = el.value.trim();
+      consultFormAnswers[step.key] = num ? selectedCountry.code + ' ' + num : '';
+    }
+  } else if (step.type === 'text') {
     const el = document.getElementById('cf_input');
     if (el) consultFormAnswers[step.key] = el.value;
   } else if (step.type === 'number') {
@@ -1296,8 +1419,20 @@ function submitConsultForm() {
   const formData = { type: 'massage_consult', ...consultFormAnswers };
   tg.HapticFeedback.notificationOccurred('success');
   hideConsultForm();
+
+  // Save via API + notify bot
+  const u = uid();
+  if (u) {
+    api('/api/questionnaire/submit', {chat_id: u, data: consultFormAnswers}).catch(() => {});
+  }
   tg.sendData(JSON.stringify(formData));
-  tg.showAlert('✅ Анкета отправлена! Открой чат с ботом.');
+
+  // Показать следующий шаг — прямо в Mini App
+  const uploadSection = qs('massage-upload-section');
+  if (uploadSection) uploadSection.style.display = 'block';
+  const nextSteps = qs('massage-next-steps');
+  if (nextSteps) nextSteps.style.display = 'block';
+  tg.showAlert('✅ Анкета сохранена! Теперь загрузи фото или видео для диагностики.');
 }
 
 // Telegram viewport fix — растягиваем на весь экран
@@ -1340,6 +1475,41 @@ async function api(endpoint, data) {
     const txt = await r.text();
     try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
+}
+async function apiGet(endpoint) {
+  try {
+    const r = await fetch(endpoint, { method: 'GET' });
+    const txt = await r.text();
+    try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
+  } catch(e) { return {ok:false, error:'Network error'}; }
+}
+
+const COUNTRY_CODES = [
+  {code:'+7', flag:'🇷🇺', label:'Россия'},
+  {code:'+20', flag:'🇪🇬', label:'Египет'},
+  {code:'+1', flag:'🇺🇸', label:'США/Канада'},
+  {code:'+44', flag:'🇬🇧', label:'Великобритания'},
+  {code:'+49', flag:'🇩🇪', label:'Германия'},
+  {code:'+33', flag:'🇫🇷', label:'Франция'},
+  {code:'+39', flag:'🇮🇹', label:'Италия'},
+  {code:'+34', flag:'🇪🇸', label:'Испания'},
+  {code:'+90', flag:'🇹🇷', label:'Турция'},
+  {code:'+971', flag:'🇦🇪', label:'ОАЭ'},
+  {code:'+966', flag:'🇸🇦', label:'Сауд. Аравия'},
+  {code:'+380', flag:'🇺🇦', label:'Украина'},
+  {code:'+375', flag:'🇧🇾', label:'Беларусь'},
+  {code:'+77', flag:'🇰🇿', label:'Казахстан'},
+  {code:'+995', flag:'🇬🇪', label:'Грузия'},
+];
+let selectedCountry = COUNTRY_CODES[0];
+
+const YES_WORDS = new Set(['да','ага','угу','конечно','есть','ну да','давай','ок','yes','yep','yeah','разумеется','безусловно','верно','так','точно','именно','ok']);
+const NO_WORDS = new Set(['нет','неа','не','ни в коем случае','не-а','нее','неет','no','nope','never','никак','нету','нисколько','отнюдь']);
+function semanticNormalize(text) {
+  const t = text.trim().toLowerCase().replace(/[.!?]+$/, '');
+  if (YES_WORDS.has(t)) return {canonical:'да', isBinary:true, original:text};
+  if (NO_WORDS.has(t)) return {canonical:'нет', isBinary:true, original:text};
+  return {canonical:text, isBinary:false, original:text};
 }
 
 const PRESETS = [
@@ -1667,6 +1837,21 @@ function stripMarkdown(t) {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/^#{1,6}\s+/gm, '').replace(/^[-*+]\s+/gm, '').replace(/^\d+\.\s+/gm, '').replace(/^>\s+/gm, '')
     .replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[ДЕЙСТВИЕ:[^\]]*\]/g, '');
+}
+function renderMarkdown(t) {
+  return t
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<b>$1</b>')
+    .replace(/__([\s\S]+?)__/g, '<u>$1</u>')
+    .replace(/`{3}([\s\S]*?)`{3}/g, '<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
+    .replace(/\n/g, '<br>');
 }
 function parseActions(text) {
   const acts = [];
@@ -2148,6 +2333,79 @@ async function uploadMassageMedia(input, type) {
       status.textContent = ''; status.style.color = 'var(--accent)';
     }
   }, 4000);
+}
+
+/* ===== Massage Analysis ===== */
+async function startMassageAnalysis() {
+  const u = uid();
+  if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
+  const btn = qs('btn-analyze'); btn.style.display = 'none';
+  const loading = qs('massage-analyze-loading'); loading.style.display = 'block';
+  const resultsDiv = qs('massage-results'); resultsDiv.style.display = 'none';
+  tg.HapticFeedback.impactOccurred('medium');
+  try {
+    const d = await api('/api/massage/analyze', {chat_id: u});
+    loading.style.display = 'none';
+    if (d.ok) {
+      qs('results-content').innerHTML = renderMarkdown(d.formatted);
+      qs('resultsModal').style.display = 'flex';
+    } else {
+      tg.showAlert('❌ ' + (d.error || 'Ошибка анализа'));
+      btn.style.display = 'block';
+    }
+  } catch(e) {
+    loading.style.display = 'none';
+    tg.showAlert('❌ Ошибка сети при анализе');
+    btn.style.display = 'block';
+  }
+}
+
+async function loadMassageResults() {
+  const u = uid();
+  if (!u) return;
+  try {
+    const d = await apiGet('/api/massage/results/' + u);
+    if (d.ok && d.has_results) {
+      qs('results-content').innerHTML = renderMarkdown(d.formatted);
+      qs('btn-analyze').textContent = '📋 Посмотреть результаты';
+      qs('btn-analyze').onclick = () => { qs('resultsModal').style.display = 'flex'; };
+    }
+  } catch(e) {}
+}
+
+async function checkQuestionnaireStatus() {
+  const u = uid();
+  if (!u) return;
+  try {
+    const d = await apiGet('/api/massage/export/' + u);
+    if (d.ok && d.questionnaire) {
+      const nextSteps = qs('massage-next-steps');
+      if (nextSteps) nextSteps.style.display = 'block';
+    }
+  } catch(e) {}
+}
+
+function closeResultsModal() { qs('resultsModal').style.display = 'none'; }
+function openConsentModal() { qs('consentModal').style.display = 'flex'; tg.HapticFeedback.impactOccurred('medium'); }
+function closeConsentModal() { qs('consentModal').style.display = 'none'; }
+
+async function exportConsultation() {
+  const u = uid();
+  if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  try {
+    const r = await fetch('/api/massage/export/' + u, { method: 'GET' });
+    if (!r.ok) { const d = await r.json().catch(() => {}); tg.showAlert('❌ ' + (d?.error || 'Ошибка экспорта')); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'consultation_' + u + '_' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    tg.showAlert('✅ JSON экспортирован');
+  } catch(e) {
+    tg.showAlert('❌ Ошибка сети при экспорте');
+  }
 }
 
 function openAiMusicModal() {
