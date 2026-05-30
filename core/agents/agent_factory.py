@@ -9,7 +9,7 @@ from google.genai import types as genai_types
 import requests
 
 from config import GEMINI_KEY, HF_TOKEN, HF_TASKS, FALLBACK_MODELS
-from core.agents.agent_base import AgentResult
+from core.agents.agent_base import AgentResult, AgentBase
 
 logger = logging.getLogger(__name__)
 
@@ -328,8 +328,34 @@ class SpecialistFactory:
         return old_memory + "; " + "; ".join(new_parts)
 
     @classmethod
-    def chat(cls, chat_id: int, specialist: DynamicSpecialist, user_message: str, user_context: str = "") -> AgentResult:
+    def chat(cls, chat_id: int, specialist: DynamicSpecialist, user_message: str, user_context: str = "", file_path: str = "") -> AgentResult:
         cls._ensure_clients()
+
+        # Если прикреплён файл — сначала vision-анализ
+        if file_path and os.path.exists(file_path) and os.path.isfile(file_path):
+            try:
+                text_for_vision = user_message if user_message else "Проанализируй это изображение"
+                vision_agent = AgentBase(
+                    agent_id=f"sp_{chat_id}",
+                    name=specialist.name,
+                    role_prompt=specialist.system_prompt,
+                    model_type="vision"
+                )
+                result = vision_agent.process_vision(text_for_vision, file_path)
+                if result.is_success():
+                    specialist.message_count += 1
+                    specialist.client_memory = cls._merge_memory(specialist.client_memory, cls._extract_memory(user_message))
+                    _save_specialist(specialist)
+                    _save_conversation(chat_id, specialist.name, f"{user_message} [file: {file_path}]", result.content)
+                    try:
+                        os.remove(file_path)
+                    except Exception:
+                        pass
+                    return result
+                logger.warning(f"Specialist vision failed, falling back to text chat")
+            except Exception as e:
+                logger.warning(f"Specialist vision error: {e}")
+
         history = _load_conversation(chat_id, specialist.name)
 
         # Build context with memory

@@ -104,14 +104,24 @@ async def root():
 async def api_specialist_chat(req: dict):
     from core.agents.agent_factory import SpecialistFactory, get_specialist, get_specialists
     from core.questionnaire import MassageQuestionnaire
+    from config import TEMP_DIR
     chat_id = req.get("chat_id")
     name = req.get("name", "")
     message_text = req.get("message", "")
-    if not chat_id or not name or not message_text:
-        return {"ok": False, "error": "Missing chat_id, name, or message"}
+    file_path = req.get("file_path", "")
+    if not chat_id or not name:
+        return {"ok": False, "error": "Missing chat_id or name"}
+    if not message_text and not file_path:
+        return {"ok": False, "error": "Missing message or file"}
     specialist = get_specialist(chat_id, name)
     if not specialist:
         return {"ok": False, "error": f"Specialist '{name}' not found"}
+    # Validate file_path if provided
+    if file_path:
+        if not os.path.exists(file_path):
+            file_path = ""
+        elif not file_path.startswith(TEMP_DIR):
+            file_path = ""
     # Load questionnaire context for this user
     user_context = ""
     try:
@@ -122,7 +132,7 @@ async def api_specialist_chat(req: dict):
         pass
     try:
         result = await asyncio.wait_for(
-            asyncio.to_thread(SpecialistFactory.chat, chat_id, specialist, message_text, user_context=user_context),
+            asyncio.to_thread(SpecialistFactory.chat, chat_id, specialist, message_text, user_context=user_context, file_path=file_path),
             timeout=120
         )
         if result.is_success():
@@ -132,6 +142,37 @@ async def api_specialist_chat(req: dict):
         return {"ok": False, "error": "Превышено время ожидания ответа от AI"}
     except Exception as e:
         return {"ok": False, "error": f"Ошибка AI: {str(e)}"}
+
+
+@app.post("/api/specialist/upload")
+async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = File(...)):
+    if not chat_id or not file:
+        return {"ok": False, "error": "Missing chat_id or file"}
+    if not file.filename:
+        return {"ok": False, "error": "Empty filename"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    allowed_image = (".jpg", ".jpeg", ".png", ".webp")
+    allowed_video = (".mp4", ".mov", ".webm")
+    if ext not in allowed_image and ext not in allowed_video:
+        return {"ok": False, "error": f"Неподдерживаемый формат «{ext}». Допустимо: JPG/PNG/WebP (фото), MP4/MOV/WebM (видео)"}
+    max_size = 50 * 1024 * 1024 if ext in allowed_video else 10 * 1024 * 1024
+    if file.size and file.size > max_size:
+        limit_mb = max_size // (1024 * 1024)
+        actual_mb = file.size / (1024 * 1024)
+        return {"ok": False, "error": f"Файл слишком большой ({actual_mb:.1f} МБ). Максимум {limit_mb} МБ"}
+    from config import TEMP_DIR
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    file_id = str(uuid.uuid4())[:8]
+    prefix = "sp_photo" if ext in allowed_image else "sp_video"
+    safe_name = f"{prefix}_{chat_id}_{file_id}{ext}"
+    path = os.path.join(TEMP_DIR, safe_name)
+    try:
+        content = await file.read()
+        with open(path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        return {"ok": False, "error": f"Ошибка сохранения: {str(e)}"}
+    return {"ok": True, "file_path": path}
 
 
 @app.post("/api/specialist/list")
