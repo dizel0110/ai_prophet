@@ -22,3 +22,6 @@ docs/
 .playwright-mcp/
 tests/
 static/massage/certificates/*.png
+
+# QA / manual testing (not for public)
+CLIENT_JOURNEY.md
