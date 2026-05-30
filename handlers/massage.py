@@ -364,7 +364,7 @@ async def _ask_question(chat_id, message: types.Message):
     elif step["type"] == "multi_choice":
         skip_label = "⏭ Нет заболеваний" if step["key"] in ("chronic_diseases", "contraindications_absolute") else "⏭ Ничего из списка"
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"☐ {opt}", callback_data=f"mc_q_toggle:{opt}")] for opt in step["options"]
+            [InlineKeyboardButton(text=f"☐ {step['options'][i]}", callback_data=f"mc_q_toggle:{i}")] for i in range(len(step["options"]))
         ] + [
             [InlineKeyboardButton(text="✅ Готово", callback_data="mc_q_done")],
             [InlineKeyboardButton(text=skip_label, callback_data="mc_q_skip")]
@@ -434,12 +434,13 @@ async def on_mc_q_callback(callback: types.CallbackQuery):
         return
 
     if data.startswith("mc_q_toggle:"):
-        opt = data.replace("mc_q_toggle:", "")
+        opt_idx = int(data.replace("mc_q_toggle:", ""))
         step_idx = _get_user_data(chat_id).get("massage_q_index", 0)
         is_optional = _get_user_data(chat_id).get("massage_optional_mode", False)
         steps = QUESTIONNAIRE_STEPS_OPTIONAL if is_optional else QUESTIONNAIRE_STEPS
         step = steps[step_idx]
         target_key = step["key"]
+        opt = step["options"][opt_idx]
 
         if target_key == "chronic_diseases":
             items = list(q.chronic_diseases)
@@ -455,7 +456,7 @@ async def on_mc_q_callback(callback: types.CallbackQuery):
         _save_questionnaire(chat_id, q)
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"{'✅' if c in items else '☐'} {c}", callback_data=f"mc_q_toggle:{c}")] for c in step["options"]
+            [InlineKeyboardButton(text=f"{'✅' if step['options'][i] in items else '☐'} {step['options'][i]}", callback_data=f"mc_q_toggle:{i}")] for i in range(len(step["options"]))
         ] + [
             [InlineKeyboardButton(text="✅ Готово", callback_data="mc_q_done")],
             [InlineKeyboardButton(text="⏭ Ничего из списка", callback_data="mc_q_skip")]
