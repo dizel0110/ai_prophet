@@ -611,6 +611,7 @@ html{scroll-behavior:smooth}
       </div>
       <button class="btn btn-primary" onclick="startConsultation()">🧑‍⚕️ Начать консультацию</button>
       <button class="btn btn-secondary" onclick="openConsultForm()">📝 Заполнить анкету</button>
+      <button class="btn btn-secondary" id="btn-resume-consult" onclick="" style="display:none;background:rgba(196,154,108,.12);border-color:var(--gold);margin-top:4px">📋 Продолжить анкету</button>
     </div>
     <div class="card" id="massage-upload-section">
       <div class="sec-title" style="font-size:15px">📤 Загрузить для диагностики</div>
@@ -1070,7 +1071,7 @@ function navigate(page) {
   document.querySelector('.tab[data-page="' + page + '"]').classList.add('active');
   tg.HapticFeedback.impactOccurred('light');
   window.scrollTo(0, 0);
-  if (page === 'ai') { loadMassageResults(); checkQuestionnaireStatus(); }
+  if (page === 'ai') { loadMassageResults(); checkQuestionnaireStatus(); checkQuestionnaireProgress(); }
 }
 
 const BOT_USERNAME = 'ai_prophet_io_bot';
@@ -1134,6 +1135,7 @@ let consultSteps = null;
 let consultStepIndex = 0;
 let consultFormAnswers = {};
 let consultShowingOptional = false;
+let consultAutoSaveTimer = null;
 let consultMCSelected = [];
 
 function openConsultForm() {
@@ -1269,6 +1271,7 @@ function showConsultStep() {
 
   // Nav buttons
   renderConsultNav();
+  saveConsultProgress();
 }
 
 function showOptionalInterstitial(container, nav, progress) {
@@ -1317,6 +1320,7 @@ function renderConsultNav() {
         consultStepIndex--;
         showConsultStep();
       }
+      saveConsultProgress();
     };
     nav.appendChild(back);
   }
@@ -1329,7 +1333,7 @@ function renderConsultNav() {
   if (step.type === 'choice' || step.type === 'consent') {
     if (consultFormAnswers[step.key] !== undefined && consultFormAnswers[step.key] !== '') {
       next.textContent = isLast ? '✅ Готово' : 'Далее →';
-      next.onclick = () => { consultStepIndex++; showConsultStep(); };
+      next.onclick = () => { consultStepIndex++; showConsultStep(); saveConsultProgress(); };
     } else {
       next.textContent = 'Выберите вариант';
       next.style.opacity = '0.5';
@@ -1337,7 +1341,7 @@ function renderConsultNav() {
     }
   } else if (step.type === 'multi_choice') {
     next.textContent = isLast ? '✅ Готово' : 'Далее →';
-    next.onclick = () => { consultStepIndex++; showConsultStep(); };
+    next.onclick = () => { consultStepIndex++; showConsultStep(); saveConsultProgress(); };
   } else {
     next.textContent = isLast ? '✅ Готово' : 'Далее →';
     next.onclick = () => {
@@ -1365,6 +1369,7 @@ function renderConsultNav() {
       }
       consultStepIndex++;
       showConsultStep();
+      saveConsultProgress();
     };
   }
 
@@ -1392,6 +1397,7 @@ function saveCurrentStep() {
 
 function selectConsultChoice(key, value) {
   consultFormAnswers[key] = value;
+  saveConsultProgress();
   showConsultStep();
 }
 
@@ -1403,6 +1409,45 @@ function toggleConsultMC(key, option) {
     selected.push(option);
   }
   consultFormAnswers[key] = selected;
+  saveConsultProgress();
+}
+
+function saveConsultProgress() {
+  const u = uid();
+  if (!u || !consultSteps) return;
+  if (consultAutoSaveTimer) clearTimeout(consultAutoSaveTimer);
+  consultAutoSaveTimer = setTimeout(function() {
+    api('/api/questionnaire/save_progress', {
+      chat_id: u,
+      answers: consultFormAnswers,
+      step_index: consultStepIndex,
+      showing_optional: consultShowingOptional
+    }).catch(function(){});
+  }, 500);
+}
+
+function resumeConsultForm(savedData) {
+  consultFormAnswers = savedData.answers || {};
+  consultStepIndex = savedData.step_index || 0;
+  consultShowingOptional = savedData.showing_optional || false;
+  tg.HapticFeedback.impactOccurred('medium');
+  document.getElementById('consultModal').classList.add('show');
+  loadConsultSteps();
+}
+
+async function checkQuestionnaireProgress() {
+  const u = uid();
+  if (!u) return;
+  try {
+    const d = await apiGet('/api/questionnaire/progress/' + u);
+    if (d.ok && d.has_progress) {
+      var contBtn = qs('btn-resume-consult');
+      if (contBtn) {
+        contBtn.style.display = 'block';
+        contBtn.onclick = function() { resumeConsultForm(d); };
+      }
+    }
+  } catch(e) {}
 }
 
 function submitConsultForm() {
@@ -1424,12 +1469,17 @@ function submitConsultForm() {
   tg.HapticFeedback.notificationOccurred('success');
   hideConsultForm();
 
-  // Save via API + notify bot
+  // Clear saved progress
   const u = uid();
   if (u) {
-    api('/api/questionnaire/submit', {chat_id: u, data: consultFormAnswers}).catch(() => {});
+    api('/api/questionnaire/clear_progress', {chat_id: u}).catch(function(){});
+    api('/api/questionnaire/submit', {chat_id: u, data: consultFormAnswers}).catch(function(){});
   }
   tg.sendData(JSON.stringify(formData));
+
+  // Hide resume button
+  var contBtn = qs('btn-resume-consult');
+  if (contBtn) contBtn.style.display = 'none';
 
   // Показать следующий шаг — прямо в Mini App
   const uploadSection = qs('massage-upload-section');

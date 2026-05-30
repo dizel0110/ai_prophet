@@ -574,6 +574,50 @@ async def api_questionnaire_steps_full():
     }
 
 
+@app.post("/api/questionnaire/save_progress")
+async def api_questionnaire_save_progress(req: dict):
+    """Save partial questionnaire progress (supports resume after close)."""
+    chat_id = str(req.get("chat_id", ""))
+    answers = req.get("answers", {})
+    step_index = req.get("step_index", 0)
+    showing_optional = req.get("showing_optional", False)
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    from handlers.massage import _set_user_data
+    _set_user_data(chat_id, "massage_questionnaire_progress", {
+        "answers": answers,
+        "step_index": step_index,
+        "showing_optional": showing_optional,
+        "timestamp": str(datetime.now()),
+    })
+    return {"ok": True}
+
+
+@app.get("/api/questionnaire/progress/{chat_id}")
+async def api_questionnaire_progress(chat_id: str):
+    """Return saved questionnaire progress, if any."""
+    from handlers.massage import _get_user_data, _get_questionnaire
+    q = _get_questionnaire(chat_id)
+    if q and q.full_name:
+        return {"ok": True, "has_progress": False, "completed": True}
+    data = _get_user_data(chat_id)
+    progress = data.get("massage_questionnaire_progress")
+    if progress and progress.get("answers"):
+        return {"ok": True, "has_progress": True, **progress}
+    return {"ok": True, "has_progress": False}
+
+
+@app.post("/api/questionnaire/clear_progress")
+async def api_questionnaire_clear_progress(req: dict):
+    """Clear saved progress after successful submit."""
+    chat_id = str(req.get("chat_id", ""))
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    from handlers.massage import _set_user_data
+    _set_user_data(chat_id, "massage_questionnaire_progress", None)
+    return {"ok": True}
+
+
 @app.post("/api/questionnaire/submit")
 async def api_questionnaire_submit(req: dict):
     chat_id = str(req.get("chat_id", ""))
@@ -593,6 +637,8 @@ async def api_questionnaire_submit(req: dict):
     _set_user_data(chat_id, "massage_step", "media")
     _set_user_data(chat_id, "massage_photos", [])
     _set_user_data(chat_id, "massage_videos", [])
+    # Clear any saved progress
+    _set_user_data(chat_id, "massage_questionnaire_progress", None)
     return {"ok": True}
 
 # ──────────────────── Server ────────────────────

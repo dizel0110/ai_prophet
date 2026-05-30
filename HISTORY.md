@@ -171,3 +171,17 @@
 - **Telegram bot**: `on_mc_analyze` saves `massage_music_recommendation` to `user_settings` and shows recommendation in "Что дальше?" card
 - **Tests**: 12 new tests (4 × `get_tracks_by_duration`, 8 × `_parse_music_recommendation` with Russian/English/reduced coverage)
 - **Total tests**: 69 ✅
+
+## 2026-05-30: Questionnaire Resume After App Close (🔥 Простота)
+- **Problem**: User closes Mini App mid-questionnaire → all answers lost (`consultFormAnswers` in-memory)
+- **Solution**: Auto-save partial progress to server on every step change
+- **New endpoints** (`main.py`):
+  - `POST /api/questionnaire/save_progress` — saves `{answers, step_index, showing_optional}` to `user_settings["massage_questionnaire_progress"]`
+  - `GET /api/questionnaire/progress/{chat_id}` — returns saved progress (or `{completed: true}` if already submitted)
+  - `POST /api/questionnaire/clear_progress` — clears after successful submit
+- **Mini App** (`index.html`):
+  - `saveConsultProgress()` — debounced (500ms) auto-save on every: step advance, back, choice select, multi-choice toggle, text input leave
+  - `checkQuestionnaireProgress()` — called on AI page enter → shows `btn-resume-consult` («📋 Продолжить анкету») with gold border
+  - `resumeConsultForm(data)` — restores `consultFormAnswers`, `consultStepIndex`, `consultShowingOptional` → opens modal at saved position
+  - Cleared on submit via `POST /api/questionnaire/clear_progress`
+- **/api/questionnaire/submit** — also clears progress (`_set_user_data(..., "massage_questionnaire_progress", None)`)
