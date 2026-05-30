@@ -882,7 +882,6 @@ async def handle_document(message: types.Message, bot: Bot):
     else:
         await message.answer("📁 *Файл получен.* К сожалению, я умею обрабатывать только `.json` бэкапы моей библиотеки музыки.")
 
-@router.message()
 def _extract_questions(text: str) -> list:
     """Extract question phrases ending with ? from AI response."""
     import re
@@ -890,6 +889,7 @@ def _extract_questions(text: str) -> list:
     return [q.strip() for q in qs if len(q.strip()) > 5][:3]
 
 
+@router.message()
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
     text = message.text

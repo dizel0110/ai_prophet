@@ -809,12 +809,52 @@ async def on_mc_final_review(callback: types.CallbackQuery):
 
 
 # === ОБРАБОТКА ДАННЫХ ИЗ MINI APP ===
+async def _handle_prophet_action(message: types.Message, action: str):
+    """Обработка действий из Prophet Mini App (plain string actions)."""
+    chat_id = str(message.chat.id)
+    if action == "daily_prediction":
+        from handlers.messages import conduct_ai_ritual
+        status_msg = await message.answer("🧘 *Медитирую над твоими словами...*")
+        await conduct_ai_ritual(message, message.bot, "🔮 Предсказание", status_msg)
+    elif action == "vision_info":
+        from handlers.messages import conduct_ai_ritual
+        status_msg = await message.answer("🧘 *Медитирую над твоими словами...*")
+        await conduct_ai_ritual(message, message.bot, "🖼 Видение", status_msg)
+    elif action == "playlist_wizard":
+        from handlers.messages import user_settings, save_settings
+        user_settings.setdefault(chat_id, {})['playlist_step'] = 'artist'
+        user_settings[chat_id]['playlist_draft'] = {'items': []}
+        save_settings(user_settings)
+        await message.answer(
+            "🎵 *Мастер Плейлистов*\n\nНапиши имя артиста или название трека для поиска:",
+            parse_mode="Markdown"
+        )
+    elif action == "import_json":
+        await message.answer(
+            "📥 *Импорт Плейлистов*\n\nПросто скинь мне JSON-файл с плейлистом или бэкапом библиотеки.",
+            parse_mode="Markdown"
+        )
+    elif action == "library":
+        from handlers.messages import handle_pl_library
+        await handle_pl_library(
+            types.CallbackQuery(
+                id="0", from_user=message.from_user,
+                chat_instance="0", message=message, data="pl_library"
+            )
+        )
+
+
 @router.message(F.web_app_data)
 async def on_massage_webapp_data(message: types.Message):
     if not message.web_app_data:
         return
+    raw = message.web_app_data.data
+    # Prophet Mini App: plain string action
+    if not raw.startswith("{"):
+        await _handle_prophet_action(message, raw)
+        return
     try:
-        data = json.loads(message.web_app_data.data)
+        data = json.loads(raw)
         if data.get("type") != "massage_consult":
             return
     except (json.JSONDecodeError, KeyError):

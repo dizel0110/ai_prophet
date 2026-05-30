@@ -386,6 +386,58 @@ async def serve_user_audio(chat_id: str, filename: str):
     return FileResponse(path, media_type="audio/mpeg")
 
 
+# ──────────────────── Massage Upload API ────────────────────
+
+MASSAGE_EXT_IMAGE = (".jpg", ".jpeg", ".png", ".webp")
+MASSAGE_EXT_VIDEO = (".mp4", ".mov", ".webm")
+MASSAGE_MAX_IMAGE = 10 * 1024 * 1024
+MASSAGE_MAX_VIDEO = 50 * 1024 * 1024
+
+MASSAGE_EXT_LABELS = {
+    **{e: "фото (JPG/PNG/WebP, до 10 МБ)" for e in MASSAGE_EXT_IMAGE},
+    **{e: "видео (MP4/MOV/WebM, до 50 МБ)" for e in MASSAGE_EXT_VIDEO},
+}
+
+
+@app.post("/api/massage/upload")
+async def api_massage_upload(chat_id: str = Form(...), file: UploadFile = File(...)):
+    if not chat_id or not file:
+        return {"ok": False, "error": "Не указан chat_id или файл"}
+    if not file.filename:
+        return {"ok": False, "error": "Пустое имя файла"}
+    ext = os.path.splitext(file.filename)[1].lower()
+    is_image = ext in MASSAGE_EXT_IMAGE
+    is_video = ext in MASSAGE_EXT_VIDEO
+    if not is_image and not is_video:
+        allowed = ", ".join(sorted(set(MASSAGE_EXT_LABELS.values())))
+        return {"ok": False, "error": f"Неподдерживаемый формат «{ext}». Допустимо: {allowed}"}
+    max_size = MASSAGE_MAX_IMAGE if is_image else MASSAGE_MAX_VIDEO
+    if file.size and file.size > max_size:
+        limit_mb = max_size // (1024 * 1024)
+        actual_mb = file.size / (1024 * 1024)
+        return {"ok": False, "error": f"Файл слишком большой ({actual_mb:.1f} МБ). Максимум {limit_mb} МБ для {'фото' if is_image else 'видео'}"}
+    from config import TEMP_DIR
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    file_id = str(uuid.uuid4())[:8]
+    prefix = "massage_photo" if is_image else "massage_video"
+    safe_name = f"{prefix}_{chat_id}_{file_id}{ext}"
+    path = os.path.join(TEMP_DIR, safe_name)
+    try:
+        content = await file.read()
+        with open(path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        return {"ok": False, "error": f"Ошибка сохранения файла: {str(e)}"}
+
+    key = "massage_photos" if is_image else "massage_videos"
+    from handlers.massage import _get_user_data, _set_user_data
+    existing = _get_user_data(chat_id).get(key, [])
+    existing.append(path)
+    _set_user_data(chat_id, key, existing)
+    _set_user_data(chat_id, "massage_step", "media")
+    return {"ok": True, "file_path": path, "count": len(existing)}
+
+
 # ──────────────────── Questionnaire API ────────────────────
 
 @app.get("/api/questionnaire/steps")
