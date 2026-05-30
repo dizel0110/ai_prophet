@@ -670,11 +670,14 @@ def _is_chat_id_admin(chat_id: int) -> bool:
 
 
 @app.get("/api/admin/identify")
-async def api_admin_identify(chat_id: int = 0):
-    """Check if user is an admin and their current mode preference."""
+async def api_admin_identify(chat_id: int = 0, username: str = ""):
+    """Check if user is an admin and their current mode preference.
+    Owner (OWNER_USERNAME) is always admin — no .env setup needed.
+    """
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
-    is_admin = _is_chat_id_admin(chat_id)
+    from config import OWNER_USERNAME
+    is_admin = _is_chat_id_admin(chat_id) or (username and username.lower() == OWNER_USERNAME.lower())
     persist = _load_admin_mode_persist()
     pref = persist.get(str(chat_id), "client")
     return {"ok": True, "is_admin": is_admin, "mode": pref}

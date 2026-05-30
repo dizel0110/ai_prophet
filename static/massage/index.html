@@ -2531,8 +2531,9 @@ let adminMode = false;
 async function identifyAdmin() {
   const u = uid();
   if (!u) return;
+  var uname = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username) || '';
   try {
-    const d = await apiGet('/api/admin/identify', {chat_id: u});
+    const d = await apiGet('/api/admin/identify', {chat_id: u, username: uname});
     if (d.ok && d.is_admin) {
       qs('admin-gear').style.display = 'inline-block';
       adminMode = d.mode === 'admin';
