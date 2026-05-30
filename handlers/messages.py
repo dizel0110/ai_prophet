@@ -25,6 +25,24 @@ _qr_counter: int = 0
 
 # Путь к файлу настроек
 SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
+USERNAME_MAP_FILE = os.path.join(DATA_DIR, "username_chat_map.json")
+
+
+def _update_username_map(message: types.Message):
+    """Track username→chat_id mapping so /give_access can work instantly."""
+    username = (message.from_user.username or "").lower()
+    if not username:
+        return
+    try:
+        m = {}
+        if os.path.exists(USERNAME_MAP_FILE):
+            with open(USERNAME_MAP_FILE, "r", encoding="utf-8") as f:
+                m = json.load(f)
+        m[username] = message.chat.id
+        with open(USERNAME_MAP_FILE, "w", encoding="utf-8") as f:
+            json.dump(m, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -916,7 +934,8 @@ async def handle_text(message: types.Message, bot: Bot):
     text = message.text
     if not text: return
 
-    # Admin access — check if user's username is in pending list
+    # Track username→chat_id for admin access
+    _update_username_map(message)
     _check_admin_pending_access(message)
 
     # Если пользователь общается со специалистом — перенаправляем

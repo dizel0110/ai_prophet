@@ -1,11 +1,10 @@
 from aiogram import types, Router, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
-from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_url, ADMIN_IDS
+from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_url, ADMIN_IDS, DATA_DIR
 import json
 import os
 import time
-from config import TEMP_DIR, DATA_DIR
 
 router = Router()
 
@@ -45,6 +44,35 @@ def _add_admin_id(chat_id: int):
             json.dump(list(existing), f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+def _remove_admin_id(chat_id: int):
+    """Remove chat_id from the runtime admin list."""
+    ADMIN_IDS.discard(chat_id)
+    path = os.path.join(DATA_DIR, "admin_ids_extras.json")
+    try:
+        existing = set()
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                existing = set(json.load(f))
+        existing.discard(chat_id)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(list(existing), f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _resolve_username_to_chat_id(username: str) -> int | None:
+    """Look up chat_id from username_chat_map.json (set by messages.py)."""
+    path = os.path.join(DATA_DIR, "username_chat_map.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            m = json.load(f)
+        return m.get(username.lower())
+    except Exception:
+        return None
 
 # Лимиты безопасности
 MAX_FAILED_ATTEMPTS = 3  # Максимум неудачных попыток
@@ -241,6 +269,72 @@ async def reset_vip_lock(message: types.Message):
     else:
         await message.answer("❌ Неверный пароль сброса.")
 
+@router.message(Command("id"))
+async def show_id(message: types.Message):
+    """Показать chat_id пользователя."""
+    await message.answer(
+        f"📋 *Твой ID:* `{message.chat.id}`\n"
+        f"👤 *Username:* @{message.from_user.username or '—'}\n\n"
+        "Этот ID нужен для доступа к админ-панели Mini App.\n"
+        "Можешь добавить его в `.env` владельца или попросить `/give_access`.",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("revoke_access"))
+async def revoke_access(message: types.Message):
+    """Убрать пользователя из админ-панели.
+
+    Использование: /revoke_access @username
+    Владелец и админы могут забирать доступ.
+    """
+    if not _is_owner_or_admin(message):
+        await message.answer("🔐 Только владелец и админы.")
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "📋 *Удаление админа*\n\n"
+            "Использование: `/revoke_access @username`",
+            parse_mode="Markdown"
+        )
+        return
+
+    target = args[1].lstrip("@").lower()
+    if not target:
+        await message.answer("❌ Укажи username пользователя.")
+        return
+
+    existing_id = _resolve_username_to_chat_id(target)
+    if existing_id is None or existing_id not in ADMIN_IDS:
+        await message.answer(f"ℹ️ @{target} не найден в списке админов.")
+        return
+
+    _remove_admin_id(existing_id)
+    await message.answer(
+        f"✅ Доступ @{target} (chat_id: {existing_id}) отозван.",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("admin_ids"))
+async def list_admin_ids(message: types.Message):
+    """Показать список всех админов (только для владельца)."""
+    username = (message.from_user.username or "").lower()
+    if username != OWNER_USERNAME.lower():
+        await message.answer("🔐 Только владелец.")
+        return
+
+    lines = ["📋 *Список админов:\n\n"]
+    for cid in sorted(ADMIN_IDS):
+        lines.append(f"• `{cid}`")
+    await message.answer(
+        "\n".join(lines) if len(lines) > 1 else "Нет дополнительных админов.",
+        parse_mode="Markdown"
+    )
+
+
 @router.message(Command("exitvip"))
 async def exit_vip(message: types.Message):
     """Выход из VIP режима"""
@@ -263,19 +357,22 @@ async def exit_vip(message: types.Message):
         await message.answer("ℹ️ Вы не в VIP режиме.")
 
 
+def _is_owner_or_admin(message: types.Message) -> bool:
+    """Check if sender is owner or existing admin."""
+    username = (message.from_user.username or "").lower()
+    chat_id = message.chat.id
+    return username == OWNER_USERNAME.lower() or chat_id in ADMIN_IDS
+
+
 @router.message(Command("give_access"))
 async def give_access(message: types.Message):
     """Добавить пользователя в админ-панель Mini App.
 
     Использование: /give_access @username
-    Пользователь должен хотя бы раз написать боту.
+    Владелец и админы могут давать доступ.
     """
-    username = message.from_user.username or ""
-    chat_id = str(message.chat.id)
-
-    # Только OWNER может давать доступ
-    if username != OWNER_USERNAME and int(chat_id) not in ADMIN_IDS:
-        await message.answer("🔐 Эта команда только для владельца.")
+    if not _is_owner_or_admin(message):
+        await message.answer("🔐 Только владелец и админы.")
         return
 
     args = message.text.split()
@@ -283,24 +380,37 @@ async def give_access(message: types.Message):
         await message.answer(
             "📋 *Добавление админа*\n\n"
             "Использование: `/give_access @username`\n\n"
-            "Пользователь должен хотя бы раз написать боту.\n"
-            "Я добавлю его chat_id в админ-панель Mini App.\n\n"
+            "Если пользователь уже писал боту — доступ даётся сразу.\n"
+            "Если нет — он получит его при первом сообщении.\n\n"
             "_Как узнать свой chat_id: напиши /id боту_",
             parse_mode="Markdown"
         )
         return
 
-    target = args[1].lstrip("@")
+    target = args[1].lstrip("@").lower()
     if not target:
         await message.answer("❌ Укажи username пользователя.")
         return
 
-    pending = _load_admin_pending()
-    pending[target.lower()] = True
-    _save_admin_pending(pending)
+    # Instant grant if user has messaged before
+    existing_id = _resolve_username_to_chat_id(target)
+    if existing_id is not None:
+        if existing_id in ADMIN_IDS:
+            await message.answer(f"ℹ️ @{target} уже имеет доступ.")
+            return
+        _add_admin_id(existing_id)
+        await message.answer(
+            f"✅ Доступ выдан @{target} (chat_id: {existing_id}).",
+            parse_mode="Markdown"
+        )
+        return
 
+    # Fallback: pending until next message
+    pending = _load_admin_pending()
+    pending[target] = True
+    _save_admin_pending(pending)
     await message.answer(
-        f"✅ Запрос на добавление @{target} отправлен.\n"
-        f"Когда @{target} в следующий раз напишет боту, он автоматически получит доступ к админ-панели.",
+        f"⏳ @{target} ещё не писал(а) боту.\n"
+        f"Доступ будет выдан автоматически, когда он(а) напишет любое сообщение.",
         parse_mode="Markdown"
     )
