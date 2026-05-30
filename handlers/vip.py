@@ -1,7 +1,7 @@
 from aiogram import types, Router, F
 from aiogram.filters import Command
 from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
-from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_url
+from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_url, ADMIN_IDS
 import json
 import os
 import time
@@ -10,6 +10,41 @@ from config import TEMP_DIR, DATA_DIR
 router = Router()
 
 SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
+ADMIN_PENDING_FILE = os.path.join(DATA_DIR, "admin_pending.json")
+
+
+def _load_admin_pending() -> dict:
+    if os.path.exists(ADMIN_PENDING_FILE):
+        try:
+            with open(ADMIN_PENDING_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_admin_pending(data: dict):
+    try:
+        with open(ADMIN_PENDING_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _add_admin_id(chat_id: int):
+    """Add chat_id to the runtime admin list (in-memory + persisted file)."""
+    ADMIN_IDS.add(chat_id)
+    path = os.path.join(DATA_DIR, "admin_ids_extras.json")
+    try:
+        existing = set()
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                existing = set(json.load(f))
+        existing.add(chat_id)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(list(existing), f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 # Лимиты безопасности
 MAX_FAILED_ATTEMPTS = 3  # Максимум неудачных попыток
@@ -226,3 +261,46 @@ async def exit_vip(message: types.Message):
         )
     else:
         await message.answer("ℹ️ Вы не в VIP режиме.")
+
+
+@router.message(Command("give_access"))
+async def give_access(message: types.Message):
+    """Добавить пользователя в админ-панель Mini App.
+
+    Использование: /give_access @username
+    Пользователь должен хотя бы раз написать боту.
+    """
+    username = message.from_user.username or ""
+    chat_id = str(message.chat.id)
+
+    # Только OWNER может давать доступ
+    if username != OWNER_USERNAME and int(chat_id) not in ADMIN_IDS:
+        await message.answer("🔐 Эта команда только для владельца.")
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "📋 *Добавление админа*\n\n"
+            "Использование: `/give_access @username`\n\n"
+            "Пользователь должен хотя бы раз написать боту.\n"
+            "Я добавлю его chat_id в админ-панель Mini App.\n\n"
+            "_Как узнать свой chat_id: напиши /id боту_",
+            parse_mode="Markdown"
+        )
+        return
+
+    target = args[1].lstrip("@")
+    if not target:
+        await message.answer("❌ Укажи username пользователя.")
+        return
+
+    pending = _load_admin_pending()
+    pending[target.lower()] = True
+    _save_admin_pending(pending)
+
+    await message.answer(
+        f"✅ Запрос на добавление @{target} отправлен.\n"
+        f"Когда @{target} в следующий раз напишет боту, он автоматически получит доступ к админ-панели.",
+        parse_mode="Markdown"
+    )

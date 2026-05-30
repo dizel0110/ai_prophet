@@ -641,6 +641,113 @@ async def api_questionnaire_submit(req: dict):
     _set_user_data(chat_id, "massage_questionnaire_progress", None)
     return {"ok": True}
 
+# ──────────────────── Admin API ────────────────────
+
+ADMIN_PERSIST_FILE = os.path.join(DATA_DIR, "admin_mode_persist.json")
+
+
+def _load_admin_mode_persist() -> dict:
+    if os.path.exists(ADMIN_PERSIST_FILE):
+        try:
+            with open(ADMIN_PERSIST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_admin_mode_persist(data: dict):
+    try:
+        with open(ADMIN_PERSIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _is_chat_id_admin(chat_id: int) -> bool:
+    from config import ADMIN_IDS
+    return chat_id in ADMIN_IDS
+
+
+@app.get("/api/admin/identify")
+async def api_admin_identify(chat_id: int = 0):
+    """Check if user is an admin and their current mode preference."""
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    is_admin = _is_chat_id_admin(chat_id)
+    persist = _load_admin_mode_persist()
+    pref = persist.get(str(chat_id), "client")
+    return {"ok": True, "is_admin": is_admin, "mode": pref}
+
+
+@app.post("/api/admin/mode")
+async def api_admin_mode(req: dict):
+    """Toggle admin mode on/off."""
+    chat_id = str(req.get("chat_id", ""))
+    mode = req.get("mode", "client")
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    if mode not in ("client", "admin"):
+        return {"ok": False, "error": "Invalid mode"}
+    persist = _load_admin_mode_persist()
+    persist[chat_id] = mode
+    _save_admin_mode_persist(persist)
+    return {"ok": True, "mode": mode}
+
+
+@app.get("/api/admin/clients")
+async def api_admin_clients(chat_id: int = 0):
+    """List all clients with questionnaire data (admin only)."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    clients = []
+    settings_path = os.path.join(DATA_DIR, "user_settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                all_data = json.load(f)
+            for cid, data in all_data.items():
+                q = data.get("massage_questionnaire")
+                if not q:
+                    continue
+                phone = (q.get("phone") or "").strip()
+                name = (q.get("full_name") or "").strip()
+                if not name:
+                    continue
+                clients.append({
+                    "chat_id": cid,
+                    "name": name,
+                    "phone": phone,
+                    "has_photos": bool(data.get("massage_photos")),
+                    "has_videos": bool(data.get("massage_videos")),
+                    "has_results": bool(data.get("massage_results")),
+                    "has_progress": bool(data.get("massage_questionnaire_progress")),
+                })
+        except Exception:
+            pass
+    clients.sort(key=lambda c: c["name"].lower())
+    return {"ok": True, "clients": clients}
+
+
+@app.get("/api/admin/client/{target_chat_id}")
+async def api_admin_client(target_chat_id: str, chat_id: int = 0):
+    """Get full client data including export (admin only)."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    from handlers.massage import _get_user_data, _get_questionnaire
+    data = _get_user_data(target_chat_id)
+    q = _get_questionnaire(target_chat_id)
+    questionnaire = q.to_dict() if q else None
+    results = data.get("massage_results")
+    return {
+        "ok": True,
+        "questionnaire": questionnaire,
+        "formatted": (results.get("formatted") if results else None),
+        "photos": data.get("massage_photos", []),
+        "videos": data.get("massage_videos", []),
+    }
+
+
 # ──────────────────── Server ────────────────────
 
 def start_web():

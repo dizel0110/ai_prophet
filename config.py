@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,6 +16,12 @@ TELEGRAM_API_URL = os.getenv("TELEGRAM_API_URL")  # Cloudflare Worker proxy дл
 
 PORT = int(os.getenv("PORT", 7860))
 OWNER_USERNAME = os.getenv("OWNER_USERNAME", "dizel0110")
+ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS: set[int] = set()
+for part in ADMIN_IDS_RAW.split(","):
+    part = part.strip()
+    if part and part.isdigit():
+        ADMIN_IDS.add(int(part))
 
 # Mini App URL — Telegram требует HTTPS
 # На HF Spaces формируется автоматически, для локали — GitHub Pages или ngrok
@@ -38,6 +45,19 @@ TEMP_DIR = "temp"
 DATA_DIR = "data"
 for d in (TEMP_DIR, DATA_DIR):
     if not os.path.exists(d): os.makedirs(d)
+
+# Also load extra admin IDs from runtime file (/give_access)
+_admin_extras = os.path.join(DATA_DIR, "admin_ids_extras.json")
+if os.path.exists(_admin_extras):
+    try:
+        with open(_admin_extras, "r", encoding="utf-8") as _f:
+            _extras = json.load(_f)
+        if isinstance(_extras, list):
+            for _e in _extras:
+                if isinstance(_e, int):
+                    ADMIN_IDS.add(_e)
+    except Exception:
+        pass
 
 # АКТУАЛЬНЫЕ МОДЕЛИ (Май 2026)
 FALLBACK_MODELS = [

@@ -13,7 +13,7 @@ from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, Inlin
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
 from core.agents.agent_factory import SpecialistFactory, get_specialists, get_specialist, remove_specialist, DynamicSpecialist
-from config import FALLBACK_MODELS, TEMP_DIR, DATA_DIR, get_base_url
+from config import FALLBACK_MODELS, TEMP_DIR, DATA_DIR, ADMIN_IDS, get_base_url
 from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
@@ -894,11 +894,30 @@ def _extract_questions(text: str) -> list:
     return [q.strip() for q in qs if len(q.strip()) > 5][:3]
 
 
+def _check_admin_pending_access(message: types.Message):
+    """Check if this user's username is in the admin pending list,
+    and if so, add their chat_id to ADMIN_IDS."""
+    username = (message.from_user.username or "").lower()
+    if not username:
+        return
+    from handlers.vip import _load_admin_pending, _save_admin_pending, _add_admin_id
+    pending = _load_admin_pending()
+    if username in pending:
+        del pending[username]
+        _save_admin_pending(pending)
+        chat_id = message.chat.id
+        _add_admin_id(chat_id)
+        logger.info(f"Admin access granted to @{username} (chat_id={chat_id})")
+
+
 @router.message()
 async def handle_text(message: types.Message, bot: Bot):
     chat_id = str(message.chat.id)
     text = message.text
     if not text: return
+
+    # Admin access — check if user's username is in pending list
+    _check_admin_pending_access(message)
 
     # Если пользователь общается со специалистом — перенаправляем
     is_sp = _is_chatting_with_specialist(chat_id)

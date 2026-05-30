@@ -242,6 +242,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .tab.active[data-page="chat"] .tab-icon{animation:tabBlink 1.8s ease-in-out infinite}
 .tab.active[data-page="music"] .tab-icon{animation:musicFloat 3s ease-in-out infinite}
 .tab.active[data-page="more"] .tab-icon{animation:tabSlide 2s ease-in-out infinite}
+.tab.active[data-page="admin"] .tab-icon{animation:tabSlide 2s ease-in-out infinite}
 @keyframes tabHome{0%{filter:brightness(1);text-shadow:0 0 0 rgba(196,154,108,0);transform:scale(1.1)}100%{filter:brightness(1.25);text-shadow:0 0 12px rgba(196,154,108,.5);transform:scale(1.15)}}
 @keyframes tabFloat{0%,100%{transform:translateY(0) scale(1.1)}50%{transform:translateY(-4px) scale(1.12)}}
 @keyframes tabBreathe{0%,100%{transform:scale(1.1)}50%{transform:scale(1.2)}}
@@ -303,6 +304,10 @@ html{scroll-behavior:smooth}
 
 <!-- HERO (часть каждой страницы) -->
 <div class="hero">
+  <div style="position:absolute;top:8px;right:12px;display:flex;gap:6px;align-items:center">
+    <span id="admin-mode-badge" style="display:none;font-size:11px;background:var(--gold);color:#1a0f0a;padding:2px 8px;border-radius:4px;font-weight:600">⚙️ АДМИН</span>
+    <button id="admin-gear" onclick="toggleAdminMode()" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--gold);padding:2px" title="Админ-панель">⚙️</button>
+  </div>
   <h1>Мастерская Массажа</h1>
   <div class="divider"></div>
   <div class="sub">Искусство расслабления и восстановления</div>
@@ -955,6 +960,28 @@ html{scroll-behavior:smooth}
   </div>
 </div>
 
+<!-- ADMIN PAGE -->
+<div class="page" id="page-admin" style="display:none">
+  <div class="sec">
+    <div class="sec-title">📊 Админ-панель</div>
+    <div class="sec-sub">Клиенты, прошедшие консультацию</div>
+    <div id="admin-client-list" style="margin-top:8px">
+      <p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Загрузка...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN CLIENT MODAL -->
+<div class="modal-overlay" id="adminClientModal" style="display:none">
+  <div class="modal" style="height:85dvh;display:flex;flex-direction:column;padding:16px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-bottom:12px">
+      <div class="sec-title" style="font-size:16px;margin:0" id="admin-client-name">Клиент</div>
+      <button class="modal-close" onclick="qs('adminClientModal').style.display='none'" style="position:static;font-size:20px">✕</button>
+    </div>
+    <div id="admin-client-content" style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;white-space:pre-wrap"></div>
+  </div>
+</div>
+
 <!-- CONSULTATION FORM MODAL -->
 <div class="modal-overlay" id="consultModal">
   <div class="modal" style="max-height:88vh">
@@ -1047,6 +1074,11 @@ html{scroll-behavior:smooth}
   <button class="tab" data-page="more" onclick="navigate('more')">
     <span class="tab-icon">📋</span>
     <span class="tab-label">Ещё</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" id="tab-admin" data-page="admin" onclick="loadAdminClients();navigate('admin')" style="display:none">
+    <span class="tab-icon">⚙️</span>
+    <span class="tab-label">Админ</span>
     <span class="tab-indicator"></span>
   </button>
 </div>
@@ -1530,9 +1562,14 @@ async function api(endpoint, data) {
     try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
 }
-async function apiGet(endpoint) {
+async function apiGet(endpoint, params) {
+  var url = endpoint;
+  if (params) {
+    var qs = Object.keys(params).map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + qs;
+  }
   try {
-    const r = await fetch(endpoint, { method: 'GET' });
+    const r = await fetch(url, { method: 'GET' });
     const txt = await r.text();
     try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
@@ -2486,6 +2523,111 @@ async function exportConsultation() {
     tg.showAlert('❌ Ошибка сети при экспорте');
   }
 }
+
+// ──────────────────── Admin ────────────────────
+
+let adminMode = false;
+
+async function identifyAdmin() {
+  const u = uid();
+  if (!u) return;
+  try {
+    const d = await apiGet('/api/admin/identify', {chat_id: u});
+    if (d.ok && d.is_admin) {
+      qs('admin-gear').style.display = 'inline-block';
+      adminMode = d.mode === 'admin';
+      if (adminMode) {
+        qs('tab-admin').style.display = '';
+        qs('admin-mode-badge').style.display = 'inline-block';
+      }
+    }
+  } catch(e) {}
+}
+
+async function toggleAdminMode() {
+  adminMode = !adminMode;
+  const mode = adminMode ? 'admin' : 'client';
+  const u = uid();
+  if (u) {
+    await api('/api/admin/mode', {chat_id: u, mode: mode});
+  }
+  if (adminMode) {
+    qs('tab-admin').style.display = '';
+    qs('admin-mode-badge').style.display = 'inline-block';
+    loadAdminClients();
+    navigate('admin');
+  } else {
+    qs('tab-admin').style.display = 'none';
+    qs('admin-mode-badge').style.display = 'none';
+    navigate('home');
+  }
+}
+
+async function loadAdminClients() {
+  const u = uid();
+  if (!u) return;
+  const container = qs('admin-client-list');
+  try {
+    const d = await apiGet('/api/admin/clients', {chat_id: u});
+    if (!d.ok || !d.clients || d.clients.length === 0) {
+      container.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Пока нет клиентов</p>';
+      return;
+    }
+    container.innerHTML = d.clients.map(function(c) {
+      return '<div class="card" style="cursor:pointer;margin-bottom:6px;padding:10px 12px" onclick="openAdminClient(\'' + c.chat_id + '\')">' +
+        '<div style="font-size:14px;font-weight:600">' + escHtml(c.name) + '</div>' +
+        '<div style="font-size:12px;color:var(--hint);margin-top:2px">' +
+          (c.phone ? c.phone : '—') + ' · ' +
+          (c.has_results ? '✅ Анализ выполнен' : (c.has_progress ? '📝 Анкета заполняется' : '📋 Анкета готова')) +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    container.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Ошибка загрузки</p>';
+  }
+}
+
+async function openAdminClient(chatId) {
+  const u = uid();
+  if (!u) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  try {
+    const d = await apiGet('/api/admin/client/' + chatId, {chat_id: u});
+    if (!d.ok) { tg.showAlert('Ошибка загрузки'); return; }
+    var html = '';
+    if (d.questionnaire) {
+      var q = d.questionnaire;
+      html += '<b>📋 Анкета</b><br>';
+      if (q.full_name) html += '👤 ' + escHtml(q.full_name) + '<br>';
+      if (q.phone) html += '📞 ' + escHtml(q.phone) + '<br>';
+      if (q.age) html += '🎂 ' + q.age + ' лет<br>';
+      if (q.complaints) html += '💬 Жалобы: ' + escHtml(q.complaints) + '<br>';
+      if (q.pain_location) html += '📍 Локация: ' + escHtml(q.pain_location) + '<br>';
+      if (q.chronic_diseases && q.chronic_diseases.length) html += '🩺 Хроника: ' + escHtml(q.chronic_diseases.join(', ')) + '<br>';
+      html += '<br>';
+    }
+    if (d.formatted) {
+      html += '<b>🧑‍⚕️ Результаты анализа</b><br><br>';
+      html += renderMarkdown(d.formatted);
+    } else {
+      html += '<span style="color:var(--hint)">Анализ ещё не проведён</span>';
+    }
+    qs('admin-client-name').textContent = d.questionnaire && d.questionnaire.full_name ? escHtml(d.questionnaire.full_name) : 'Клиент #' + chatId;
+    qs('admin-client-content').innerHTML = html;
+    qs('adminClientModal').style.display = 'flex';
+  } catch(e) {
+    tg.showAlert('Ошибка сети');
+  }
+}
+
+function escHtml(s) {
+  if (typeof s !== 'string') return String(s || '');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Run admin identify on load
+setTimeout(identifyAdmin, 500);
+
 
 async function goMusicFromResults() {
   const u = uid();

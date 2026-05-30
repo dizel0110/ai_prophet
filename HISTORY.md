@@ -185,3 +185,23 @@
   - `resumeConsultForm(data)` — restores `consultFormAnswers`, `consultStepIndex`, `consultShowingOptional` → opens modal at saved position
   - Cleared on submit via `POST /api/questionnaire/clear_progress`
 - **/api/questionnaire/submit** — also clears progress (`_set_user_data(..., "massage_questionnaire_progress", None)`)
+
+## 2026-05-30: Admin Panel in Mini App (⚙️)
+- **Principle**: Admin detection by Telegram `chat_id` — no separate login form. Gear icon only visible to admins
+- **Config**: `ADMIN_IDS` from `.env` + `data/admin_ids_extras.json` (runtime additions survive restart)
+- **Bot**:
+  - `/give_access @username` (`handlers/vip.py`) — adds username to pending list; when next message arrives, `chat_id` is automatically added to `ADMIN_IDS` and saved to `data/admin_ids_extras.json`
+  - `_check_admin_pending_access()` (`messages.py`) — runs on every user message, matches username against pending list
+  - `_add_admin_id(chat_id)` — persists extra admins across server restarts
+- **API** (`main.py`):
+  - `GET /api/admin/identify?chat_id=X` — returns `{is_admin, mode}` (client/admin persisted)
+  - `POST /api/admin/mode` — toggle admin mode state (server-persisted)
+  - `GET /api/admin/clients?chat_id=X` — all clients with questionnaire data
+  - `GET /api/admin/client/{id}?chat_id=X` — full client details
+- **Mini App** (`index.html`):
+  - ⚙️ Gear icon in hero (only admins see it)
+  - Tap gear → toggle client/admin mode (badge + admin tab appear/disappear)
+  - Admin tab: client list with name/phone/status cards
+  - Tap client → modal with full questionnaire + analysis results
+  - `adminMode` state persisted server-side (survives app close)
+- **UX**: Admin mode is visually quiet — clients never see the gear or admin controls
