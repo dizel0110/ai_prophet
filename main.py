@@ -933,20 +933,42 @@ async def api_session_media(
         return {"ok": False, "error": f"Failed to send: {e}"}
 
 
-@app.get("/api/education/{role}")
-async def api_education(role: str):
-    """Get education markdown content for a role: client / masseur / admin."""
+@app.get("/api/education")
+async def api_education(chat_id: int = 0, role: str = "client"):
+    """Get education markdown content for a role.
+    Returns allowed_roles based on actual user permission.
+    """
     import os
     role_map = {"client": "education_client.md", "masseur": "education_masseur.md", "admin": "education_admin.md"}
+    # Determine allowed roles based on user's actual role
+    allowed = ["client"]
+    if chat_id:
+        from config import OWNER_USERNAME
+        is_admin = _is_chat_id_admin(chat_id)
+        if is_admin:
+            allowed = ["client", "masseur", "admin"]
+        else:
+            from core.masseur_diary import is_masseur
+            if is_masseur(chat_id):
+                allowed = ["client", "masseur"]
+    else:
+        # Fallback: no chat_id — determine by requested role
+        if role == "masseur":
+            allowed = ["client", "masseur"]
+        elif role == "admin":
+            allowed = ["client", "masseur", "admin"]
+    # Restrict requested role to allowed
+    if role not in allowed:
+        role = allowed[0]
     fname = role_map.get(role)
     if not fname:
-        return {"ok": False, "error": "Invalid role. Use: client, masseur, admin"}
+        return {"ok": False, "error": "Invalid role", "allowed_roles": allowed}
     fpath = os.path.join("config", fname)
     if not os.path.exists(fpath):
-        return {"ok": False, "error": "Education file not found"}
+        return {"ok": False, "error": "Education file not found", "allowed_roles": allowed}
     with open(fpath, "r", encoding="utf-8") as f:
         content = f.read()
-    return {"ok": True, "role": role, "content": content}
+    return {"ok": True, "role": role, "content": content, "allowed_roles": allowed}
 
 
 @app.post("/api/admin/test_client")

@@ -1002,7 +1002,7 @@ html{scroll-behavior:smooth}
 <div class="page" id="page-education">
   <div class="sec">
     <div class="sec-title">🎓 <span id="edu-title">Обучение</span></div>
-    <div style="margin:10px 0 16px 0;display:flex;gap:6px">
+    <div style="margin:10px 0 16px 0;display:flex;gap:6px" id="edu-tabs">
       <button class="tab-sm active" data-role="client" onclick="switchEduRole('client')">👤 Клиент</button>
       <button class="tab-sm" data-role="masseur" onclick="switchEduRole('masseur')">🖐 Массажист</button>
       <button class="tab-sm" data-role="admin" onclick="switchEduRole('admin')">⚙️ Админ</button>
@@ -2857,6 +2857,8 @@ async function identifyAdmin() {
         qs('tab-admin').style.display = '';
         qs('admin-mode-badge').style.display = 'inline-block';
         qs('admin-mode-badge').textContent = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
+        qs('admin-panel-title').textContent = currentRole === 'masseur' ? '💆 Панель массажиста' : '📊 Админ-панель';
+        loadAdminClients();
       }
     }
   } catch(e) {}
@@ -2926,13 +2928,32 @@ var _eduCurrentRole = 'client';
 
 async function loadEducationPage() {
   var role = _eduCurrentRole || 'client';
+  const u = uid();
   qs('edu-content').textContent = 'Загрузка...';
   try {
-    var res = await apiGet('/api/education/' + role);
+    var res = await apiGet('/api/education', {chat_id: u || 0, role: role});
     if (res.ok && res.content) {
       qs('edu-content').innerHTML = renderMarkdown(res.content);
     } else {
       qs('edu-content').textContent = 'Не удалось загрузить обучение. Попробуйте позже.';
+    }
+    // Show/hide role tabs based on allowed_roles
+    if (res.allowed_roles) {
+      document.querySelectorAll('#edu-tabs .tab-sm').forEach(function(b) {
+        var allowed = res.allowed_roles.indexOf(b.dataset.role) !== -1;
+        b.style.display = allowed ? '' : 'none';
+      });
+      // Switch to first allowed if current not allowed
+      if (res.allowed_roles.indexOf(_eduCurrentRole) === -1) {
+        _eduCurrentRole = res.allowed_roles[0] || 'client';
+        // Update tab active states
+        document.querySelectorAll('#edu-tabs .tab-sm').forEach(function(b) {
+          b.classList.toggle('active', b.dataset.role === _eduCurrentRole);
+        });
+        // Re-load with corrected role
+        loadEducationPage();
+        return;
+      }
     }
   } catch(e) {
     qs('edu-content').textContent = 'Ошибка сети';
