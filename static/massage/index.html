@@ -2898,6 +2898,17 @@ async function createTestPatient() {
   }
 }
 
+async function createEmptyTestPatient() {
+  tg.HapticFeedback.impactOccurred('medium');
+  var res = await api('/api/admin/test_client/empty', {});
+  if (res && res.ok && res.client) {
+    tg.showAlert('🧪 Пустой тестовый создан: ' + (res.client.first_name || 'Без имени'));
+    loadAdminClients();
+  } else {
+    tg.showAlert('Ошибка создания');
+  }
+}
+
 async function deleteTestPatient(chatId) {
   tg.HapticFeedback.impactOccurred('medium');
   var res = await api('/api/admin/test_client/delete', {chat_id: chatId});
@@ -3002,7 +3013,9 @@ async function loadAdminClients() {
       container.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Пока нет клиентов</p>';
       return;
     }
-    container.innerHTML = '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px;margin-bottom:10px" onclick="createTestPatient()">🧪 Создать тестового пациента</button>' +
+    container.innerHTML = '<div style="display:flex;gap:6px;margin-bottom:10px">' +
+      '<button class="btn btn-secondary" style="flex:1;font-size:11px;padding:8px" onclick="createTestPatient()">🧪 Создать тестового</button>' +
+      '<button class="btn btn-secondary" style="flex:1;font-size:11px;padding:8px" onclick="createEmptyTestPatient()">🧪 Пустой (без анкеты)</button></div>' +
     clientsRes.clients.map(function(c) {
       var visitInfo = '';
       if (c.total_consultations > 0) {

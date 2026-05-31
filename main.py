@@ -957,6 +957,30 @@ async def api_test_client_create(req: dict):
     return {"ok": True, "client": profile}
 
 
+@app.post("/api/admin/test_client/empty")
+async def api_test_client_empty(req: dict):
+    """Create test patient WITHOUT questionnaire (for training/testing)."""
+    from core.client_profiles import _next_test_chat_id, _load_profiles, _save_profiles
+    import time, random
+    cid = _next_test_chat_id()
+    names = ["Пётр Пустой", "Иван Тестов", "Ольга Новая"]
+    profs = _load_profiles()
+    profile = {
+        "chat_id": cid,
+        "first_name": random.choice(names),
+        "phone": f"+7000{random.randint(100000, 999999)}",
+        "first_visit": time.time() - random.randint(0, 7) * 86400,
+        "last_visit": time.time(),
+        "total_consultations": 0,
+        "consultations": [],
+        "latest_questionnaire": {},
+        "is_test": True,
+    }
+    profs[str(cid)] = profile
+    _save_profiles(profs)
+    return {"ok": True, "client": profile}
+
+
 @app.post("/api/admin/test_client/delete")
 async def api_test_client_delete(req: dict, chat_id: int = 0):
     if not chat_id:
