@@ -3261,6 +3261,8 @@ var _sessionState = {
 };
 
 function startSession(chatId, hasQuestionnaire) {
+  var u = uid();
+  if (!u) { tg.showAlert('❌ Не удалось определить пользователя'); return; }
   _sessionState.chatId = chatId;
   _sessionState.hasQuestionnaire = hasQuestionnaire !== false;
   _sessionState.duration = 30;
@@ -3280,7 +3282,7 @@ function startSession(chatId, hasQuestionnaire) {
   qs('btn-session-start').style.display = '';
   qs('btn-session-stop').style.display = 'none';
   qs('sessionModal').style.display = 'flex';
-  tg.HapticFeedback.impactOccurred('medium');
+  try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
 }
 
 function setSessionDuration(min) {
@@ -3314,16 +3316,20 @@ function toggleSessionTimer() {
     if (!_sessionState.startedAt) {
       _sessionState.startedAt = Date.now();
       startMediaRecording();
+      return; // timer starts inside startMediaRecording on success
     } else if (_sessionState.mediaRecorder && _sessionState.mediaRecorder.state === 'paused') {
       _sessionState.mediaRecorder.resume();
     }
-    _sessionState.running = true;
-    _sessionState.timer = setInterval(tickSession, 1000);
-    qs('btn-session-start').textContent = '⏸ Пауза';
-    qs('btn-session-stop').style.display = '';
-    qs('session-rec-status').textContent = '🔴 Запись...';
-    tg.HapticFeedback.impactOccurred('medium');
+    _beginTimer();
   }
+}
+
+function _beginTimer() {
+  _sessionState.running = true;
+  _sessionState.timer = setInterval(tickSession, 1000);
+  qs('btn-session-start').textContent = '⏸ Пауза';
+  qs('btn-session-stop').style.display = '';
+  tg.HapticFeedback.impactOccurred('medium');
 }
 
 function tickSession() {
@@ -3339,13 +3345,13 @@ function tickSession() {
 function startMediaRecording() {
   var preview = qs('session-preview');
   try {
-    var stream = null;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      qs('session-rec-status').textContent = '⚠ Камера не доступна — запись без видео (только таймер)';
+      qs('session-rec-status').textContent = '⚠ Запись не поддерживается этим браузером';
+      qs('btn-session-start').textContent = '▶ Начать';
+      _sessionState.startedAt = null;
       return;
     }
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(function(s) {
-      stream = s;
       preview.srcObject = s;
       preview.style.display = 'block';
       preview.play();
@@ -3363,10 +3369,10 @@ function startMediaRecording() {
       };
       mr.start(1000);
       qs('session-rec-status').textContent = '🔴 Запись видео...';
+      _beginTimer();
     }).catch(function(err) {
       // No camera — try audio only
       navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
-        stream = s;
         var mr = new MediaRecorder(s, { mimeType: 'audio/webm;codecs=opus' });
         _sessionState.mediaRecorder = mr;
         _sessionState.recordedChunks = [];
@@ -3379,12 +3385,17 @@ function startMediaRecording() {
         };
         mr.start(1000);
         qs('session-rec-status').textContent = '🎤 Запись аудио (камера недоступна)';
+        _beginTimer();
       }).catch(function(err2) {
-        qs('session-rec-status').textContent = '⚠ Нет доступа к микрофону — запись без звука (только таймер)';
+        qs('session-rec-status').textContent = '⚠ Нет доступа — запись невозможна';
+        qs('btn-session-start').textContent = '▶ Начать';
+        _sessionState.startedAt = null;
       });
     });
   } catch(e) {
     qs('session-rec-status').textContent = '⚠ Запись не поддерживается браузером';
+    qs('btn-session-start').textContent = '▶ Начать';
+    _sessionState.startedAt = null;
   }
 }
 
