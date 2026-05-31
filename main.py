@@ -1179,7 +1179,43 @@ def _is_chat_id_admin(chat_id: int) -> bool:
                         return True
         except Exception:
             pass
+    # Also check admin_ids_extras.json (set by identify endpoint)
+    try:
+        _extras_path = os.path.join(DATA_DIR, "admin_ids_extras.json")
+        if os.path.exists(_extras_path):
+            with open(_extras_path, "r", encoding="utf-8") as _f:
+                _extras = json.load(_f)
+            if str(chat_id) in _extras:
+                return True
+    except Exception:
+        pass
     return False
+
+
+def _promote_chat_id_to_admin(chat_id: int, username: str):
+    """Save chat_id to admin extras so _is_chat_id_admin can find it."""
+    try:
+        _extras_path = os.path.join(DATA_DIR, "admin_ids_extras.json")
+        _ids = {}
+        if os.path.exists(_extras_path):
+            with open(_extras_path, "r", encoding="utf-8") as _f:
+                _ids = json.load(_f)
+        _ids[str(chat_id)] = {"username": username, "promoted_at": time.time()}
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(_extras_path, "w", encoding="utf-8") as _f:
+            json.dump(_ids, _f, ensure_ascii=False, indent=2)
+        # Also save to username_chat_map for redundancy
+        _map_path = os.path.join(DATA_DIR, "username_chat_map.json")
+        _map = {}
+        if os.path.exists(_map_path):
+            with open(_map_path, "r", encoding="utf-8") as _f:
+                _map = json.load(_f)
+        if username not in _map:
+            _map[username] = chat_id
+            with open(_map_path, "w", encoding="utf-8") as _f:
+                json.dump(_map, _f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 @app.get("/api/admin/identify")
@@ -1189,6 +1225,9 @@ async def api_admin_identify(chat_id: int = 0, username: str = ""):
         return {"ok": False, "error": "Missing chat_id"}
     from config import OWNER_USERNAME
     is_admin = _is_chat_id_admin(chat_id) or (username and username.lower() == OWNER_USERNAME.lower())
+    # If identified as admin via username, persist chat_id so other endpoints work
+    if is_admin and username and username.lower() == OWNER_USERNAME.lower() and not _is_chat_id_admin(chat_id):
+        _promote_chat_id_to_admin(chat_id, username)
     from core.masseur_diary import is_masseur
     is_mas = is_masseur(chat_id)
     persist = _load_admin_mode_persist()
