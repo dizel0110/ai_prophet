@@ -967,7 +967,7 @@ html{scroll-behavior:smooth}
 </div>
 
 <!-- ADMIN PAGE -->
-<div class="page" id="page-admin" style="display:none">
+<div class="page" id="page-admin">
   <div class="sec">
     <div class="sec-title">📊 <span id="admin-panel-title">Админ-панель</span></div>
 
@@ -999,7 +999,7 @@ html{scroll-behavior:smooth}
 </div>
 
 <!-- EDUCATION PAGE -->
-<div class="page" id="page-education" style="display:none">
+<div class="page" id="page-education">
   <div class="sec">
     <div class="sec-title">🎓 <span id="edu-title">Обучение</span></div>
     <div style="margin:10px 0 16px 0;display:flex;gap:6px">
@@ -1092,7 +1092,7 @@ html{scroll-behavior:smooth}
 <div class="modal-overlay" id="sessionModal" style="display:none">
   <div class="modal" style="text-align:center">
     <button class="modal-close" onclick="stopSession()">✕</button>
-    <h3>🎥 Сеанс массажа</h3>
+    <h3 id="sessionModalTitle">🎥 Сеанс массажа</h3>
     <div id="session-client-name" style="font-size:14px;color:var(--hint);margin-bottom:12px"></div>
 
     <div style="font-size:48px;font-weight:700;color:var(--gold);margin:16px 0" id="session-timer">00:00</div>
@@ -2156,7 +2156,18 @@ function stripMarkdown(t) {
     .replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[ДЕЙСТВИЕ:[^\]]*\]/g, '');
 }
 function renderMarkdown(t) {
-  return t
+  var embeds = [];
+  t = t.replace(/\[YOUTUBE:\s*([\w-]+)\]/g, function(m, id) {
+    var i = embeds.length;
+    embeds.push('<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:8px;margin:8px 0"><iframe style="position:absolute;top:0;left:0;width:100%;height:100%" src="https://www.youtube.com/embed/' + id.trim() + '" frameborder="0" allowfullscreen></iframe></div>');
+    return '%%EMBED_' + i + '%%';
+  });
+  t = t.replace(/\[VIDEO:\s*(.+?)\]/g, function(m, url) {
+    var i = embeds.length;
+    embeds.push('<video controls style="max-width:100%;border-radius:8px;margin:8px 0" src="' + url.trim() + '"></video>');
+    return '%%EMBED_' + i + '%%';
+  });
+  var result = t
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<b>$1</b>')
@@ -2169,6 +2180,10 @@ function renderMarkdown(t) {
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
     .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
     .replace(/\n/g, '<br>');
+  for (var i = 0; i < embeds.length; i++) {
+    result = result.replace('%%EMBED_' + i + '%%', embeds[i]);
+  }
+  return result;
 }
 function parseActions(text) {
   const acts = [];
@@ -3001,13 +3016,13 @@ async function loadAdminClients() {
       var cardStyle = 'cursor:pointer;margin-bottom:6px;padding:10px 12px';
       if (isTest) cardStyle += ';opacity:0.6;border-color:var(--hint)';
       var testBadge = isTest ? ' <span style="font-size:11px;color:var(--hint)">🧪 Тест</span>' : '';
+      var qBadge = c.has_questionnaire ? '' : ' <span style="font-size:11px;color:var(--red);font-weight:400">⚠️ Нет анкеты</span>';
       return '<div class="card" style="' + cardStyle + '" onclick="openAdminClient(\'' + c.chat_id + '\')">' +
-        '<div style="font-size:14px;font-weight:600">' + escHtml(c.name) + testBadge + '</div>' +
+        '<div style="font-size:14px;font-weight:600">' + escHtml(c.name) + testBadge + qBadge + '</div>' +
         '<div style="font-size:12px;color:var(--hint);margin-top:2px">' +
           (c.phone ? c.phone : '—') + (visitInfo ? ' · ' + visitInfo : '') +
         '</div>' +
         (isTest ? '<div style="margin-top:4px"><button class="btn btn-danger-sm" onclick="event.stopPropagation();deleteTestPatient(' + c.chat_id + ')">🗑 Удалить тестового</button></div>' : '') +
-      '</div>';
       '</div>';
     }).join('');
   } catch(e) {
@@ -3134,7 +3149,9 @@ async function openAdminClient(chatId) {
     // Add session timer button for masseurs/admins
     if (currentRole === 'masseur' || currentRole === 'admin') {
       var plannedTech = (diaryRes.pre_session && diaryRes.pre_session.recommended_technique) || '';
-      html += '<button class="btn btn-primary" style="width:100%;font-size:12px;padding:8px;margin-bottom:6px" onclick="startSession(\'' + chatId + '\')">🎥 Начать сеанс массажа</button>';
+      var hasQ = d.questionnaire ? true : false;
+      var sessionLabel = hasQ ? '🎥 Начать сеанс массажа' : '🎬 Тренировка / тест системы';
+      html += '<button class="btn btn-' + (hasQ ? 'primary' : 'secondary') + '" style="width:100%;font-size:12px;padding:8px;margin-bottom:6px" onclick="startSession(\'' + chatId + '\',' + hasQ + ')">' + sessionLabel + '</button>';
       html += '<div id="session-status-' + chatId + '" style="display:none;margin-bottom:6px"></div>';
       html += '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px" onclick="showDiaryForm(\'' + chatId + '\',\'' + plannedTech.replace(/'/g, "\\'") + '\')">📓 Добавить запись в дневник</button><br><br>';
     }
@@ -3219,6 +3236,7 @@ function submitDiary() {
 
 var _sessionState = {
   chatId: null,
+  hasQuestionnaire: true,
   duration: 30,
   remaining: 0,
   timer: null,
@@ -3228,8 +3246,9 @@ var _sessionState = {
   recordedChunks: [],
 };
 
-function startSession(chatId) {
+function startSession(chatId, hasQuestionnaire) {
   _sessionState.chatId = chatId;
+  _sessionState.hasQuestionnaire = hasQuestionnaire !== false;
   _sessionState.duration = 30;
   _sessionState.remaining = 30 * 60;
   _sessionState.running = false;
@@ -3240,6 +3259,7 @@ function startSession(chatId) {
   nameEl.textContent = '🆔 ' + chatId;
   qs('session-timer').textContent = '30:00';
   qs('session-rec-status').textContent = '⏸ Выберите длительность и нажмите «Начать»';
+  qs('sessionModalTitle').textContent = _sessionState.hasQuestionnaire ? '🎥 Сеанс массажа' : '🎬 Тренировка / тест';
   document.querySelectorAll('#sessionModal [id^="sd-"]').forEach(function(b) { b.className = 'btn btn-secondary'; });
   qs('sd-30').className = 'btn btn-primary';
   qs('btn-session-start').textContent = '▶ Начать';
@@ -3359,6 +3379,7 @@ async function uploadSessionRecording() {
   formData.append('chat_id', _sessionState.chatId);
   formData.append('masseur_chat_id', uid());
   formData.append('duration_min', elapsed);
+  formData.append('has_questionnaire', _sessionState.hasQuestionnaire ? '1' : '0');
   qs('session-rec-status').textContent = '📤 Отправка...';
   try {
     var res = await apiUpload('/api/massage/session_media', formData);

@@ -876,12 +876,14 @@ async def api_session_media(
     chat_id: int = Form(0),
     masseur_chat_id: int = Form(0),
     duration_min: int = Form(0),
+    has_questionnaire: str = Form("0"),
 ):
     """Receive a session recording and send it to the masseur's Telegram."""
     if not chat_id or not masseur_chat_id:
         return {"ok": False, "error": "Missing chat_id or masseur_chat_id"}
     if not file.filename:
         return {"ok": False, "error": "No file"}
+    is_training = has_questionnaire != "1"
 
     temp_path = os.path.join(tempfile.gettempdir(), f"session_{chat_id}_{int(time.time())}_{file.filename}")
     try:
@@ -894,30 +896,33 @@ async def api_session_media(
     try:
         from config import TOKEN
         b = Bot(token=TOKEN)
-        caption = f"🎥 Запись сеанса массажа\n🆔 Клиент: {chat_id}\n⏱ Длительность: {duration_min} мин"
+        mode_tag = "🎬 ТРЕНИРОВКА" if is_training else "🎥 Сеанс массажа"
+        caption = f"{mode_tag}\n🆔 Клиент: {chat_id}\n⏱ Длительность: {duration_min} мин"
+        if is_training:
+            caption = f"{mode_tag}\n🆔 {chat_id}\n⏱ {duration_min} мин\n⚠ Без анкеты — тестовая запись"
         if duration_min <= 0:
-            caption = f"🎥 Запись сеанса массажа\n🆔 Клиент: {chat_id}"
+            caption = f"{mode_tag}\n🆔 Клиент: {chat_id}"
 
         video = FSInputFile(temp_path)
         await b.send_video(chat_id=masseur_chat_id, video=video, caption=caption)
         await b.session.close()
 
-        # Also save reference in diary
-        from core.masseur_diary import add_diary_entry
-        add_diary_entry(
-            chat_id=chat_id,
-            masseur_chat_id=masseur_chat_id,
-            entry={
-                "technique": "",
-                "intensity": "",
-                "tools": "",
-                "tissue_state": "",
-                "client_feedback": "",
-                "recommendations": "",
-                "notes": f"🎥 Сеанс {duration_min} мин · запись отправлена в Telegram",
-                "planned_technique": "",
-            },
-        )
+        if not is_training:
+            from core.masseur_diary import add_diary_entry
+            add_diary_entry(
+                chat_id=chat_id,
+                masseur_chat_id=masseur_chat_id,
+                entry={
+                    "technique": "",
+                    "intensity": "",
+                    "tools": "",
+                    "tissue_state": "",
+                    "client_feedback": "",
+                    "recommendations": "",
+                    "notes": f"🎥 Сеанс {duration_min} мин · запись отправлена в Telegram",
+                    "planned_technique": "",
+                },
+            )
 
         os.remove(temp_path)
         return {"ok": True, "sent_to": masseur_chat_id}
@@ -1135,8 +1140,22 @@ def _save_admin_mode_persist(data: dict):
 
 
 def _is_chat_id_admin(chat_id: int) -> bool:
-    from config import ADMIN_IDS
-    return chat_id in ADMIN_IDS
+    from config import ADMIN_IDS, OWNER_USERNAME
+    if chat_id in ADMIN_IDS:
+        return True
+    # Also check if chat_id maps to OWNER_USERNAME
+    if OWNER_USERNAME:
+        try:
+            _map_path = os.path.join(DATA_DIR, "username_chat_map.json")
+            if os.path.exists(_map_path):
+                with open(_map_path, "r", encoding="utf-8") as _f:
+                    _m = json.load(_f)
+                for _uname, _cid in _m.items():
+                    if _uname.lower() == OWNER_USERNAME.lower() and _cid == chat_id:
+                        return True
+        except Exception:
+            pass
+    return False
 
 
 @app.get("/api/admin/identify")
@@ -1174,6 +1193,7 @@ async def api_admin_clients(chat_id: int = 0):
     if not chat_id or not _is_chat_id_admin(chat_id):
         return {"ok": False, "error": "Access denied"}
     clients = []
+    seen = set()
     settings_path = os.path.join(DATA_DIR, "user_settings.json")
     if os.path.exists(settings_path):
         try:
@@ -1182,17 +1202,22 @@ async def api_admin_clients(chat_id: int = 0):
             from core.client_profiles import get_profile
             for cid, data in all_data.items():
                 q = data.get("massage_questionnaire")
-                if not q:
+                has_q = bool(q)
+                phone = (q.get("phone") if q else "").strip()
+                name = (q.get("full_name") if q else "").strip()
+                if not name and not has_q:
                     continue
-                phone = (q.get("phone") or "").strip()
-                name = (q.get("full_name") or "").strip()
                 if not name:
-                    continue
+                    name = f"Пользователь {cid}"
                 profile = get_profile(int(cid))
+                is_test = profile.get("is_test", False) if profile else False
+                seen.add(cid)
                 clients.append({
                     "chat_id": cid,
                     "name": name,
                     "phone": phone,
+                    "has_questionnaire": has_q,
+                    "is_test": is_test,
                     "has_photos": bool(data.get("massage_photos")),
                     "has_videos": bool(data.get("massage_videos")),
                     "has_results": bool(data.get("massage_results")),
@@ -1203,7 +1228,27 @@ async def api_admin_clients(chat_id: int = 0):
                 })
         except Exception:
             pass
-    clients.sort(key=lambda c: c["name"].lower())
+    # Also add clients from profiles without settings (minimal data)
+    from core.client_profiles import get_all_profiles
+    for profile in get_all_profiles():
+        pid = str(profile.get("_chat_id", ""))
+        if not pid or pid in seen:
+            is_test = profile.get("is_test", False)
+            clients.append({
+                "chat_id": pid,
+                "name": profile.get("first_name", f"Пользователь {pid}"),
+                "phone": profile.get("phone", ""),
+                "has_questionnaire": False,
+                "is_test": is_test,
+                "has_photos": False,
+                "has_videos": False,
+                "has_results": False,
+                "has_progress": False,
+                "total_consultations": profile.get("total_consultations", 0),
+                "first_visit": profile.get("first_visit", 0),
+                "last_visit": profile.get("last_visit", 0),
+            })
+    clients.sort(key=lambda c: (0 if c["has_questionnaire"] else 1, c["name"].lower()))
     return {"ok": True, "clients": clients}
 
 
