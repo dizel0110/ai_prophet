@@ -718,8 +718,9 @@ async def api_booking_request(req: dict):
 # ──────────────────── Massage Diary & Roles API ────────────────────
 
 @app.post("/api/massage/diary/{chat_id}")
-async def api_diary_add(chat_id: int, req: dict, masseur_chat_id: int = 0):
+async def api_diary_add(chat_id: int, req: dict):
     """Add a diary entry for a client session (masseur writes post-session)."""
+    masseur_chat_id = req.get("masseur_chat_id", 0)
     if not chat_id or not masseur_chat_id:
         return {"ok": False, "error": "Missing chat_id or masseur_chat_id"}
     from core.masseur_diary import add_diary_entry

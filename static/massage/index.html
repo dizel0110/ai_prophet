@@ -1104,6 +1104,7 @@ html{scroll-behavior:smooth}
     </div>
 
     <div style="margin:12px 0;font-size:13px;color:var(--hint)" id="session-rec-status">⏸ Запись не начата</div>
+    <video id="session-preview" autoplay playsinline muted style="width:100%;max-height:160px;border-radius:8px;background:#000;display:none;margin-bottom:8px;object-fit:cover"></video>
 
     <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
       <button class="btn btn-primary" id="btn-session-start" onclick="toggleSessionTimer()" style="flex:1;min-width:0">▶ Начать</button>
@@ -3336,13 +3337,37 @@ function tickSession() {
 }
 
 function startMediaRecording() {
+  var preview = qs('session-preview');
   try {
     var stream = null;
-    // Try to get camera + microphone
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(function(s) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      qs('session-rec-status').textContent = '⚠ Камера не доступна — запись без видео (только таймер)';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(function(s) {
+      stream = s;
+      preview.srcObject = s;
+      preview.style.display = 'block';
+      preview.play();
+      var mr = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp8,opus' });
+      _sessionState.mediaRecorder = mr;
+      _sessionState.recordedChunks = [];
+      mr.ondataavailable = function(e) {
+        if (e.data.size > 0) _sessionState.recordedChunks.push(e.data);
+      };
+      mr.onstop = function() {
+        s.getTracks().forEach(function(t) { t.stop(); });
+        preview.srcObject = null;
+        preview.style.display = 'none';
+        uploadSessionRecording();
+      };
+      mr.start(1000);
+      qs('session-rec-status').textContent = '🔴 Запись видео...';
+    }).catch(function(err) {
+      // No camera — try audio only
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
         stream = s;
-        var mr = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp8,opus' });
+        var mr = new MediaRecorder(s, { mimeType: 'audio/webm;codecs=opus' });
         _sessionState.mediaRecorder = mr;
         _sessionState.recordedChunks = [];
         mr.ondataavailable = function(e) {
@@ -3353,29 +3378,13 @@ function startMediaRecording() {
           uploadSessionRecording();
         };
         mr.start(1000);
-      }).catch(function(err) {
-        // No camera permission - record audio only
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
-          stream = s;
-          var mr = new MediaRecorder(s, { mimeType: 'audio/webm;codecs=opus' });
-          _sessionState.mediaRecorder = mr;
-          _sessionState.recordedChunks = [];
-          mr.ondataavailable = function(e) {
-            if (e.data.size > 0) _sessionState.recordedChunks.push(e.data);
-          };
-          mr.onstop = function() {
-            s.getTracks().forEach(function(t) { t.stop(); });
-            uploadSessionRecording();
-          };
-          mr.start(1000);
-          qs('session-rec-status').textContent = '🎤 Запись аудио...';
-        }).catch(function(err2) {
-          qs('session-rec-status').textContent = '⚠ Нет доступа к микрофону';
-        });
+        qs('session-rec-status').textContent = '🎤 Запись аудио (камера недоступна)';
+      }).catch(function(err2) {
+        qs('session-rec-status').textContent = '⚠ Нет доступа к микрофону — запись без звука (только таймер)';
       });
-    }
+    });
   } catch(e) {
-    qs('session-rec-status').textContent = '⚠ Запись не поддерживается';
+    qs('session-rec-status').textContent = '⚠ Запись не поддерживается браузером';
   }
 }
 
@@ -3413,6 +3422,9 @@ function stopSession() {
     _sessionState.mediaRecorder.stop();
   }
   _sessionState.startedAt = null;
+  var preview = qs('session-preview');
+  preview.srcObject = null;
+  preview.style.display = 'none';
   qs('sessionModal').style.display = 'none';
 }
 
