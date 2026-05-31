@@ -797,6 +797,76 @@ async def api_pre_session(chat_id: int):
     return {"ok": True, "briefing": briefing}
 
 
+def _compute_delta(a: dict, b: dict) -> dict:
+    """Compute what changed between two consultation records."""
+    delta = {}
+    # Pain
+    if a.get("pain_location") != b.get("pain_location"):
+        delta["pain_location"] = {"from": a.get("pain_location", ""), "to": b.get("pain_location", "")}
+    if a.get("pain_type") != b.get("pain_type"):
+        delta["pain_type"] = {"from": a.get("pain_type", ""), "to": b.get("pain_type", "")}
+    # Technique
+    if a.get("recommended_technique") != b.get("recommended_technique"):
+        delta["technique"] = {"from": a.get("recommended_technique", ""), "to": b.get("recommended_technique", "")}
+    # Contraindications
+    a_ci = a.get("has_contraindications", False)
+    b_ci = b.get("has_contraindications", False)
+    if a_ci != b_ci:
+        delta["contraindications"] = {"from": a_ci, "to": b_ci}
+    # Music
+    if a.get("music_genre") != b.get("music_genre"):
+        delta["music"] = {"from": a.get("music_genre", ""), "to": b.get("music_genre", "")}
+    # Days between
+    if a.get("date") and b.get("date"):
+        delta["days_between"] = int((b["date"] - a["date"]) / 86400)
+    # Questionnaire fields (weight, bp, etc.)
+    aq = a.get("questionnaire_snapshot", {})
+    bq = b.get("questionnaire_snapshot", {})
+    for field, label in [("weight", "Вес"), ("ad_puls", "Давление/пульс")]:
+        av = aq.get(field, "")
+        bv = bq.get(field, "")
+        if av and bv and av != bv:
+            delta[field] = {"from": av, "to": bv, "label": label}
+    return delta
+
+
+@app.get("/api/massage/client_path/{chat_id}")
+async def api_client_path(chat_id: int):
+    """Get client journey path with deltas between visits."""
+    from core.client_profiles import get_profile, get_timeline
+    timeline = get_timeline(chat_id)  # newest first
+    if not timeline or len(timeline) < 1:
+        return {"ok": False, "error": "Not enough data"}
+    # Reverse to chronological order
+    timeline = list(reversed(timeline))
+    nodes = []
+    for i, c in enumerate(timeline):
+        node = {
+            "visit": i + 1,
+            "date": c.get("date", 0),
+            "technique": c.get("recommended_technique", ""),
+            "music": c.get("music_genre", ""),
+            "complaints": c.get("complaints", ""),
+            "pain_location": c.get("pain_location", ""),
+            "pain_type": c.get("pain_type", ""),
+            "has_contraindications": c.get("has_contraindications", False),
+            "photo_count": c.get("photo_count", 0),
+            "video_count": c.get("video_count", 0),
+        }
+        if i > 0:
+            node["delta"] = _compute_delta(timeline[i - 1], c)
+        else:
+            node["delta"] = {}
+        nodes.append(node)
+    profile = get_profile(chat_id)
+    return {
+        "ok": True,
+        "client_name": (profile or {}).get("first_name", ""),
+        "visits": len(nodes),
+        "nodes": nodes,
+    }
+
+
 @app.get("/api/education/{role}")
 async def api_education(role: str):
     """Get education markdown content for a role: client / masseur / admin."""

@@ -2988,11 +2988,12 @@ async function openAdminClient(chatId) {
   if (!u) return;
   tg.HapticFeedback.impactOccurred('medium');
   try {
-    var [clientRes, timelineRes, diaryRes] = await Promise.all([
-      apiGet('/api/admin/client/' + chatId, {chat_id: u}),
-      apiGet('/api/admin/client/' + chatId + '/timeline', {chat_id: u}),
-      apiGet('/api/massage/diary_summary/' + chatId),
-    ]);
+  var [clientRes, timelineRes, diaryRes, pathRes] = await Promise.all([
+    apiGet('/api/admin/client/' + chatId, {chat_id: u}),
+    apiGet('/api/admin/client/' + chatId + '/timeline', {chat_id: u}),
+    apiGet('/api/massage/diary_summary/' + chatId),
+    apiGet('/api/massage/client_path/' + chatId),
+  ]);
     var d = clientRes;
     if (!d.ok) { tg.showAlert('Ошибка загрузки'); return; }
     var html = '';
@@ -3012,6 +3013,45 @@ async function openAdminClient(chatId) {
         if (ps.has_contraindications) html += '<div style="margin-top:6px;color:#ff6b6b">⚠️ Есть противопоказания — ознакомьтесь с анкетой</div>';
         html += '</div><br>';
       }
+    }
+
+    // Path: visual client journey
+    if (pathRes.ok && pathRes.nodes && pathRes.nodes.length > 1) {
+      html += '<b>🛤️ Путь клиента</b><br>';
+      html += '<span style="color:var(--hint);font-size:11px">' + pathRes.visits + ' визитов · ' +
+        escHtml(pathRes.client_name || '') + '</span><br><br>';
+      html += '<div style="position:relative;padding-left:20px">';
+      // Vertical line
+      html += '<div style="position:absolute;left:8px;top:8px;bottom:8px;width:2px;background:rgba(212,175,55,0.3);border-radius:1px"></div>';
+      pathRes.nodes.forEach(function(n, idx) {
+        var colorDot = n.has_contraindications ? '#ff6b6b' : 'var(--gold)';
+        html += '<div style="position:relative;margin-bottom:14px;padding-left:16px">';
+        html += '<div style="position:absolute;left:-14px;top:4px;width:10px;height:10px;border-radius:50%;background:' + colorDot + ';border:2px solid var(--bg)"></div>';
+        var dateStr = n.date ? new Date(n.date * 1000).toLocaleDateString('ru-RU', {day:'numeric', month:'short', year:'numeric'}) : '—';
+        html += '<div style="font-size:13px;font-weight:600;color:var(--gold)">#' + n.visit + ' · ' + dateStr + '</div>';
+        if (n.technique) html += '<div style="font-size:12px">🖐 ' + escHtml(n.technique.slice(0, 100)) + '</div>';
+        if (n.complaints) html += '<div style="font-size:11px;color:var(--hint)">💬 ' + escHtml(n.complaints.slice(0, 80)) + '</div>';
+        if (n.music) html += '<div style="font-size:11px;color:var(--hint)">🎵 ' + escHtml(n.music) + '</div>';
+
+        // Delta indicators
+        if (n.delta) {
+          var d = n.delta;
+          var deltas = [];
+          if (d.pain_location) deltas.push('<span style="color:#4ecdc4">📍 Локация: ' + escHtml(d.pain_location.from) + ' → ' + escHtml(d.pain_location.to) + '</span>');
+          if (d.pain_type) deltas.push('<span style="color:#4ecdc4">🩹 Тип боли: ' + escHtml(d.pain_type.from) + ' → ' + escHtml(d.pain_type.to) + '</span>');
+          if (d.technique) deltas.push('<span style="color:#4ecdc4">🖐 Техника: ' + escHtml(d.technique.from) + ' → ' + escHtml(d.technique.to) + '</span>');
+          if (d.contraindications) deltas.push('<span style="color:#ff6b6b">⚠️ Противопоказания: ' + (d.contraindications.from ? 'были' : 'не было') + ' → ' + (d.contraindications.to ? 'появились' : 'сняты') + '</span>');
+          if (d.music) deltas.push('<span style="color:#4ecdc4">🎵 Музыка: ' + escHtml(d.music.from) + ' → ' + escHtml(d.music.to) + '</span>');
+          if (d.days_between) deltas.push('<span style="color:var(--hint)">⏱ Через ' + d.days_between + ' дн.</span>');
+          if (d.weight) deltas.push('<span style="color:' + (parseFloat(d.weight.to) < parseFloat(d.weight.from) ? '#4ecdc4' : '#ff6b6b') + '">⚖️ ' + escHtml(d.weight.label) + ': ' + escHtml(d.weight.from) + ' → ' + escHtml(d.weight.to) + '</span>');
+          if (d.ad_puls) deltas.push('<span style="color:#4ecdc4">❤️ ' + escHtml(d.ad_puls.label) + ': ' + escHtml(d.ad_puls.from) + ' → ' + escHtml(d.ad_puls.to) + '</span>');
+          if (deltas.length) {
+            html += '<div style="margin-top:3px;font-size:11px;line-height:1.6">' + deltas.join('<br>') + '</div>';
+          }
+        }
+        html += '</div>';
+      });
+      html += '</div><br>';
     }
 
     // Timeline
