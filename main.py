@@ -722,7 +722,7 @@ async def api_diary_add(chat_id: int, req: dict, masseur_chat_id: int = 0):
     from core.masseur_diary import add_diary_entry
     entry = {k: req.get(k, "") for k in [
         "technique", "intensity", "tools", "tissue_state",
-        "client_feedback", "recommendations", "notes",
+        "client_feedback", "recommendations", "notes", "planned_technique",
     ]}
     entry["rating"] = req.get("rating", 0)
     ok = add_diary_entry(chat_id, masseur_chat_id, entry)
@@ -745,12 +745,56 @@ async def api_diary_summary(chat_id: int):
     diary = get_diary(chat_id)
     timeline = get_timeline(chat_id)
     profile = get_profile(chat_id)
+    pre_session = {}
+    if profile and profile.get("consultations"):
+        last_c = profile["consultations"][-1]
+        pre_session = {
+            "complaints": last_c.get("complaints", ""),
+            "pain_location": last_c.get("pain_location", ""),
+            "pain_type": last_c.get("pain_type", ""),
+            "recommended_technique": last_c.get("recommended_technique", ""),
+            "has_contraindications": last_c.get("has_contraindications", False),
+            "age": last_c.get("age", 0),
+            "gender": last_c.get("gender", ""),
+            "total_consultations": len(profile.get("consultations", [])),
+        }
     return {
         "ok": True,
         "diary": diary,
         "timeline": timeline,
         "profile": profile,
+        "pre_session": pre_session,
     }
+
+
+@app.get("/api/massage/pre_session/{chat_id}")
+async def api_pre_session(chat_id: int):
+    """Pre-session briefing for masseur: what AI recommends + client history."""
+    from core.client_profiles import get_profile, get_timeline
+    from core.masseur_diary import get_diary
+    profile = get_profile(chat_id)
+    if not profile:
+        return {"ok": False, "error": "No profile"}
+    consults = profile.get("consultations", [])
+    last = consults[-1] if consults else {}
+    diary = get_diary(chat_id)
+    last_diary = diary[0] if diary else None
+    briefing = {
+        "client_name": profile.get("first_name", ""),
+        "phone": profile.get("phone", ""),
+        "age": last.get("age", 0),
+        "gender": last.get("gender", ""),
+        "total_visits": len(consults),
+        "complaints": last.get("complaints", ""),
+        "pain_location": last.get("pain_location", ""),
+        "pain_type": last.get("pain_type", ""),
+        "recommended_technique": last.get("recommended_technique", ""),
+        "music_genre": last.get("music_genre", ""),
+        "contraindications": last.get("has_contraindications", False),
+        "last_date": last.get("date", 0),
+        "last_diary": last_diary,
+    }
+    return {"ok": True, "briefing": briefing}
 
 
 @app.get("/api/admin/masseurs")

@@ -1038,7 +1038,8 @@ html{scroll-behavior:smooth}
     <button class="modal-close" onclick="qs('diaryModal').style.display='none'">✕</button>
     <h3>📓 Дневник сеанса</h3>
     <input type="hidden" id="diaryClientId">
-    <div class="form-group"><label>🖐 Техника</label><input type="text" id="diary-technique" placeholder="Классический, стоун..."></div>
+    <div class="form-group"><label>📋 Планировалось (AI)</label><input type="text" id="diary-planned_technique" placeholder="Заполнится из сводки"></div>
+    <div class="form-group"><label>🖐 Выполнено</label><input type="text" id="diary-technique" placeholder="Классический, стоун..."></div>
     <div class="form-group"><label>💪 Интенсивность</label>
       <select id="diary-intensity">
         <option value="">Выберите</option><option>Лёгкий</option><option>Средний</option><option>Глубокий</option>
@@ -2917,6 +2918,23 @@ async function openAdminClient(chatId) {
     if (!d.ok) { tg.showAlert('Ошибка загрузки'); return; }
     var html = '';
 
+    // Pre-session briefing (for masseurs)
+    if (diaryRes.ok && diaryRes.pre_session) {
+      var ps = diaryRes.pre_session;
+      if (ps.recommended_technique || ps.complaints) {
+        html += '<div class="card" style="padding:10px;margin-bottom:10px;font-size:12px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.2);border-radius:8px">';
+        html += '<div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:6px">📋 Предсеансовая сводка</div>';
+        html += '<div style="color:var(--hint);font-size:11px;margin-bottom:6px">' + ps.total_consultations + '-й визит · ' +
+          (ps.age ? ps.age + ' лет' : '—') + (ps.gender ? ' · ' + ps.gender : '') + '</div>';
+        if (ps.complaints) html += '<div>💬 <b>Жалобы:</b> ' + escHtml(ps.complaints.slice(0, 200)) + '</div>';
+        if (ps.pain_location) html += '<div>📍 <b>Локация:</b> ' + escHtml(ps.pain_location) + '</div>';
+        if (ps.pain_type) html += '<div>🩹 <b>Тип боли:</b> ' + escHtml(ps.pain_type) + '</div>';
+        if (ps.recommended_technique) html += '<div style="margin-top:4px;padding:4px 8px;background:rgba(212,175,55,0.12);border-radius:6px;display:inline-block;font-weight:600">🖐 AI рекомендует: ' + escHtml(ps.recommended_technique.slice(0, 150)) + '</div>';
+        if (ps.has_contraindications) html += '<div style="margin-top:6px;color:#ff6b6b">⚠️ Есть противопоказания — ознакомьтесь с анкетой</div>';
+        html += '</div><br>';
+      }
+    }
+
     // Timeline
     if (timelineRes.ok && timelineRes.timeline && timelineRes.timeline.length) {
       var profileInfo = timelineRes.profile || {};
@@ -2948,7 +2966,8 @@ async function openAdminClient(chatId) {
         var dDate = e.created_at ? new Date(e.created_at * 1000).toLocaleDateString('ru-RU', {day:'numeric', month:'short', year:'numeric'}) : '—';
         html += '<div class="card" style="padding:8px 10px;margin-bottom:6px;font-size:12px;border-left:3px solid var(--gold)">';
         html += '<div style="color:var(--gold);font-weight:600">📓 ' + dDate + '</div>';
-        if (e.technique) html += '<div>🖐 Техника: ' + escHtml(e.technique) + '</div>';
+        if (e.planned_technique) html += '<div style="color:var(--hint);font-size:11px">📋 Планировалось: ' + escHtml(e.planned_technique) + '</div>';
+        if (e.technique) html += '<div>🖐 Выполнено: ' + escHtml(e.technique) + '</div>';
         if (e.intensity) html += '<div>💪 Интенсивность: ' + escHtml(e.intensity) + '</div>';
         if (e.tools) html += '<div>🧴 Средства: ' + escHtml(e.tools) + '</div>';
         if (e.tissue_state) html += '<div>🔬 Ткани: ' + escHtml(e.tissue_state) + '</div>';
@@ -2963,7 +2982,8 @@ async function openAdminClient(chatId) {
 
     // Add diary button for masseurs/admins
     if (currentRole === 'masseur' || currentRole === 'admin') {
-      html += '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px" onclick="showDiaryForm(\'' + chatId + '\')">📓 Добавить запись в дневник</button><br><br>';
+      var plannedTech = (diaryRes.pre_session && diaryRes.pre_session.recommended_technique) || '';
+      html += '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px" onclick="showDiaryForm(\'' + chatId + '\',\'' + plannedTech.replace(/'/g, "\\'") + '\')">📓 Добавить запись в дневник</button><br><br>';
     }
 
     if (d.questionnaire) {
@@ -2995,12 +3015,15 @@ async function openAdminClient(chatId) {
 
 // ─── Diary form ───
 
-function showDiaryForm(chatId) {
+function showDiaryForm(chatId, plannedTechnique) {
   var d = qs('adminClientModal');
   d.style.display = 'none';
   qs('diaryClientId').value = chatId;
+  // Auto-fill planned technique from pre-session briefing
+  var ptInput = document.getElementById('diary-planned_technique');
+  if (ptInput) ptInput.value = plannedTechnique || '';
   // Clear form
-  ['technique','intensity','tools','tissue_state','client_feedback','recommendations','notes'].forEach(function(k) {
+  ['planned_technique','technique','intensity','tools','tissue_state','client_feedback','recommendations','notes'].forEach(function(k) {
     var el = document.getElementById('diary-' + k);
     if (el) el.value = '';
   });
@@ -3013,6 +3036,7 @@ function submitDiary() {
   var u = uid();
   if (!chatId || !u) return;
   var entry = {
+    planned_technique: qs('diary-planned_technique').value.trim(),
     technique: qs('diary-technique').value.trim(),
     intensity: qs('diary-intensity').value,
     tools: qs('diary-tools').value.trim(),
