@@ -1296,21 +1296,40 @@ async def api_admin_clients(chat_id: int = 0):
     for profile in get_all_profiles():
         pid = str(profile.get("_chat_id", ""))
         if not pid or pid in seen:
-            is_test = profile.get("is_test", False)
-            clients.append({
-                "chat_id": pid,
-                "name": profile.get("first_name", f"Пользователь {pid}"),
-                "phone": profile.get("phone", ""),
-                "has_questionnaire": False,
-                "is_test": is_test,
-                "has_photos": False,
-                "has_videos": False,
-                "has_results": False,
-                "has_progress": False,
-                "total_consultations": profile.get("total_consultations", 0),
-                "first_visit": profile.get("first_visit", 0),
-                "last_visit": profile.get("last_visit", 0),
-            })
+            continue
+        seen.add(pid)
+        is_test = profile.get("is_test", False)
+        clients.append({
+            "chat_id": pid,
+            "name": profile.get("first_name", f"Пользователь {pid}"),
+            "phone": profile.get("phone", ""),
+            "has_questionnaire": False,
+            "is_test": is_test,
+            "has_photos": False,
+            "has_videos": False,
+            "has_results": False,
+            "has_progress": False,
+            "total_consultations": profile.get("total_consultations", 0),
+            "first_visit": profile.get("first_visit", 0),
+            "last_visit": profile.get("last_visit", 0),
+        })
+    # Fallback: always include the admin themselves so the UI is never empty
+    admin_chat_id = str(chat_id)
+    if admin_chat_id not in seen:
+        clients.append({
+            "chat_id": admin_chat_id,
+            "name": f"Администратор {admin_chat_id}",
+            "phone": "",
+            "has_questionnaire": False,
+            "is_test": False,
+            "has_photos": False,
+            "has_videos": False,
+            "has_results": False,
+            "has_progress": False,
+            "total_consultations": 0,
+            "first_visit": 0,
+            "last_visit": 0,
+        })
     clients.sort(key=lambda c: (0 if c["has_questionnaire"] else 1, c["name"].lower()))
     return {"ok": True, "clients": clients}
 
