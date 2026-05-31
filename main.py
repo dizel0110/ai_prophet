@@ -10,11 +10,14 @@ import time
 import asyncio
 import logging
 import multiprocessing
+import uuid
+import shutil
+import tempfile
 import uvicorn
 from datetime import datetime
 from pathlib import Path
 from aiogram import Bot, Dispatcher
-import uuid
+from aiogram.types import FSInputFile
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -865,6 +868,63 @@ async def api_client_path(chat_id: int):
         "visits": len(nodes),
         "nodes": nodes,
     }
+
+
+@app.post("/api/massage/session_media")
+async def api_session_media(
+    file: UploadFile = File(...),
+    chat_id: int = Form(0),
+    masseur_chat_id: int = Form(0),
+    duration_min: int = Form(0),
+):
+    """Receive a session recording and send it to the masseur's Telegram."""
+    if not chat_id or not masseur_chat_id:
+        return {"ok": False, "error": "Missing chat_id or masseur_chat_id"}
+    if not file.filename:
+        return {"ok": False, "error": "No file"}
+
+    temp_path = os.path.join(tempfile.gettempdir(), f"session_{chat_id}_{int(time.time())}_{file.filename}")
+    try:
+        content = await file.read()
+        with open(temp_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to save file: {e}"}
+
+    try:
+        from config import TOKEN
+        b = Bot(token=TOKEN)
+        caption = f"🎥 Запись сеанса массажа\n🆔 Клиент: {chat_id}\n⏱ Длительность: {duration_min} мин"
+        if duration_min <= 0:
+            caption = f"🎥 Запись сеанса массажа\n🆔 Клиент: {chat_id}"
+
+        video = FSInputFile(temp_path)
+        await b.send_video(chat_id=masseur_chat_id, video=video, caption=caption)
+        await b.session.close()
+
+        # Also save reference in diary
+        from core.masseur_diary import add_diary_entry
+        add_diary_entry(
+            chat_id=chat_id,
+            masseur_chat_id=masseur_chat_id,
+            entry={
+                "technique": "",
+                "intensity": "",
+                "tools": "",
+                "tissue_state": "",
+                "client_feedback": "",
+                "recommendations": "",
+                "notes": f"🎥 Сеанс {duration_min} мин · запись отправлена в Telegram",
+                "planned_technique": "",
+            },
+        )
+
+        os.remove(temp_path)
+        return {"ok": True, "sent_to": masseur_chat_id}
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return {"ok": False, "error": f"Failed to send: {e}"}
 
 
 @app.get("/api/education/{role}")

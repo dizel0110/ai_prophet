@@ -1088,6 +1088,30 @@ html{scroll-behavior:smooth}
   </div>
 </div>
 
+<!-- SESSION MODAL (timer + recording) -->
+<div class="modal-overlay" id="sessionModal" style="display:none">
+  <div class="modal" style="text-align:center">
+    <button class="modal-close" onclick="stopSession()">✕</button>
+    <h3>🎥 Сеанс массажа</h3>
+    <div id="session-client-name" style="font-size:14px;color:var(--hint);margin-bottom:12px"></div>
+
+    <div style="font-size:48px;font-weight:700;color:var(--gold);margin:16px 0" id="session-timer">00:00</div>
+
+    <div style="display:flex;gap:8px;justify-content:center;margin:12px 0">
+      <button class="btn btn-secondary" onclick="setSessionDuration(30)" id="sd-30" style="flex:1;min-width:0;font-size:13px">30 мин</button>
+      <button class="btn btn-secondary" onclick="setSessionDuration(60)" id="sd-60" style="flex:1;min-width:0;font-size:13px">60 мин</button>
+      <button class="btn btn-secondary" onclick="setSessionDuration(90)" id="sd-90" style="flex:1;min-width:0;font-size:13px">90 мин</button>
+    </div>
+
+    <div style="margin:12px 0;font-size:13px;color:var(--hint)" id="session-rec-status">⏸ Запись не начата</div>
+
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+      <button class="btn btn-primary" id="btn-session-start" onclick="toggleSessionTimer()" style="flex:1;min-width:0">▶ Начать</button>
+      <button class="btn btn-secondary" id="btn-session-stop" onclick="stopSession()" style="flex:1;min-width:0;display:none">⏹ Завершить</button>
+    </div>
+  </div>
+</div>
+
 <!-- BOOKING MODAL -->
 <div class="modal-overlay" id="bookingModal">
   <div class="modal">
@@ -1750,6 +1774,14 @@ async function apiGet(endpoint, params) {
   }
   try {
     const r = await fetch(url, { method: 'GET' });
+    const txt = await r.text();
+    try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
+  } catch(e) { return {ok:false, error:'Network error'}; }
+}
+
+async function apiUpload(endpoint, formData) {
+  try {
+    const r = await fetch(endpoint, { method: 'POST', body: formData });
     const txt = await r.text();
     try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
@@ -3099,9 +3131,11 @@ async function openAdminClient(chatId) {
       html += '<br>';
     }
 
-    // Add diary button for masseurs/admins
+    // Add session timer button for masseurs/admins
     if (currentRole === 'masseur' || currentRole === 'admin') {
       var plannedTech = (diaryRes.pre_session && diaryRes.pre_session.recommended_technique) || '';
+      html += '<button class="btn btn-primary" style="width:100%;font-size:12px;padding:8px;margin-bottom:6px" onclick="startSession(\'' + chatId + '\')">🎥 Начать сеанс массажа</button>';
+      html += '<div id="session-status-' + chatId + '" style="display:none;margin-bottom:6px"></div>';
       html += '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px" onclick="showDiaryForm(\'' + chatId + '\',\'' + plannedTech.replace(/'/g, "\\'") + '\')">📓 Добавить запись в дневник</button><br><br>';
     }
 
@@ -3179,6 +3213,173 @@ function submitDiary() {
   }).catch(function() {
     tg.showAlert('❌ Ошибка сети');
   });
+}
+
+// ─── Session Timer + Recording ───
+
+var _sessionState = {
+  chatId: null,
+  duration: 30,
+  remaining: 0,
+  timer: null,
+  running: false,
+  startedAt: null,
+  mediaRecorder: null,
+  recordedChunks: [],
+};
+
+function startSession(chatId) {
+  _sessionState.chatId = chatId;
+  _sessionState.duration = 30;
+  _sessionState.remaining = 30 * 60;
+  _sessionState.running = false;
+  _sessionState.recordedChunks = [];
+  if (_sessionState.timer) { clearInterval(_sessionState.timer); _sessionState.timer = null; }
+
+  var nameEl = qs('session-client-name');
+  nameEl.textContent = '🆔 ' + chatId;
+  qs('session-timer').textContent = '30:00';
+  qs('session-rec-status').textContent = '⏸ Выберите длительность и нажмите «Начать»';
+  document.querySelectorAll('#sessionModal [id^="sd-"]').forEach(function(b) { b.className = 'btn btn-secondary'; });
+  qs('sd-30').className = 'btn btn-primary';
+  qs('btn-session-start').textContent = '▶ Начать';
+  qs('btn-session-start').style.display = '';
+  qs('btn-session-stop').style.display = 'none';
+  qs('sessionModal').style.display = 'flex';
+  tg.HapticFeedback.impactOccurred('medium');
+}
+
+function setSessionDuration(min) {
+  if (_sessionState.running) return;
+  _sessionState.duration = min;
+  _sessionState.remaining = min * 60;
+  document.querySelectorAll('#sessionModal [id^="sd-"]').forEach(function(b) { b.className = 'btn btn-secondary'; });
+  qs('sd-' + min).className = 'btn btn-primary';
+  qs('session-timer').textContent = fmtTime(_sessionState.remaining);
+}
+
+function fmtTime(sec) {
+  var m = Math.floor(sec / 60);
+  var s = sec % 60;
+  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function toggleSessionTimer() {
+  if (_sessionState.running) {
+    // Pause
+    _sessionState.running = false;
+    clearInterval(_sessionState.timer);
+    qs('btn-session-start').textContent = '▶ Продолжить';
+    if (_sessionState.mediaRecorder && _sessionState.mediaRecorder.state === 'recording') {
+      _sessionState.mediaRecorder.pause();
+    }
+    qs('session-rec-status').textContent = '⏸ Пауза';
+    tg.HapticFeedback.impactOccurred('medium');
+  } else {
+    // Start/Resume
+    if (!_sessionState.startedAt) {
+      _sessionState.startedAt = Date.now();
+      startMediaRecording();
+    } else if (_sessionState.mediaRecorder && _sessionState.mediaRecorder.state === 'paused') {
+      _sessionState.mediaRecorder.resume();
+    }
+    _sessionState.running = true;
+    _sessionState.timer = setInterval(tickSession, 1000);
+    qs('btn-session-start').textContent = '⏸ Пауза';
+    qs('btn-session-stop').style.display = '';
+    qs('session-rec-status').textContent = '🔴 Запись...';
+    tg.HapticFeedback.impactOccurred('medium');
+  }
+}
+
+function tickSession() {
+  _sessionState.remaining--;
+  qs('session-timer').textContent = fmtTime(_sessionState.remaining);
+  if (_sessionState.remaining <= 0) {
+    stopSession();
+    tg.HapticFeedback.impactOccurred('heavy');
+    tg.showAlert('⏱ Сеанс завершён!');
+  }
+}
+
+function startMediaRecording() {
+  try {
+    var stream = null;
+    // Try to get camera + microphone
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(function(s) {
+        stream = s;
+        var mr = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp8,opus' });
+        _sessionState.mediaRecorder = mr;
+        _sessionState.recordedChunks = [];
+        mr.ondataavailable = function(e) {
+          if (e.data.size > 0) _sessionState.recordedChunks.push(e.data);
+        };
+        mr.onstop = function() {
+          s.getTracks().forEach(function(t) { t.stop(); });
+          uploadSessionRecording();
+        };
+        mr.start(1000);
+      }).catch(function(err) {
+        // No camera permission - record audio only
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
+          stream = s;
+          var mr = new MediaRecorder(s, { mimeType: 'audio/webm;codecs=opus' });
+          _sessionState.mediaRecorder = mr;
+          _sessionState.recordedChunks = [];
+          mr.ondataavailable = function(e) {
+            if (e.data.size > 0) _sessionState.recordedChunks.push(e.data);
+          };
+          mr.onstop = function() {
+            s.getTracks().forEach(function(t) { t.stop(); });
+            uploadSessionRecording();
+          };
+          mr.start(1000);
+          qs('session-rec-status').textContent = '🎤 Запись аудио...';
+        }).catch(function(err2) {
+          qs('session-rec-status').textContent = '⚠ Нет доступа к микрофону';
+        });
+      });
+    }
+  } catch(e) {
+    qs('session-rec-status').textContent = '⚠ Запись не поддерживается';
+  }
+}
+
+async function uploadSessionRecording() {
+  if (_sessionState.recordedChunks.length === 0) {
+    return;
+  }
+  var blob = new Blob(_sessionState.recordedChunks, { type: 'video/webm' });
+  if (blob.size < 1024) { return; }
+  var elapsed = Math.round((Date.now() - _sessionState.startedAt) / 60000);
+  if (elapsed < 1) elapsed = 1;
+  var formData = new FormData();
+  formData.append('file', blob, 'session_' + _sessionState.chatId + '.webm');
+  formData.append('chat_id', _sessionState.chatId);
+  formData.append('masseur_chat_id', uid());
+  formData.append('duration_min', elapsed);
+  qs('session-rec-status').textContent = '📤 Отправка...';
+  try {
+    var res = await apiUpload('/api/massage/session_media', formData);
+    if (res && res.ok) {
+      tg.showAlert('✅ Запись отправлена в Telegram');
+    } else {
+      tg.showAlert('❌ Ошибка отправки');
+    }
+  } catch(e) {
+    tg.showAlert('❌ Ошибка сети');
+  }
+}
+
+function stopSession() {
+  if (_sessionState.timer) { clearInterval(_sessionState.timer); _sessionState.timer = null; }
+  _sessionState.running = false;
+  if (_sessionState.mediaRecorder && _sessionState.mediaRecorder.state !== 'inactive') {
+    _sessionState.mediaRecorder.stop();
+  }
+  _sessionState.startedAt = null;
+  qs('sessionModal').style.display = 'none';
 }
 
 function escHtml(s) {
