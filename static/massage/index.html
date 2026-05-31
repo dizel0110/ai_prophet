@@ -1709,24 +1709,32 @@ function renderChatList() {
 })();
 
 // ===== CRUD =====
+let _creatingSp = false;
+
 function showCreateSpecialist() { tg.HapticFeedback.impactOccurred('medium'); const m = qs('createSpecialistModal'); if(m) m.style.display='flex'; }
 function closeCreateModal() { const m = qs('createSpecialistModal'); if(m) m.style.display='none'; }
 
 async function createAndOpen(name, role) {
+  if (_creatingSp) return;
   const u = uid(); if (!u) return;
+  _creatingSp = true;
   tg.HapticFeedback.impactOccurred('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: role || name});
+  _creatingSp = false;
   if (d.ok) { tg.showAlert('✅ Создан: ' + d.name); loadChatList(); openSpecialistChat(d.name); }
   else { tg.showAlert('❌ ' + (d.error || 'Не удалось создать')); }
 }
 
 async function createSpecialist() {
+  if (_creatingSp) return;
   const name = qsv('csName');
   const role = qsv('csRole');
   if (!name && !role) { tg.showAlert('Заполни имя или роль'); return; }
   const u = uid(); if (!u) return;
+  _creatingSp = true;
   tg.HapticFeedback.impactOccurred('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: role || name});
+  _creatingSp = false;
   if (d.ok) {
     closeCreateModal();
     const n = qs('csName'); if(n) n.value='';
@@ -1737,22 +1745,28 @@ async function createSpecialist() {
 }
 
 async function generateFromName() {
+  if (_creatingSp) return;
   const name = qsv('csName');
   if (!name) { tg.showAlert('Сначала напиши имя'); return; }
   const u = uid(); if (!u) return;
+  _creatingSp = true;
   tg.HapticFeedback.impactOccurred('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: ''});
+  _creatingSp = false;
   if (d.ok) { closeCreateModal(); tg.showAlert('✅ ' + d.name + ' — ' + d.role); loadSpecialists(); loadChatList(); openSpecialistChat(d.name); }
   else { tg.showAlert('❌ ' + (d.error || 'Не удалось создать')); }
 }
 
 async function createRandomSpecialist() {
+  if (_creatingSp) return;
   const names = ['Мастер интуитивного массажа','Эксперт по биоэнергетике','Специалист по звукотерапии','Мастер краниосакральной терапии','Эксперт по арома-ЛФК','Специалист по гидромассажу','Мастер висцерального массажа','Консультант по осознанному движению','Эксперт по фасциальному релизу'];
   const roles = ['Интуитивный терапевт, работающий через ощущения тела','Знаток энергетических потоков, снимает блоки без прикосновений','Использует звук и вибрацию для расслабления','Специалист по мягкой работе с черепом и крестцом','Сочетает эфирные масла с лечебной физкультурой','Мастер водных процедур и подводного массажа','Работает с внутренними органами через брюшную стенку','Помогает почувствовать тело через осознанные движения','Снимает хроническое напряжение через работу с фасциями'];
   const i = Math.floor(Math.random()*names.length);
   const u = uid(); if (!u) return;
+  _creatingSp = true;
   tg.HapticFeedback.impactOccurred('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: names[i], role: roles[i]});
+  _creatingSp = false;
   if (d.ok) { closeCreateModal(); tg.showAlert('🎲 ' + d.name); loadSpecialists(); loadChatList(); openSpecialistChat(d.name); }
   else { tg.showAlert('❌ ' + (d.error || 'Не удалось создать')); }
 }
@@ -1843,7 +1857,7 @@ function openChatDirect(name, u) {
   if (u) {
     if (!spMessages[u]) spMessages[u] = {};
     if (!spMessages[u][name]) spMessages[u][name] = [];
-    spMessages[u][name].forEach(m => addMsg(m.role, m.text, name));
+    spMessages[u][name].forEach(m => m.html ? addMsg(m.role, m.html, name, true) : addMsg(m.role, m.text, name));
   }
   const inp = qs('chat-input'); if(inp) inp.focus();
 }
@@ -1954,12 +1968,19 @@ function parseActions(text) {
   while ((m = re.exec(text)) !== null) acts.push({type:m[1], param:m[2]||''});
   return acts;
 }
-function addMsg(role, text, name) {
+function addMsg(role, text, name, isHtml) {
   const c = qs('chat-messages'); if(!c) return;
-  text = stripMarkdown(text);
   const b = document.createElement('div'); b.className='chat-bubble '+role;
   if(role==='ai'){ const n=document.createElement('div'); n.className='chat-name'; n.textContent=name||'Специалист'; b.appendChild(n); }
-  const t=document.createElement('div'); t.textContent=text; b.appendChild(t);
+  const t=document.createElement('div');
+  if (isHtml) {
+    t.innerHTML = text;
+  } else if (role==='ai') {
+    t.innerHTML = renderMarkdown(text);
+  } else {
+    t.textContent = text;
+  }
+  b.appendChild(t);
   c.appendChild(b); c.scrollTop=c.scrollHeight;
   const old = qs('chat-suggestions'); if(old) old.remove();
   if(role==='ai'){
@@ -2001,37 +2022,56 @@ async function sendSpecialistFile(input) {
   tg.HapticFeedback.impactOccurred('medium');
   if(!spMessages[u]) spMessages[u]={};
   if(!spMessages[u][currentSP]) spMessages[u][currentSP]=[];
-  const icon = file.type.startsWith('video/') ? '🎥' : '📷';
-  spMessages[u][currentSP].push({role:'user',text:icon+' ('+file.name+')'});
-  addMsg('user',icon+' '+file.name);
-  showTyping();
-  const fd = new FormData();
-  fd.append('chat_id', u);
-  fd.append('file', file);
-  try {
-    const r = await fetch('/api/specialist/upload', {method:'POST', body:fd});
-    const d = await r.json();
-    if (!d.ok) { hideTyping(); tg.showAlert('❌ '+(d.error||'Ошибка загрузки')); input.value=''; return; }
-    const inp = qs('chat-input');
-    const text = (inp&&inp.value.trim()) ? inp.value.trim() : 'Проанализируй это';
-    if(inp) inp.value='';
-    const resp = await api('/api/specialist/chat', {chat_id:u, name:currentSP, message:text, file_path:d.file_path});
-    hideTyping();
-    if(resp.ok) {
-      spMessages[u][currentSP].push({role:'ai',text:resp.response});
-      addMsg('ai',resp.response,resp.name||currentSP);
-      const acts = parseActions(resp.response);
-      acts.forEach(function(a) {
-        setTimeout(function() {
-          if (a.type==='open_specialist' && a.param) { closeSpecialistChat(); setTimeout(function() { openSpecialistChat(a.param); }, 200); }
-          else if (a.type==='play_music' && a.param) { closeSpecialistChat(); navigate('music'); setTimeout(function() { loadGenreTracks(a.param); }, 300); }
-          else if (a.type==='start_consultation') { closeSpecialistChat(); openConsultForm(); }
-          else if (a.type==='go_booking') { closeSpecialistChat(); navigate('booking'); }
-        }, 600);
-      });
-    } else { addMsg('ai','❌ '+(resp.error||'Не удалось получить ответ')); }
-  } catch(e) { hideTyping(); addMsg('ai','❌ Ошибка сети'); }
-  input.value='';
+  const isVideo = file.type.startsWith('video/');
+  const icon = isVideo ? '🎥' : '📷';
+  // For images: show thumbnail preview with FileReader, then upload+chat
+  function doUploadAndChat() {
+    showTyping();
+    const fd = new FormData();
+    fd.append('chat_id', u);
+    fd.append('file', file);
+    (async function() {
+      try {
+        const r = await fetch('/api/specialist/upload', {method:'POST', body:fd});
+        const d = await r.json();
+        if (!d.ok) { hideTyping(); tg.showAlert('❌ '+(d.error||'Ошибка загрузки')); input.value=''; return; }
+        const inp = qs('chat-input');
+        const text = (inp&&inp.value.trim()) ? inp.value.trim() : 'Проанализируй это';
+        if(inp) inp.value='';
+        const resp = await api('/api/specialist/chat', {chat_id:u, name:currentSP, message:text, file_path:d.file_path});
+        hideTyping();
+        if(resp.ok) {
+          spMessages[u][currentSP].push({role:'ai',text:resp.response});
+          addMsg('ai',resp.response,resp.name||currentSP);
+          const acts = parseActions(resp.response);
+          acts.forEach(function(a) {
+            setTimeout(function() {
+              if (a.type==='open_specialist' && a.param) { closeSpecialistChat(); setTimeout(function() { openSpecialistChat(a.param); }, 200); }
+              else if (a.type==='play_music' && a.param) { closeSpecialistChat(); navigate('music'); setTimeout(function() { loadGenreTracks(a.param); }, 300); }
+              else if (a.type==='start_consultation') { closeSpecialistChat(); openConsultForm(); }
+              else if (a.type==='go_booking') { closeSpecialistChat(); navigate('booking'); }
+            }, 600);
+          });
+        } else { addMsg('ai','❌ '+(resp.error||'Не удалось получить ответ')); }
+      } catch(e) { hideTyping(); addMsg('ai','❌ Ошибка сети'); }
+      input.value='';
+    })();
+  }
+
+  if (!isVideo && file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const imgHtml = icon+' <img src="'+e.target.result+'" style="max-width:180px;max-height:120px;border-radius:8px;object-fit:cover;vertical-align:middle">';
+      spMessages[u][currentSP].push({role:'user',text:'📷 ['+file.name+']',html:imgHtml});
+      addMsg('user',imgHtml,false,true);
+      doUploadAndChat();
+    };
+    reader.readAsDataURL(file);
+  } else {
+    spMessages[u][currentSP].push({role:'user',text:icon+' ('+file.name+')'});
+    addMsg('user',icon+' '+file.name);
+    doUploadAndChat();
+  }
 }
 
 async function sendSpecialistMessage() {

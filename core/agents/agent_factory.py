@@ -1,9 +1,10 @@
 import json
 import os
+import re
 import time
 import logging
 from dataclasses import dataclass, asdict
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from google import genai
 from google.genai import types as genai_types
 import requests
@@ -14,6 +15,7 @@ from core.agents.agent_base import AgentResult, AgentBase
 logger = logging.getLogger(__name__)
 
 SPECIALISTS_FILE = os.path.join("temp", "specialists.json")
+MAX_SPECIALISTS_PER_USER = 20
 
 
 @dataclass
@@ -129,6 +131,27 @@ BUILT_IN_AGENTS = [
 ]
 
 
+def _roles_similar(a: str, b: str) -> bool:
+    """Проверяет, описывают ли две роли примерно одно и то же."""
+    if not a or not b:
+        return False
+    def normalize(s: str) -> set:
+        s = s.lower().strip()
+        s = re.sub(r'[^\w\s]', '', s)
+        # стоп-слова общего назначения
+        stop = {'и', 'в', 'на', 'с', 'по', 'для', 'от', 'за', 'о', 'об', 'при', 'к', 'до', 'из', 'у', 'а', 'но', 'или', 'это', 'не', 'ни', 'то', 'что', 'как', 'так', 'же', 'бы', 'ли'}
+        words = [w for w in s.split() if w not in stop and len(w) > 2]
+        return set(words)
+    set_a = normalize(a)
+    set_b = normalize(b)
+    if not set_a or not set_b:
+        return False
+    intersection = set_a & set_b
+    # Если пересечение >= 60% от меньшего набора — считаем похожими
+    min_len = min(len(set_a), len(set_b))
+    return len(intersection) / min_len >= 0.6 if min_len > 0 else False
+
+
 class SpecialistFactory:
     _gemini_client = None
     _hf_token = None
@@ -187,6 +210,21 @@ class SpecialistFactory:
             )
             _save_specialist(specialist)
             return specialist
+
+        # Лимит на количество специалистов
+        existing = get_specialists(chat_id)
+        if len(existing) >= MAX_SPECIALISTS_PER_USER:
+            raise ValueError(f"Достигнут лимит специалистов ({MAX_SPECIALISTS_PER_USER}). Удали лишнего через /dismiss.")
+
+        # Проверка на похожего специалиста (role_description)
+        built_in_names = {b["name"].lower() for b in BUILT_IN_AGENTS}
+        user_agents = [s for s in existing if s.name.lower() not in built_in_names]
+        if role_description and any(_roles_similar(role_description, s.role_description) for s in user_agents):
+            match = next(s for s in user_agents if _roles_similar(role_description, s.role_description))
+            if name and match.name.lower() != name.lower():
+                pass  # имя другое — всё равно создаём
+            else:
+                return match  # возвращаем существующего
 
         system = "Ты — создатель экспертов. Отвечай только в формате JSON. На языке пользователя (по умолчанию русский). Без иероглифов."
         prompt_parts = ["Создай персонального консультанта."]
@@ -325,23 +363,41 @@ class SpecialistFactory:
         new_parts = [p.strip() for p in new_facts.split(";") if p.strip() not in old_parts]
         if not new_parts:
             return old_memory
-        return old_memory + "; " + "; ".join(new_parts)
+        result = old_memory + "; " + "; ".join(new_parts)
+        # Не даём памяти распухать >500 символов
+        return result[:500] if len(result) > 500 else result
 
     @classmethod
     def chat(cls, chat_id: int, specialist: DynamicSpecialist, user_message: str, user_context: str = "", file_path: str = "") -> AgentResult:
         cls._ensure_clients()
+        history = _load_conversation(chat_id, specialist.name)
 
-        # Если прикреплён файл — сначала vision-анализ
+        # Build context with memory
+        memory_block = ""
+        if specialist.client_memory:
+            memory_block = f"\n[Память о клиенте: {specialist.client_memory}]\n\n"
+        if user_context:
+            memory_block += f"\n[Данные клиента из анкеты:\n{user_context}]\n\n"
+
+        # Build conversation context for AI
+        conv_context = ""
+        for h in history[-10:]:
+            conv_context += f"{h['role']}: {h['content']}\n"
+
+        # Если прикреплён файл — vision-анализ с контекстом беседы
         if file_path and os.path.exists(file_path) and os.path.isfile(file_path):
             try:
-                text_for_vision = user_message if user_message else "Проанализируй это изображение"
+                context_prompt = specialist.system_prompt + memory_block
+                if conv_context:
+                    context_prompt += f"\n[История диалога:\n{conv_context}]\n\n"
+                context_prompt += f"user: {user_message if user_message else 'Проанализируй это изображение'}"
                 vision_agent = AgentBase(
                     agent_id=f"sp_{chat_id}",
                     name=specialist.name,
                     role_prompt=specialist.system_prompt,
                     model_type="vision"
                 )
-                result = vision_agent.process_vision(text_for_vision, file_path)
+                result = vision_agent.process_vision(context_prompt, file_path)
                 if result.is_success():
                     specialist.message_count += 1
                     specialist.client_memory = cls._merge_memory(specialist.client_memory, cls._extract_memory(user_message))
@@ -356,27 +412,18 @@ class SpecialistFactory:
             except Exception as e:
                 logger.warning(f"Specialist vision error: {e}")
 
-        history = _load_conversation(chat_id, specialist.name)
-
-        # Build context with memory
-        memory_block = ""
-        if specialist.client_memory:
-            memory_block = f"\n[Память о клиенте: {specialist.client_memory}]\n\n"
-        if user_context:
-            memory_block += f"\n[Данные клиента из анкеты:\n{user_context}]\n\n"
-
         # Gemini first — лучше следует system prompt
         if cls._gemini_client:
             for model in FALLBACK_MODELS[:2]:
                 try:
                     ctx = specialist.system_prompt + memory_block
-                    for h in history[-4:]:
+                    for h in history[-10:]:
                         ctx += f"{h['role']}: {h['content']}\n"
                     ctx += f"user: {user_message}\n\n{specialist.name}:"
                     resp = cls._gemini_client.models.generate_content(
                         model=model,
                         contents=ctx,
-                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=1024),
+                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048),
                     )
                     if resp and resp.text:
                         specialist.message_count += 1
@@ -402,7 +449,7 @@ class SpecialistFactory:
                     json={
                         "model": HF_TASKS.get("text", "Qwen/Qwen2.5-7B-Instruct"),
                         "messages": msgs,
-                        "max_tokens": 1024,
+                        "max_tokens": 2048,
                     },
                     timeout=60,
                 )

@@ -541,7 +541,7 @@ async def _create_and_show_specialist(message: types.Message, chat_id: int, role
 async def _handle_create_specialist_auto(chat_id: int, role_description: str, message: types.Message):
     """Вызывается из function calling loop при запросе create_specialist."""
     await message.answer(f"🧑‍⚕️ Создаю специалиста: _{role_description}_…")
-    specialist = SpecialistFactory.create(chat_id=chat_id, role_description=role_description)
+    specialist = await asyncio.to_thread(SpecialistFactory.create, chat_id=chat_id, role_description=role_description)
     if not specialist:
         await message.answer("❌ Не удалось создать специалиста. Попробуй позже.")
         return None

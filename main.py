@@ -209,7 +209,10 @@ async def api_specialist_create(req: dict):
         return {"ok": False, "error": "Missing chat_id"}
     if not role and not name:
         return {"ok": False, "error": "Provide role or name"}
-    sp = await asyncio.to_thread(SpecialistFactory.create, chat_id=chat_id, role_description=role, name=name or None)
+    try:
+        sp = await asyncio.to_thread(SpecialistFactory.create, chat_id=chat_id, role_description=role, name=name or None)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     if sp:
         result = {"ok": True, "name": sp.name, "role": sp.role_description, "skills": sp.skills}
         if hasattr(sp, "communication_schema") and sp.communication_schema:

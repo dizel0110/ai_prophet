@@ -62,7 +62,7 @@ class AgentBase:
                 json={
                     "model": HF_TASKS.get("text", "Qwen/Qwen2.5-7B-Instruct"),
                     "messages": [{"role": "user", "content": f"{HF_SYSTEM_PROMPT}\n\nЗапрос для {self.name}.\n\n{prompt}"}],
-                    "max_tokens": 1024,
+                    "max_tokens": 2048,
                 },
                 timeout=60,
             )
@@ -88,7 +88,7 @@ class AgentBase:
                         {"type": "text", "text": f"{self._system_prompt()}\n\n{text}"},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}},
                     ]}],
-                    "max_tokens": 1024,
+                    "max_tokens": 2048,
                 },
                 timeout=60,
             )
@@ -109,7 +109,7 @@ class AgentBase:
                 resp = self.gemini_client.models.generate_content(
                     model=model,
                     contents=prompt,
-                    config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=1024),
+                    config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048),
                 )
                 if resp and resp.text:
                     return resp.text.strip()
@@ -130,7 +130,7 @@ class AgentBase:
                         model=model,
                         contents=[f"{self._system_prompt()}\n\n{text}",
                                   genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)],
-                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=1024),
+                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048),
                     )
                     if resp and resp.text:
                         return resp.text.strip()

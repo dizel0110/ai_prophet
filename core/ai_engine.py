@@ -151,7 +151,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
                     {"type": "text", "text": text or "Опиши это фото."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}}
                 ]}],
-                "max_tokens": 500
+                "max_tokens": 2048
             }
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
 
@@ -169,7 +169,7 @@ def get_hf_response(text=None, image_path=None, task="text"):
             payload = {
                 "model": model_id,
                 "messages": [{"role": "user", "content": f"{HF_SYSTEM_PROMPT}\n\n{text}"}],
-                "max_tokens": 500
+                "max_tokens": 2048
             }
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
 
