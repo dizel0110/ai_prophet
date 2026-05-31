@@ -306,7 +306,7 @@ html{scroll-behavior:smooth}
 <div class="hero">
   <div style="position:absolute;top:8px;right:12px;display:flex;gap:6px;align-items:center">
     <span id="admin-mode-badge" style="display:none;font-size:11px;background:var(--gold);color:#1a0f0a;padding:2px 8px;border-radius:4px;font-weight:600">⚙️ АДМИН</span>
-    <button id="admin-gear" onclick="toggleAdminMode()" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--gold);padding:2px" title="Админ-панель">⚙️</button>
+    <button id="admin-gear" onclick="cycleRole()" style="display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--gold);padding:2px" title="Переключить роль">⚙️</button>
   </div>
   <h1>Мастерская Массажа</h1>
   <div class="divider"></div>
@@ -965,8 +965,29 @@ html{scroll-behavior:smooth}
 <!-- ADMIN PAGE -->
 <div class="page" id="page-admin" style="display:none">
   <div class="sec">
-    <div class="sec-title">📊 Админ-панель</div>
-    <div class="sec-sub">Клиенты, прошедшие консультацию</div>
+    <div class="sec-title">📊 <span id="admin-panel-title">Админ-панель</span></div>
+
+    <!-- Stats -->
+    <div id="admin-stats" style="margin-bottom:12px;display:none">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+        <div class="card" style="flex:1;min-width:70px;text-align:center;padding:10px 6px">
+          <div style="font-size:22px;font-weight:700;color:var(--gold)" id="stat-clients">0</div>
+          <div style="font-size:11px;color:var(--hint)">Клиентов</div>
+        </div>
+        <div class="card" style="flex:1;min-width:70px;text-align:center;padding:10px 6px">
+          <div style="font-size:22px;font-weight:700;color:var(--gold)" id="stat-consults">0</div>
+          <div style="font-size:11px;color:var(--hint)">Консультаций</div>
+        </div>
+        <div class="card" style="flex:1;min-width:70px;text-align:center;padding:10px 6px">
+          <div style="font-size:22px;font-weight:700;color:var(--gold)" id="stat-today">0</div>
+          <div style="font-size:11px;color:var(--hint)">Сегодня</div>
+        </div>
+      </div>
+      <div id="stats-techniques" style="margin:6px 0"></div>
+      <div id="stats-demographics" style="display:flex;gap:12px;margin:6px 0;font-size:12px"></div>
+    </div>
+
+    <div class="sec-sub">👥 Клиенты</div>
     <div id="admin-client-list" style="margin-top:8px">
       <p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Загрузка...</p>
     </div>
@@ -981,6 +1002,60 @@ html{scroll-behavior:smooth}
       <button class="modal-close" onclick="qs('adminClientModal').style.display='none'" style="position:static;font-size:20px">✕</button>
     </div>
     <div id="admin-client-content" style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;white-space:pre-wrap"></div>
+  </div>
+</div>
+
+<!-- QUICK BOOKING MODAL (minimal 4-field questionnaire) -->
+<div class="modal-overlay" id="quickBookingModal" style="display:none">
+  <div class="modal">
+    <button class="modal-close" onclick="qs('quickBookingModal').style.display='none'">✕</button>
+    <h3>📝 Быстрая запись</h3>
+    <p style="font-size:13px;color:var(--hint);margin-bottom:12px">
+      4 вопроса для безопасности — и вы записаны!
+    </p>
+    <div class="form-group"><label>👤 Ваше имя *</label><input type="text" id="qbName" placeholder="Анна"></div>
+    <div class="form-group"><label>📞 Телефон *</label><input type="tel" id="qbPhone" placeholder="+7 (999) 123-45-67"></div>
+    <div class="form-group"><label>💬 Жалобы</label><textarea id="qbComplaints" rows="2" placeholder="Что беспокоит? Спина, шея, ноги..."></textarea></div>
+    <div class="form-group"><label>⚠️ Противопоказания</label>
+      <div style="font-size:12px;color:var(--hint);margin-bottom:4px">Отметьте, если есть:</div>
+      <label class="checkbox-label"><input type="checkbox" id="qbContr1"> Онкология</label>
+      <label class="checkbox-label"><input type="checkbox" id="qbContr2"> Тромбоз</label>
+      <label class="checkbox-label"><input type="checkbox" id="qbContr3"> Воспаление/температура</label>
+      <label class="checkbox-label"><input type="checkbox" id="qbContr4"> Беременность</label>
+      <label class="checkbox-label"><input type="checkbox" id="qbContr5"> Свежие травмы/операции</label>
+    </div>
+    <label class="checkbox-label" style="margin:8px 0">
+      <input type="checkbox" id="qbConsent"> Я согласен на обработку данных и подтверждаю, что ознакомлен с противопоказаниями
+    </label>
+    <button class="btn btn-primary" onclick="submitQuickBooking()">📩 Записаться</button>
+    <button class="btn btn-secondary" onclick="qs('quickBookingModal').style.display='none'">Отмена</button>
+  </div>
+</div>
+
+<!-- DIARY MODAL -->
+<div class="modal-overlay" id="diaryModal" style="display:none">
+  <div class="modal" style="max-height:90dvh;overflow-y:auto">
+    <button class="modal-close" onclick="qs('diaryModal').style.display='none'">✕</button>
+    <h3>📓 Дневник сеанса</h3>
+    <input type="hidden" id="diaryClientId">
+    <div class="form-group"><label>🖐 Техника</label><input type="text" id="diary-technique" placeholder="Классический, стоун..."></div>
+    <div class="form-group"><label>💪 Интенсивность</label>
+      <select id="diary-intensity">
+        <option value="">Выберите</option><option>Лёгкий</option><option>Средний</option><option>Глубокий</option>
+      </select>
+    </div>
+    <div class="form-group"><label>🧴 Средства</label><input type="text" id="diary-tools" placeholder="Масло, аромат, банки..."></div>
+    <div class="form-group"><label>🔬 Состояние тканей</label><input type="text" id="diary-tissue_state" placeholder="Напряжение, триггеры, отёки..."></div>
+    <div class="form-group"><label>💬 Отзыв клиента</label><input type="text" id="diary-client_feedback" placeholder="Больно/приятно/легко..."></div>
+    <div class="form-group"><label>📌 Рекомендации</label><input type="text" id="diary-recommendations" placeholder="На следующий сеанс..."></div>
+    <div class="form-group"><label>⭐ Оценка сеанса</label>
+      <select id="diaryRating">
+        <option value="0">—</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+      </select>
+    </div>
+    <div class="form-group"><label>📝 Заметки</label><textarea id="diary-notes" rows="2" placeholder="Любые доп. наблюдения..."></textarea></div>
+    <button class="btn btn-primary" onclick="submitDiary()">💾 Сохранить</button>
+    <button class="btn btn-secondary" onclick="qs('diaryModal').style.display='none'">Отмена</button>
   </div>
 </div>
 
@@ -1127,10 +1202,6 @@ function musicPlaylist(query) {
   try { tg.openTelegramLink(url); } catch(e) { window.open(url, '_blank'); }
 }
 
-function showBookingForm() {
-  tg.HapticFeedback.impactOccurred('medium');
-  document.getElementById('bookingModal').classList.add('show');
-}
 function hideBookingForm() {
   document.getElementById('bookingModal').classList.remove('show');
 }
@@ -1152,10 +1223,94 @@ function submitBooking() {
   const date = document.getElementById('bDate').value.trim();
   const note = document.getElementById('bNote').value.trim();
   const msg = '📝 Новая заявка:%0A👤 ' + encodeURIComponent(name) + '%0A📞 ' + encodeURIComponent(phone) + '%0A💆 ' + encodeURIComponent(service || 'Не выбрано') + '%0A📅 ' + encodeURIComponent(date || 'Не указано') + '%0A📝 ' + encodeURIComponent(note || '—');
+
+  // Save to server if possible
+  var u = uid();
+  if (u) {
+    api('/api/massage/booking_request', {chat_id: u, name: name, phone: phone, service: service, date: date, note: note});
+  }
+
   tg.HapticFeedback.notificationOccurred('success');
   hideBookingForm();
   tg.openLink('https://wa.me/79991234567?text=' + msg);
   tg.showAlert('✅ Заявка отправлена! Мы свяжемся с вами в ближайшее время.');
+}
+
+async function checkBookingEligibility() {
+  var u = uid();
+  if (!u) return true;
+  try {
+    var d = await apiGet('/api/massage/booking_check/' + u);
+    if (!d.ok) return true;
+    if (d.can_book) return true;
+    tg.HapticFeedback.notificationOccurred('warning');
+    return false;
+  } catch(e) {
+    return true;
+  }
+}
+
+function showBookingForm() {
+  var u = uid();
+  if (!u) { qs('bookingModal').classList.add('show'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  apiGet('/api/massage/booking_check/' + u).then(function(d) {
+    if (!d.ok || d.can_book) {
+      qs('bookingModal').classList.add('show');
+    } else if (d.reason === 'no_questionnaire') {
+      tg.showAlert('📋 Для записи нужно заполнить мед. анкету.\nЭто 4 вопроса для вашей безопасности.');
+      qs('quickBookingModal').style.display = 'flex';
+    } else if (d.reason === 'questionnaire_outdated') {
+      tg.showAlert('🕐 С последнего визита прошло ' + d.days_since + ' дней.\nПройдите быстрый чек-ап для безопасности.');
+      setTimeout(function() {
+        navigate('massage');
+        qs('ai-tab').click();
+      }, 1000);
+    }
+  });
+}
+
+function submitQuickBooking() {
+  var name = qs('qbName').value.trim();
+  var phone = qs('qbPhone').value.trim();
+  var complaints = qs('qbComplaints').value.trim();
+  var consent = qs('qbConsent').checked;
+  if (!name || !phone) { tg.showAlert('Заполните имя и телефон'); return; }
+  if (!consent) { tg.showAlert('Подтвердите согласие на обработку данных'); return; }
+  var contraindications = [];
+  ['qbContr1','qbContr2','qbContr3','qbContr4','qbContr5'].forEach(function(id) {
+    if (document.getElementById(id).checked) {
+      var labels = ['онкология','тромбоз','воспаление','беременность','травмы/операции'];
+      var idx = parseInt(id.slice(-1)) - 1;
+      contraindications.push(labels[idx]);
+    }
+  });
+  var u = uid();
+  if (!u) { tg.showAlert('Открой Mini App в Telegram'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  api('/api/questionnaire/minimal', {
+    chat_id: u,
+    data: {
+      full_name: name,
+      phone: phone,
+      complaints: complaints,
+      contraindications_absolute: contraindications,
+      informed_consent: true,
+    }
+  }).then(function(r) {
+    if (r && r.ok) {
+      qs('quickBookingModal').style.display = 'none';
+      qs('bookingModal').classList.add('show');
+      // Pre-fill booking form
+      qs('bName').value = name;
+      qs('bPhone').value = phone;
+      tg.showAlert('✅ Анкета заполнена! Теперь запишитесь на сеанс.');
+    } else {
+      tg.showAlert('❌ Ошибка: ' + ((r && r.error) || 'повторите попытку'));
+    }
+  }).catch(function() {
+    tg.showAlert('❌ Ошибка сети');
+  });
 }
 
 function startConsultation() {
@@ -2612,9 +2767,10 @@ async function exportConsultation() {
   }
 }
 
-// ──────────────────── Admin ────────────────────
+// ──────────────────── Admin & Roles ────────────────────
 
 let adminMode = false;
+let currentRole = 'client'; // 'client' | 'admin' | 'masseur'
 
 async function identifyAdmin() {
   const u = uid();
@@ -2622,27 +2778,34 @@ async function identifyAdmin() {
   var uname = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username) || '';
   try {
     const d = await apiGet('/api/admin/identify', {chat_id: u, username: uname});
-    if (d.ok && d.is_admin) {
+    if (d.ok && (d.is_admin || d.is_masseur)) {
       qs('admin-gear').style.display = 'inline-block';
-      adminMode = d.mode === 'admin';
+      currentRole = d.mode === 'admin' || d.mode === 'masseur' ? d.mode : 'client';
+      adminMode = currentRole !== 'client';
       if (adminMode) {
         qs('tab-admin').style.display = '';
         qs('admin-mode-badge').style.display = 'inline-block';
+        qs('admin-mode-badge').textContent = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
       }
     }
   } catch(e) {}
 }
 
-async function toggleAdminMode() {
-  adminMode = !adminMode;
-  const mode = adminMode ? 'admin' : 'client';
+async function cycleRole() {
+  var roles = ['client', 'admin', 'masseur'];
+  var idx = roles.indexOf(currentRole);
+  currentRole = roles[(idx + 1) % roles.length];
+  adminMode = currentRole !== 'client';
   const u = uid();
   if (u) {
-    await api('/api/admin/mode', {chat_id: u, mode: mode});
+    await api('/api/admin/mode', {chat_id: u, mode: currentRole});
   }
   if (adminMode) {
     qs('tab-admin').style.display = '';
     qs('admin-mode-badge').style.display = 'inline-block';
+    var badgeText = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
+    qs('admin-mode-badge').textContent = badgeText;
+    qs('admin-panel-title').textContent = currentRole === 'masseur' ? '💆 Панель массажиста' : '📊 Админ-панель';
     loadAdminClients();
     navigate('admin');
   } else {
@@ -2652,22 +2815,86 @@ async function toggleAdminMode() {
   }
 }
 
+// Rename the onclick in the gear button to cycleRole
+// (the gear button will use cycleRole instead of toggleAdminMode)
+
 async function loadAdminClients() {
   const u = uid();
   if (!u) return;
   const container = qs('admin-client-list');
   try {
-    const d = await apiGet('/api/admin/clients', {chat_id: u});
-    if (!d.ok || !d.clients || d.clients.length === 0) {
+    var [clientsRes, statsRes] = await Promise.all([
+      apiGet('/api/admin/clients', {chat_id: u}),
+      apiGet('/api/admin/stats', {chat_id: u}),
+    ]);
+
+    // Stats
+    var statsEl = qs('admin-stats');
+    if (statsRes.ok && statsRes.stats) {
+      var s = statsRes.stats;
+      statsEl.style.display = 'block';
+      qs('stat-clients').textContent = s.total_clients || 0;
+      qs('stat-consults').textContent = s.total_consultations || 0;
+      qs('stat-today').textContent = s.today_consultations || 0;
+
+      // Top techniques
+      var techEl = qs('stats-techniques');
+      if (s.top_techniques && s.top_techniques.length) {
+        var maxCount = s.top_techniques[0].count;
+        techEl.innerHTML = '<div style="font-size:12px;color:var(--hint);margin-bottom:4px">🏆 Популярные техники:</div>' +
+          s.top_techniques.map(function(t) {
+            var pct = maxCount > 0 ? (t.count / maxCount * 100) : 0;
+            return '<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0">' +
+              '<span style="min-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(t.name) + '</span>' +
+              '<div style="flex:1;height:14px;background:var(--card);border-radius:3px;overflow:hidden">' +
+              '<div style="height:100%;width:' + pct + '%;background:var(--gold);border-radius:3px"></div></div>' +
+              '<span style="min-width:20px;text-align:right">' + t.count + '</span></div>';
+          }).join('');
+      } else {
+        techEl.innerHTML = '';
+      }
+
+      // Demographics
+      var demoEl = qs('stats-demographics');
+      var parts = [];
+      if (s.gender) {
+        var totalG = (s.gender.female || 0) + (s.gender.male || 0) + (s.gender.unknown || 0);
+        if (totalG > 0) {
+          var fPct = Math.round((s.gender.female || 0) / totalG * 100);
+          var mPct = Math.round((s.gender.male || 0) / totalG * 100);
+          parts.push('<span>👩 ' + (s.gender.female || 0) + ' (' + fPct + '%)</span>');
+          parts.push('<span>👨 ' + (s.gender.male || 0) + ' (' + mPct + '%)</span>');
+        }
+      }
+      if (s.age_groups) {
+        parts.push('<span style="color:var(--hint)">|</span>');
+        parts.push('<span>18-30: ' + (s.age_groups['18-30'] || 0) + '</span>');
+        parts.push('<span>31-45: ' + (s.age_groups['31-45'] || 0) + '</span>');
+        parts.push('<span>46+: ' + (s.age_groups['46+'] || 0) + '</span>');
+      }
+      demoEl.innerHTML = parts.join(' ');
+    } else {
+      statsEl.style.display = 'none';
+    }
+
+    // Clients
+    if (!clientsRes.ok || !clientsRes.clients || clientsRes.clients.length === 0) {
       container.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Пока нет клиентов</p>';
       return;
     }
-    container.innerHTML = d.clients.map(function(c) {
+    container.innerHTML = clientsRes.clients.map(function(c) {
+      var visitInfo = '';
+      if (c.total_consultations > 0) {
+        visitInfo = '🖐 ' + c.total_consultations + ' конс.';
+        if (c.last_visit) {
+          var days = Math.floor((Date.now() / 1000 - c.last_visit) / 86400);
+          visitInfo += ' · ' + (days === 0 ? 'сегодня' : days + 'дн. назад');
+        }
+      }
       return '<div class="card" style="cursor:pointer;margin-bottom:6px;padding:10px 12px" onclick="openAdminClient(\'' + c.chat_id + '\')">' +
         '<div style="font-size:14px;font-weight:600">' + escHtml(c.name) + '</div>' +
         '<div style="font-size:12px;color:var(--hint);margin-top:2px">' +
-          (c.phone ? c.phone : '—') + ' · ' +
-          (c.has_results ? '✅ Анализ выполнен' : (c.has_progress ? '📝 Анкета заполняется' : '📋 Анкета готова')) +
+          (c.phone ? c.phone : '—') + (visitInfo ? ' · ' + visitInfo : '') +
         '</div>' +
       '</div>';
     }).join('');
@@ -2681,9 +2908,64 @@ async function openAdminClient(chatId) {
   if (!u) return;
   tg.HapticFeedback.impactOccurred('medium');
   try {
-    const d = await apiGet('/api/admin/client/' + chatId, {chat_id: u});
+    var [clientRes, timelineRes, diaryRes] = await Promise.all([
+      apiGet('/api/admin/client/' + chatId, {chat_id: u}),
+      apiGet('/api/admin/client/' + chatId + '/timeline', {chat_id: u}),
+      apiGet('/api/massage/diary_summary/' + chatId),
+    ]);
+    var d = clientRes;
     if (!d.ok) { tg.showAlert('Ошибка загрузки'); return; }
     var html = '';
+
+    // Timeline
+    if (timelineRes.ok && timelineRes.timeline && timelineRes.timeline.length) {
+      var profileInfo = timelineRes.profile || {};
+      html += '<b>🕐 История консультаций</b><br>';
+      html += '<span style="color:var(--hint);font-size:11px">Всего: ' + profileInfo.total_consultations + ' · ' +
+        'Первый визит: ' + (profileInfo.first_visit ? new Date(profileInfo.first_visit * 1000).toLocaleDateString('ru-RU') : '—') + '</span><br><br>';
+      timelineRes.timeline.forEach(function(c) {
+        var dateStr = c.date ? new Date(c.date * 1000).toLocaleDateString('ru-RU', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+        html += '<div class="card" style="padding:8px 10px;margin-bottom:6px;font-size:12px">';
+        html += '<div style="color:var(--gold);font-weight:600">🕐 ' + dateStr + '</div>';
+        if (c.recommended_technique) html += '<div>🖐 ' + c.recommended_technique.slice(0, 100) + '</div>';
+        if (c.complaints) html += '<div style="color:var(--hint)">💬 ' + escHtml(c.complaints.slice(0, 80)) + '</div>';
+        if (c.pain_location) html += '<div style="color:var(--hint)">📍 ' + escHtml(c.pain_location) + '</div>';
+        if (c.music_genre) html += '<div>🎵 ' + escHtml(c.music_genre) + '</div>';
+        var badges = [];
+        if (c.photo_count) badges.push('📷 ' + c.photo_count);
+        if (c.video_count) badges.push('🎥 ' + c.video_count);
+        if (c.has_contraindications) badges.push('⚠️ Противопоказания');
+        if (badges.length) html += '<div style="margin-top:4px;font-size:11px;color:var(--hint)">' + badges.join(' · ') + '</div>';
+        html += '</div>';
+      });
+      html += '<br>';
+    }
+
+    // Diary entries
+    if (diaryRes.ok && diaryRes.diary && diaryRes.diary.length) {
+      html += '<b>📓 Дневник массажиста</b><br><br>';
+      diaryRes.diary.forEach(function(e) {
+        var dDate = e.created_at ? new Date(e.created_at * 1000).toLocaleDateString('ru-RU', {day:'numeric', month:'short', year:'numeric'}) : '—';
+        html += '<div class="card" style="padding:8px 10px;margin-bottom:6px;font-size:12px;border-left:3px solid var(--gold)">';
+        html += '<div style="color:var(--gold);font-weight:600">📓 ' + dDate + '</div>';
+        if (e.technique) html += '<div>🖐 Техника: ' + escHtml(e.technique) + '</div>';
+        if (e.intensity) html += '<div>💪 Интенсивность: ' + escHtml(e.intensity) + '</div>';
+        if (e.tools) html += '<div>🧴 Средства: ' + escHtml(e.tools) + '</div>';
+        if (e.tissue_state) html += '<div>🔬 Ткани: ' + escHtml(e.tissue_state) + '</div>';
+        if (e.client_feedback) html += '<div>💬 Отзыв: ' + escHtml(e.client_feedback) + '</div>';
+        if (e.recommendations) html += '<div>📌 Рекомендации: ' + escHtml(e.recommendations) + '</div>';
+        if (e.rating) html += '<span class="badge" style="margin-top:4px;display:inline-block">⭐ ' + e.rating + '/5</span>';
+        if (e.notes) html += '<div style="margin-top:4px;color:var(--hint);font-style:italic">' + escHtml(e.notes) + '</div>';
+        html += '</div>';
+      });
+      html += '<br>';
+    }
+
+    // Add diary button for masseurs/admins
+    if (currentRole === 'masseur' || currentRole === 'admin') {
+      html += '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px" onclick="showDiaryForm(\'' + chatId + '\')">📓 Добавить запись в дневник</button><br><br>';
+    }
+
     if (d.questionnaire) {
       var q = d.questionnaire;
       html += '<b>📋 Анкета</b><br>';
@@ -2696,17 +2978,64 @@ async function openAdminClient(chatId) {
       html += '<br>';
     }
     if (d.formatted) {
-      html += '<b>🧑‍⚕️ Результаты анализа</b><br><br>';
+      html += '<b>🧑‍⚕️ Последние результаты анализа</b><br><br>';
       html += renderMarkdown(d.formatted);
     } else {
       html += '<span style="color:var(--hint)">Анализ ещё не проведён</span>';
     }
-    qs('admin-client-name').textContent = d.questionnaire && d.questionnaire.full_name ? escHtml(d.questionnaire.full_name) : 'Клиент #' + chatId;
+    var name = d.questionnaire && d.questionnaire.full_name ? escHtml(d.questionnaire.full_name) : 'Клиент #' + chatId;
+    var consultCount = (timelineRes.ok && timelineRes.profile) ? (' (' + (timelineRes.profile.total_consultations || 0) + ')') : '';
+    qs('admin-client-name').textContent = name + consultCount;
     qs('admin-client-content').innerHTML = html;
     qs('adminClientModal').style.display = 'flex';
   } catch(e) {
     tg.showAlert('Ошибка сети');
   }
+}
+
+// ─── Diary form ───
+
+function showDiaryForm(chatId) {
+  var d = qs('adminClientModal');
+  d.style.display = 'none';
+  qs('diaryClientId').value = chatId;
+  // Clear form
+  ['technique','intensity','tools','tissue_state','client_feedback','recommendations','notes'].forEach(function(k) {
+    var el = document.getElementById('diary-' + k);
+    if (el) el.value = '';
+  });
+  qs('diaryRating').value = '0';
+  qs('diaryModal').style.display = 'flex';
+}
+
+function submitDiary() {
+  var chatId = qs('diaryClientId').value;
+  var u = uid();
+  if (!chatId || !u) return;
+  var entry = {
+    technique: qs('diary-technique').value.trim(),
+    intensity: qs('diary-intensity').value,
+    tools: qs('diary-tools').value.trim(),
+    tissue_state: qs('diary-tissue_state').value.trim(),
+    client_feedback: qs('diary-client_feedback').value.trim(),
+    recommendations: qs('diary-recommendations').value.trim(),
+    notes: qs('diary-notes').value.trim(),
+    rating: parseInt(qs('diaryRating').value) || 0,
+  };
+  if (!entry.technique) { tg.showAlert('Укажите технику массажа'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  entry.masseur_chat_id = u;
+  api('/api/massage/diary/' + chatId, entry).then(function(r) {
+    if (r && r.ok) {
+      tg.showAlert('✅ Запись сохранена');
+      qs('diaryModal').style.display = 'none';
+      openAdminClient(chatId);
+    } else {
+      tg.showAlert('❌ Ошибка сохранения');
+    }
+  }).catch(function() {
+    tg.showAlert('❌ Ошибка сети');
+  });
 }
 
 function escHtml(s) {

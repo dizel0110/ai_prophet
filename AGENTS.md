@@ -71,6 +71,7 @@ core/
 │   ├── orchestrator.py    — Оркестратор: запуск специалистов → синтез
 │   └── music_db.py        — Кураторская база проверенной музыки для массажа
 ├── questionnaire.py — Модель анкеты (ШММ, JSON-конфиг, 16 обязательных + опциональные)
+├── client_profiles.py — Система профилей клиентов: history, stats, timeline
 ├── network.py       — DNS patch (no-op in current code)
 └── mcp_client.py    — MCP client (unused/stub)
 ```
@@ -330,6 +331,8 @@ Playwright MCP сервер установлен для opencode. Конфигу
 - **Orchestrator synchronous calls** — AI вызовы синхронные (`requests.post`, `genai.Client.models.generate_content`), обёрнуты в `asyncio.to_thread()`.
 - **Temp files (massage photos/videos)** — сохраняются как `massage_photo_{chat_id}_{file_id}.ext` и `massage_video_{chat_id}_{file_id}.ext`. Удаляются после анализа.
 - **`F.web_app_data` handler** — массажный роутер перехватывает WebApp данные (`tg.sendData`) до того, как их получит messages.py.
+- **Client Profiles (`data/client_profiles.json`)** — создаются и обновляются при каждом завершённом анализе (`on_mc_analyze` + `/api/massage/analyze`). `save_consultation()` сохраняет: questionnaire snapshot, recommended_technique, music_genre, photo/video count, contraindications. Профиль используется для: (1) stats/дашборд, (2) адаптивная анкета на 2+ визите (Quick Checkup), (3) хронология консультаций в админ-панели.
+- **Quick Checkup** — при повторном `/massage` клиент с профилем видит "С возвращением! Ничего не изменилось? / Кое-что изменилось?". Если "ничего" — восстановление прошлой анкеты и переход к медиа. Если "изменилось" — 4 вопроса: вес → давление → жалобы → самочувствие. Обрабатывается через `InQuestionnaireFilter` (step `quick_checkup`).
 - **HF first strategy** — агенты сначала пробуют HF Router (бесплатно, `router.huggingface.co`), только при ошибке падают на Gemini. Это экономит квоту Gemini.
 - **Event delegation (sp-items)** — Mini App uses `data-name`/`data-role`/`data-exists` attributes on `.sp-item` divs, NOT inline `onclick`. Container-level click listeners in `renderChatList()` and on `#specialist-list` handle clicks via `e.target.closest('.sp-item')`. This avoids JS escaping issues and template-literal breakage.
 - **Chat opens after create** — both `createSpecialist()` (form) and `createAndOpen()` (preset/generated) call `openSpecialistChat(d.name)` after successful creation.
@@ -412,6 +415,9 @@ PNG-файлы сертификатов хранятся в `static/massage/cert
 - **`SpecialistFactory.chat()` и `create()` — синхронные, блокируют event loop** — в async-хендлерах всегда оборачивать через `await asyncio.to_thread(...)`. Без этого «Печатает...» висит вечно. Добавлять `asyncio.wait_for(..., timeout=120)` для защиты от зависаний Gemini.
 - **Русская запятая в number-полях** — пользователи пишут «36,6» вместо «36.6». В Python `float("36,6")` падает. В `massage.py:on_mc_text_input` делать `text.replace(",", ".")` перед парсингом числа.
 - **Music recommendation format is free-text** — Final Expert outputs in natural language (not structured JSON). `_parse_music_recommendation()` uses regex to extract genre, duration, and track count from any text format. Must cover both English (`ambient`) and Russian (`эмбиент`) genre names.
+- **Client Profiles** — создаются в `core/client_profiles.py`, хранятся в `data/client_profiles.json`. `save_consultation()` вызывается из `on_mc_analyze` (Telegram) и `/api/massage/analyze` (API). Файлы `data/client_profiles.json` + `data/consultation_records.json` создаются при первой консультации.
+- **Quick Checkup** — на 2+ визите `on_mc_start` проверяет `get_profile(chat_id)`, показывает "Ничего не изменилось? / Кое-что изменилось?". Обрабатывается в `on_mc_text_input` (step `quick_checkup`), 4 вопроса последовательно. После завершения — переход к медиа-шагу.
+- **Stats в Mini App** — две параллельные API-вызова в `loadAdminClients()`: `/api/admin/clients` + `/api/admin/stats`. Статистика: 3 карточки (клиенты/консультации/сегодня) + бары техник + демография. Карта клиента в модале: хронология консультаций (карточки с датой/техникой/жалобами/музыкой).
 
 ## Feature Spec #6: Музыкальный плеер / Музыкальная система
 
@@ -525,8 +531,11 @@ massage.py (консультация) ──→ music_db.py (жанры/ссыл
 | `/api/admin/mode` | POST | Переключить режим client/admin |
 | `/api/admin/clients?chat_id=X` | GET | Список клиентов (только с анкетой) |
 | `/api/admin/client/{chat_id}?admin_chat=X` | GET | Полные данные клиента |
+| `/api/admin/stats?chat_id=X` | GET | Дашборд: статистика салона |
+| `/api/admin/client/{chat_id}/timeline?chat_id=X` | GET | Хронология консультаций клиента |
 
 ### Приоритет
 1. 📋 Список клиентов + просмотр анкеты и результатов ✅
-2. 📊 Дашборд (статистика) — следующий шаг
-3. 🧑‍⚕️ Список ИИ-специалистов — после дашборда
+2. 📊 Дашборд (статистика) ✅
+3. 👤 Карта клиента (хронология + прогресс) ✅
+4. 🧑‍⚕️ Список ИИ-специалистов — следующий шаг

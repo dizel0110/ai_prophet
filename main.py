@@ -540,6 +540,25 @@ async def api_massage_analyze(req: dict):
     _set_user_data(chat_id, "massage_step", "done")
     _cleanup_massage_temp(chat_id)
 
+    # Сохраняем в профиль клиента
+    try:
+        from core.client_profiles import save_consultation
+        technique_text = results.get("technique_expert", {}).get("content", "")
+        from handlers.massage import _parse_music_recommendation as _parse_mr
+        music_rec_inner = _parse_mr(results.get("final_expert", {}).get("content", ""))
+        save_consultation(
+            chat_id=int(chat_id),
+            questionnaire=q.to_dict() if hasattr(q, "to_dict") else {},
+            recommended_technique=technique_text[:200],
+            music_genre=music_rec_inner.get("genre", ""),
+            photo_count=len(photos),
+            video_count=len(videos),
+            first_name=q.full_name if hasattr(q, "full_name") else "",
+            phone=q.phone if hasattr(q, "phone") else "",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to save client profile: {e}")
+
     formatted = format_consultation_results(results)
     _set_user_data(chat_id, "massage_results", {
         "raw": results,
@@ -596,6 +615,167 @@ async def api_massage_export(chat_id: str):
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="consultation_{chat_id}_{datetime.datetime.utcnow().strftime("%Y%m%d")}.json"'}
     )
+
+
+# ──────────────────── Booking API ────────────────────
+
+BOOKING_DAYS_THRESHOLD = 30
+
+
+@app.get("/api/massage/booking_check/{chat_id}")
+async def api_booking_check(chat_id: int = 0):
+    """Check if client can book — questionnaire must be recent (<30 days)."""
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+
+    from core.client_profiles import get_profile
+    profile = get_profile(chat_id)
+
+    if not profile:
+        return {
+            "ok": True,
+            "can_book": False,
+            "reason": "no_questionnaire",
+            "message": (
+                "📋 *Для записи на сеанс нужно заполнить медицинскую анкету.*\n\n"
+                "Это важно для твоей безопасности: мы должны знать о противопоказаниях, "
+                "хронических заболеваниях и текущем самочувствии, "
+                "чтобы подобрать безопасную и эффективную технику массажа.\n\n"
+                "🩺 *Заполни анкету — это займёт 2–3 минуты.*\n"
+                "После анализа AI-специалисты подберут идеальный массаж!"
+            ),
+        }
+
+    last_consultation = profile.get("last_visit", 0)
+    now = time.time()
+    days_since = (now - last_consultation) / 86400
+
+    if days_since > BOOKING_DAYS_THRESHOLD:
+        days = int(days_since)
+        return {
+            "ok": True,
+            "can_book": False,
+            "reason": "questionnaire_outdated",
+            "days_since": days,
+            "message": (
+                f"🕐 *С твоего последнего визита прошло {days} дней.*\n\n"
+                "За это время могло измениться самочувствие, появиться новые "
+                "противопоказания или измениться хронические заболевания.\n\n"
+                "🩺 *Пройди быстрый чек-ап — это займёт меньше минуты,*\n"
+                "чтобы мы убедились, что массаж безопасен для тебя сейчас."
+            ),
+        }
+
+    return {
+        "ok": True,
+        "can_book": True,
+        "reason": "",
+        "message": "",
+    }
+
+
+@app.post("/api/massage/booking_request")
+async def api_booking_request(req: dict):
+    """Save a booking request from the Mini App."""
+    chat_id = str(req.get("chat_id", ""))
+    name = req.get("name", "").strip()
+    phone = req.get("phone", "").strip()
+    service = req.get("service", "").strip()
+    date = req.get("date", "").strip()
+    note = req.get("note", "").strip()
+    if not chat_id or not name or not phone:
+        return {"ok": False, "error": "Missing required fields"}
+
+    booking = {
+        "chat_id": int(chat_id),
+        "name": name,
+        "phone": phone,
+        "service": service,
+        "date": date,
+        "note": note,
+        "created_at": time.time(),
+    }
+
+    bookings_file = os.path.join(DATA_DIR, "booking_requests.json")
+    try:
+        existing = []
+        if os.path.exists(bookings_file):
+            with open(bookings_file, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        existing.append(booking)
+        with open(bookings_file, "w", encoding="utf-8") as f:
+            json.dump(existing, f, ensure_ascii=False, indent=2)
+        logger.info(f"✅ Booking request saved for chat {chat_id}: {service}")
+    except Exception as e:
+        logger.warning(f"Failed to save booking: {e}")
+
+    return {"ok": True}
+
+
+# ──────────────────── Massage Diary & Roles API ────────────────────
+
+@app.post("/api/massage/diary/{chat_id}")
+async def api_diary_add(chat_id: int, req: dict, masseur_chat_id: int = 0):
+    """Add a diary entry for a client session (masseur writes post-session)."""
+    if not chat_id or not masseur_chat_id:
+        return {"ok": False, "error": "Missing chat_id or masseur_chat_id"}
+    from core.masseur_diary import add_diary_entry
+    entry = {k: req.get(k, "") for k in [
+        "technique", "intensity", "tools", "tissue_state",
+        "client_feedback", "recommendations", "notes",
+    ]}
+    entry["rating"] = req.get("rating", 0)
+    ok = add_diary_entry(chat_id, masseur_chat_id, entry)
+    return {"ok": ok}
+
+
+@app.get("/api/massage/diary/{chat_id}")
+async def api_diary_get(chat_id: int):
+    """Get all diary entries for a client."""
+    from core.masseur_diary import get_diary
+    entries = get_diary(chat_id)
+    return {"ok": True, "entries": entries}
+
+
+@app.get("/api/massage/diary_summary/{chat_id}")
+async def api_diary_summary(chat_id: int):
+    """Get diary summary for a client — combines with profile timeline."""
+    from core.masseur_diary import get_diary
+    from core.client_profiles import get_timeline, get_profile
+    diary = get_diary(chat_id)
+    timeline = get_timeline(chat_id)
+    profile = get_profile(chat_id)
+    return {
+        "ok": True,
+        "diary": diary,
+        "timeline": timeline,
+        "profile": profile,
+    }
+
+
+@app.get("/api/admin/masseurs")
+async def api_masseurs_list(chat_id: int = 0):
+    """List all registered masseurs."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    from core.masseur_diary import get_masseurs
+    return {"ok": True, "masseurs": get_masseurs()}
+
+
+@app.post("/api/admin/masseur")
+async def api_masseur_set(req: dict):
+    """Register or update a masseur (admin only)."""
+    chat_id = int(req.get("chat_id", 0))
+    name = req.get("name", "").strip()
+    specialties = req.get("specialties", [])
+    admin_chat = req.get("admin_chat", 0)
+    if not admin_chat or not _is_chat_id_admin(admin_chat):
+        return {"ok": False, "error": "Access denied"}
+    if not chat_id or not name:
+        return {"ok": False, "error": "Missing chat_id or name"}
+    from core.masseur_diary import set_masseur
+    set_masseur(chat_id, name, specialties)
+    return {"ok": True}
 
 
 # ──────────────────── Questionnaire API ────────────────────
@@ -681,9 +861,47 @@ async def api_questionnaire_submit(req: dict):
     _set_user_data(chat_id, "massage_step", "media")
     _set_user_data(chat_id, "massage_photos", [])
     _set_user_data(chat_id, "massage_videos", [])
-    # Clear any saved progress
     _set_user_data(chat_id, "massage_questionnaire_progress", None)
     return {"ok": True}
+
+
+@app.post("/api/questionnaire/minimal")
+async def api_questionnaire_minimal(req: dict):
+    """Minimal 4-field questionnaire for fast booking."""
+    chat_id = str(req.get("chat_id", ""))
+    data = req.get("data", {})
+    if not chat_id or not data:
+        return {"ok": False, "error": "Missing chat_id or data"}
+
+    from core.questionnaire import MassageQuestionnaire
+    q = MassageQuestionnaire()
+    q.full_name = data.get("full_name", "").strip()
+    q.phone = data.get("phone", "").strip()
+    q.complaints = data.get("complaints", "").strip()
+    q.contraindications_absolute = data.get("contraindications_absolute", [])
+    q.informed_consent = bool(data.get("informed_consent", False))
+
+    if not q.full_name or not q.phone:
+        return {"ok": False, "error": "Имя и телефон обязательны"}
+
+    from handlers.massage import _save_questionnaire, _set_user_data, _cleanup_massage_temp
+    _cleanup_massage_temp(chat_id)
+    _save_questionnaire(chat_id, q)
+    _set_user_data(chat_id, "massage_questionnaire_progress", None)
+
+    # Also save to profile
+    from core.client_profiles import save_consultation
+    try:
+        save_consultation(
+            chat_id=int(chat_id),
+            questionnaire=q.to_dict(),
+            first_name=q.full_name,
+            phone=q.phone,
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "full_name": q.full_name}
 
 # ──────────────────── Admin API ────────────────────
 
@@ -715,26 +933,26 @@ def _is_chat_id_admin(chat_id: int) -> bool:
 
 @app.get("/api/admin/identify")
 async def api_admin_identify(chat_id: int = 0, username: str = ""):
-    """Check if user is an admin and their current mode preference.
-    Owner (OWNER_USERNAME) is always admin — no .env setup needed.
-    """
+    """Check user role: admin, masseur, or client."""
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
     from config import OWNER_USERNAME
     is_admin = _is_chat_id_admin(chat_id) or (username and username.lower() == OWNER_USERNAME.lower())
+    from core.masseur_diary import is_masseur
+    is_mas = is_masseur(chat_id)
     persist = _load_admin_mode_persist()
     pref = persist.get(str(chat_id), "client")
-    return {"ok": True, "is_admin": is_admin, "mode": pref}
+    return {"ok": True, "is_admin": is_admin, "is_masseur": is_mas, "mode": pref}
 
 
 @app.post("/api/admin/mode")
 async def api_admin_mode(req: dict):
-    """Toggle admin mode on/off."""
+    """Toggle role mode: client/admin/masseur."""
     chat_id = str(req.get("chat_id", ""))
     mode = req.get("mode", "client")
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
-    if mode not in ("client", "admin"):
+    if mode not in ("client", "admin", "masseur"):
         return {"ok": False, "error": "Invalid mode"}
     persist = _load_admin_mode_persist()
     persist[chat_id] = mode
@@ -753,6 +971,7 @@ async def api_admin_clients(chat_id: int = 0):
         try:
             with open(settings_path, "r", encoding="utf-8") as f:
                 all_data = json.load(f)
+            from core.client_profiles import get_profile
             for cid, data in all_data.items():
                 q = data.get("massage_questionnaire")
                 if not q:
@@ -761,6 +980,7 @@ async def api_admin_clients(chat_id: int = 0):
                 name = (q.get("full_name") or "").strip()
                 if not name:
                     continue
+                profile = get_profile(int(cid))
                 clients.append({
                     "chat_id": cid,
                     "name": name,
@@ -769,6 +989,9 @@ async def api_admin_clients(chat_id: int = 0):
                     "has_videos": bool(data.get("massage_videos")),
                     "has_results": bool(data.get("massage_results")),
                     "has_progress": bool(data.get("massage_questionnaire_progress")),
+                    "total_consultations": profile["total_consultations"] if profile else 0,
+                    "first_visit": profile["first_visit"] if profile else 0,
+                    "last_visit": profile["last_visit"] if profile else 0,
                 })
         except Exception:
             pass
@@ -794,6 +1017,26 @@ async def api_admin_client(target_chat_id: str, chat_id: int = 0):
         "videos": data.get("massage_videos", []),
     }
 
+
+@app.get("/api/admin/stats")
+async def api_admin_stats(chat_id: int = 0):
+    """Dashboard statistics (admin only)."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    from core.client_profiles import get_stats
+    stats = get_stats()
+    return {"ok": True, "stats": stats}
+
+
+@app.get("/api/admin/client/{target_chat_id}/timeline")
+async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0):
+    """Client consultation timeline (admin only)."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    from core.client_profiles import get_timeline, get_profile
+    timeline = get_timeline(target_chat_id)
+    profile = get_profile(target_chat_id)
+    return {"ok": True, "timeline": timeline, "profile": profile}
 
 # ──────────────────── Server ────────────────────
 

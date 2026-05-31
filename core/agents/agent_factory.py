@@ -56,7 +56,9 @@ UNIVERSAL_CONSULTANT_SYSTEM_PROMPT = """Ты — Мастер-консульта
 • AI-консультация — команда из 5 агентов: Анкетолог, Визуальный Диагност, Специалист по движениям, Эксперт по техникам, Финальный Эксперт
 • Создание новых ИИ-специалистов под любую задачу
 • Музыка для массажа — 8 жанров: Ambient, Классика, Природа, Jazz, Спа, Тайский, Акустика, Бины
-• Запись на сеанс через форму в Mini App или WhatsApp
+• Запись на сеанс через форму в Mini App или WhatsApp — только после мед. анкеты
+
+ВАЖНО: Запись на сеанс возможна только после прохождения медицинской анкеты (AI-консультации). Анкета нужна для безопасности: противопоказания, хронические заболевания, текущее самочувствие. Если клиент хочет записаться, но не проходил анкету — объясни, почему это важно, и предложи начать AI-консультацию через кнопку [ACTION: start_consultation].
 
 Что ты делаешь:
 1. Отвечаешь на вопросы об услугах, ценах, специалистах
@@ -82,6 +84,7 @@ UNIVERSAL_CONSULTANT_SYSTEM_PROMPT = """Ты — Мастер-консульта
 Используй маркеры когда клиент явно просит переключиться на другого специалиста, включить музыку, пройти консультацию или записаться. Не используй маркеры если клиент просто спрашивает информацию.
 
 Важно: НЕ ставь диагнозы, НЕ назначай лекарства. Если нужен профильный специалист — предложи его. Стиль: дружелюбный, заботливый, на "ты". Кратко и по делу.
+ТВОЙ ОТВЕТ ОГРАНИЧЕН ~3500 токенами. Планируй структуру: сначала главное, потом детали. Не обрывай на полуслове.
 ВАЖНО: Отвечай на языке пользователя. По умолчанию — русский. НЕ используй китайские иероглифы."""
 
 UNIVERSAL_CONSULTANT_SKILLS = "массаж, AI-консультация, подбор специалистов, навигация по платформе, музыка для массажа"
@@ -173,7 +176,7 @@ class SpecialistFactory:
                     resp = cls._gemini_client.models.generate_content(
                         model=model,
                         contents=contents,
-                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=1536),
+                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=4096),
                     )
                     if resp and resp.text:
                         return resp.text.strip()
@@ -188,7 +191,7 @@ class SpecialistFactory:
                 resp = requests.post(
                     "https://router.huggingface.co/v1/chat/completions",
                     headers={"Authorization": f"Bearer {cls._hf_token}", "Content-Type": "application/json"},
-                    json={"model": HF_TASKS.get("text", "Qwen/Qwen2.5-7B-Instruct"), "messages": msgs, "max_tokens": 1536},
+                    json={"model": HF_TASKS.get("text", "Qwen/Qwen2.5-7B-Instruct"), "messages": msgs, "max_tokens": 4096},
                     timeout=60,
                 )
                 if resp.status_code == 200:
@@ -423,7 +426,7 @@ class SpecialistFactory:
                     resp = cls._gemini_client.models.generate_content(
                         model=model,
                         contents=ctx,
-                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=2048),
+                        config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=4096),
                     )
                     if resp and resp.text:
                         specialist.message_count += 1
@@ -449,7 +452,7 @@ class SpecialistFactory:
                     json={
                         "model": HF_TASKS.get("text", "Qwen/Qwen2.5-7B-Instruct"),
                         "messages": msgs,
-                        "max_tokens": 2048,
+                        "max_tokens": 4096,
                     },
                     timeout=60,
                 )

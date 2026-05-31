@@ -2,6 +2,7 @@ import os
 import json
 import glob
 import logging
+from datetime import datetime
 from aiogram import types, Router, F
 from aiogram.filters import Command, BaseFilter
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -34,6 +35,8 @@ class InQuestionnaireFilter(BaseFilter):
             chat_settings = settings.get(str(message.chat.id), {})
             step = chat_settings.get("massage_step")
             if step == "create_specialist":
+                return True
+            if step == "quick_checkup":
                 return True
             return (step == "questionnaire"
                     and chat_settings.get("massage_waiting_input") is not None)
@@ -302,23 +305,106 @@ async def on_mc_start(callback: types.CallbackQuery):
     await callback.answer()
     chat_id = callback.message.chat.id
     _cleanup_massage_temp(chat_id)
-    _set_user_data(chat_id, "massage_step", "questionnaire")
-    _set_user_data(chat_id, "massage_q_index", 0)
     _set_user_data(chat_id, "massage_photos", [])
     _set_user_data(chat_id, "massage_videos", [])
 
-    q = MassageQuestionnaire()
-    _save_questionnaire(chat_id, q)
+    # Проверяем, был ли клиент ранее
+    from core.client_profiles import get_profile
+    profile = get_profile(chat_id)
+
+    if profile and profile.get("latest_questionnaire") and profile.get("total_consultations", 0) > 0:
+        prev = profile["latest_questionnaire"]
+        q = MassageQuestionnaire.from_dict(prev)
+        _save_questionnaire(chat_id, q)
+        last_date = profile.get("last_visit", 0)
+        date_str = datetime.fromtimestamp(last_date).strftime("%d.%m.%Y") if last_date else ""
+
+        _set_user_data(chat_id, "massage_step", "quick_checkup")
+        _set_user_data(chat_id, "massage_qc_question", 0)
+
+        await callback.message.answer(
+            f"🔄 *С возвращением!*\n\n"
+            f"Последний визит: {date_str}\n"
+            f"Анкета заполнена, но давай сверим самочувствие:\n\n"
+            "👇 *Выбери вариант*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Ничего не изменилось", callback_data="mc_qc_same")],
+                [InlineKeyboardButton(text="✏️ Кое-что изменилось", callback_data="mc_qc_changed")],
+            ])
+        )
+    else:
+        _set_user_data(chat_id, "massage_step", "questionnaire")
+        _set_user_data(chat_id, "massage_q_index", 0)
+
+        q = MassageQuestionnaire()
+        _save_questionnaire(chat_id, q)
+
+        await callback.message.answer(
+            "🧑‍⚕️ *AI-консультация массажного салона*\n\n"
+            "Я задам несколько вопросов, чтобы подобрать idealьный массаж для тебя.\n"
+            "Также ты сможешь загрузить фото/видео для визуальной диагностики.\n\n"
+            "_Отвечай на вопросы, или нажми /stop в любой момент._\n"
+            "👇 *Начнём!*",
+            parse_mode="Markdown"
+        )
+        await _ask_question(chat_id, callback.message)
+
+
+# ── Quick Checkup для возвращающихся клиентов ──
+
+@router.callback_query(lambda c: c.data == "mc_qc_same")
+async def on_mc_qc_same(callback: types.CallbackQuery):
+    """Клиент сказал, что ничего не изменилось — восстанавливаем анкету и переходим к медиа."""
+    await callback.answer()
+    chat_id = callback.message.chat.id
+    _set_user_data(chat_id, "massage_step", "media")
+    data = _get_user_data(chat_id)
+    q_dict = data.get("massage_questionnaire")
+    if q_dict:
+        q = MassageQuestionnaire.from_dict(q_dict)
+        _save_questionnaire(chat_id, q)
+
+    last_date = ""
+    from core.client_profiles import get_profile
+    profile = get_profile(chat_id)
+    if profile and profile.get("last_visit"):
+        last_date = datetime.fromtimestamp(profile["last_visit"]).strftime("%d.%m.%Y")
 
     await callback.message.answer(
-        "🧑‍⚕️ *AI-консультация массажного салона*\n\n"
-        "Я задам несколько вопросов, чтобы подобрать idealьный массаж для тебя.\n"
-        "Также ты сможешь загрузить фото/видео для визуальной диагностики.\n\n"
-        "_Отвечай на вопросы, или нажми /stop в любой момент._\n"
-        "👇 *Начнём!*",
+        f"✅ *Принято! Восстанавливаю данные с {last_date}.*\n\n"
+        f"Теперь можешь загрузить фото/видео для диагностики, "
+        f"или нажми «Запустить анализ» сразу.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🧑‍⚕️ Запустить анализ", callback_data="mc_analyze")],
+            [InlineKeyboardButton(text="⏭ Пропустить", callback_data="mc_analyze")],
+        ])
+    )
+
+
+@router.callback_query(lambda c: c.data == "mc_qc_changed")
+async def on_mc_qc_changed(callback: types.CallbackQuery):
+    """Клиент хочет обновить данные — задаём быстрые вопросы."""
+    await callback.answer()
+    chat_id = callback.message.chat.id
+    _set_user_data(chat_id, "massage_step", "quick_checkup")
+    _set_user_data(chat_id, "massage_qc_question", 0)
+
+    await callback.message.answer(
+        "✏️ *Давай обновим данные.*\n\n"
+        "Отвечу на несколько коротких вопросов, "
+        "остальное возьму из прошлой анкеты.\n\n"
+        "👇 *Твой вес изменился?*\n"
+        "(напиши число в кг, или «нет» если прежний)",
         parse_mode="Markdown"
     )
-    await _ask_question(chat_id, callback.message)
+
+
+@router.callback_query(lambda c: c.data.startswith("mc_qc_"))
+async def on_mc_qc_invalid(callback: types.CallbackQuery):
+    """Catch unknown quick checkup callbacks."""
+    await callback.answer()
 
 
 @router.message(Command("stop"))
@@ -556,6 +642,120 @@ async def on_mc_text_input(message: types.Message):
         await _create_and_show_specialist(message, chat_id, text)
         return
 
+    # Быстрый чек-ап для возвращающихся клиентов
+    if data.get("massage_step") == "quick_checkup":
+        qc_step = data.get("massage_qc_question", 0)
+        q = _get_questionnaire(chat_id)
+        if q is None:
+            q = MassageQuestionnaire()
+            _save_questionnaire(chat_id, q)
+
+        text_lower = text.strip().lower()
+
+        if qc_step == 0:
+            # Вес
+            if text_lower in ("нет", "не изменился", "прежний", "такой же", "нету"):
+                pass  # оставляем старое значение
+            else:
+                try:
+                    val = float(text.replace(",", "."))
+                    q.weight = int(val)
+                except ValueError:
+                    await message.answer("Напиши число (кг) или «нет»")
+                    return
+            _set_user_data(chat_id, "massage_qc_question", 1)
+            _save_questionnaire(chat_id, q)
+            await message.answer(
+                "👍 *Давление и пульс в норме?*\n"
+                "(напиши «да» или «нет», или укажи новые значения: 120/80, 72)",
+                parse_mode="Markdown"
+            )
+
+        elif qc_step == 1:
+            # Давление/пульс
+            if text_lower in ("да", "в норме", "норма", "нормальное"):
+                pass
+            else:
+                q.blood_pressure = text[:50]
+                parts = text.replace("/", " ").split()
+                for p in parts:
+                    try:
+                        v = int(p)
+                        if q.blood_pressure_systolic == 0:
+                            q.blood_pressure_systolic = v
+                        elif q.blood_pressure_diastolic == 0:
+                            q.blood_pressure_diastolic = v
+                        elif q.pulse == 0:
+                            q.pulse = v
+                    except ValueError:
+                        pass
+            _set_user_data(chat_id, "massage_qc_question", 2)
+            _save_questionnaire(chat_id, q)
+            await message.answer(
+                "💬 *Жалобы те же или появились новые?*\n"
+                "(напиши «те же» или опиши новые)",
+                parse_mode="Markdown"
+            )
+
+        elif qc_step == 2:
+            # Жалобы
+            if text_lower in ("те же", "теже", "те-же", "не изменились", "прежние", "нет", "нету", "такие же"):
+                pass
+            else:
+                if q.complaints:
+                    q.complaints += f" (доп: {text[:500]})"
+                else:
+                    q.complaints = text[:500]
+            _set_user_data(chat_id, "massage_qc_question", 3)
+            _save_questionnaire(chat_id, q)
+            prev_diseases = q.chronic_diseases or []
+            prev_str = ", ".join(prev_diseases) if prev_diseases else "нет"
+            await message.answer(
+                f"🩺 *Хронические заболевания:* {prev_str}\n\n"
+                f"Всё по-старому? Или появились новые?\n"
+                "(напиши «те же» или перечисли новые)",
+                parse_mode="Markdown"
+            )
+
+        elif qc_step == 3:
+            # Хронические заболевания
+            if text_lower in ("те же", "теже", "те-же", "не изменились", "прежние", "нет", "нету", "всё так же", "по-старому"):
+                pass
+            else:
+                new_diseases = [d.strip() for d in text.split(",") if d.strip()]
+                if new_diseases:
+                    existing = set(d.lower().strip() for d in (q.chronic_diseases or []))
+                    merged = list(q.chronic_diseases or [])
+                    for d in new_diseases:
+                        if d.lower().strip() not in existing:
+                            merged.append(d)
+                    q.chronic_diseases = merged
+            _set_user_data(chat_id, "massage_qc_question", 4)
+            _save_questionnaire(chat_id, q)
+            await message.answer(
+                "😊 *Самочувствие в целом?*\n"
+                "(напиши пару слов — как настроение, энергия, сон)",
+                parse_mode="Markdown"
+            )
+
+        elif qc_step == 4:
+            # Самочувствие
+            q.additional_info = text[:300]
+            _save_questionnaire(chat_id, q)
+            _set_user_data(chat_id, "massage_step", "media")
+            await message.answer(
+                "✅ *Чек-ап завершён!*\n\n"
+                "Данные обновлены. Теперь можешь загрузить фото/видео "
+                "или сразу запустить анализ.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🧑‍⚕️ Запустить анализ", callback_data="mc_analyze")],
+                    [InlineKeyboardButton(text="⏭ Пропустить", callback_data="mc_analyze")],
+                ])
+            )
+
+        return
+
     q = _get_questionnaire(chat_id)
     is_optional = data.get("massage_optional_mode", False)
     steps = QUESTIONNAIRE_STEPS_OPTIONAL if is_optional else QUESTIONNAIRE_STEPS
@@ -737,6 +937,25 @@ async def on_mc_analyze(callback: types.CallbackQuery):
 
     _set_user_data(chat_id, "massage_step", "done")
     _cleanup_massage_temp(chat_id)
+
+    # Сохраняем в профиль клиента
+    try:
+        from core.client_profiles import save_consultation
+        technique_text = results.get("technique_expert", {}).get("content", "")
+        music_rec_inner = _parse_music_recommendation(results.get("final_expert", {}).get("content", ""))
+        save_consultation(
+            chat_id=chat_id,
+            questionnaire=q.to_dict() if hasattr(q, "to_dict") else {},
+            recommended_technique=technique_text[:200],
+            music_genre=music_rec_inner.get("genre", ""),
+            photo_count=len(photos),
+            video_count=len(videos),
+            referral_specialists=_parse_doctor_referrals(results.get("final_expert", {}).get("content", "")),
+            first_name=q.full_name if hasattr(q, "full_name") else "",
+            phone=q.phone if hasattr(q, "phone") else "",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to save client profile: {e}")
 
     await msg.delete()
 
