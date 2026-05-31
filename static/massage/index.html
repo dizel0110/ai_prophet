@@ -144,6 +144,7 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .btn:active{transform:scale(.97);opacity:.9}
 .btn-primary{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#fff;margin-top:10px}
 .btn-secondary{background:rgba(196,154,108,.15);color:var(--gold-dark);margin-top:6px;border:1px solid rgba(196,154,108,.3)}
+.btn-danger-sm{background:rgba(255,107,107,.15);color:#ff6b6b;border:1px solid rgba(255,107,107,.3);padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;transition:.2s;margin-top:4px}
 .btn-outline{background:transparent;color:var(--text);border:1px solid var(--border);margin-top:6px}
 
 /* Blog */
@@ -243,6 +244,9 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .tab.active[data-page="music"] .tab-icon{animation:musicFloat 3s ease-in-out infinite}
 .tab.active[data-page="more"] .tab-icon{animation:tabSlide 2s ease-in-out infinite}
 .tab.active[data-page="admin"] .tab-icon{animation:tabSlide 2s ease-in-out infinite}
+.tab.active[data-page="education"] .tab-icon{animation:tabSlide 2s ease-in-out infinite}
+.tab-sm{background:none;border:none;color:var(--text);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;transition:.2s;opacity:.5;font-weight:500}
+.tab-sm.active{opacity:1;background:rgba(212,175,55,.12);color:var(--gold)}
 @keyframes tabHome{0%{filter:brightness(1);text-shadow:0 0 0 rgba(196,154,108,0);transform:scale(1.1)}100%{filter:brightness(1.25);text-shadow:0 0 12px rgba(196,154,108,.5);transform:scale(1.15)}}
 @keyframes tabFloat{0%,100%{transform:translateY(0) scale(1.1)}50%{transform:translateY(-4px) scale(1.12)}}
 @keyframes tabBreathe{0%,100%{transform:scale(1.1)}50%{transform:scale(1.2)}}
@@ -994,6 +998,19 @@ html{scroll-behavior:smooth}
   </div>
 </div>
 
+<!-- EDUCATION PAGE -->
+<div class="page" id="page-education" style="display:none">
+  <div class="sec">
+    <div class="sec-title">🎓 <span id="edu-title">Обучение</span></div>
+    <div style="margin:10px 0 16px 0;display:flex;gap:6px">
+      <button class="tab-sm active" data-role="client" onclick="switchEduRole('client')">👤 Клиент</button>
+      <button class="tab-sm" data-role="masseur" onclick="switchEduRole('masseur')">🖐 Массажист</button>
+      <button class="tab-sm" data-role="admin" onclick="switchEduRole('admin')">⚙️ Админ</button>
+    </div>
+    <div id="edu-content" style="font-size:13px;line-height:1.7;white-space:pre-wrap"></div>
+  </div>
+</div>
+
 <!-- ADMIN CLIENT MODAL -->
 <div class="modal-overlay" id="adminClientModal" style="display:none">
   <div class="modal" style="height:85dvh;display:flex;flex-direction:column;padding:16px;overflow:hidden">
@@ -1147,6 +1164,11 @@ html{scroll-behavior:smooth}
   <button class="tab" data-page="music" onclick="navigate('music'); loadMusicPage()">
     <span class="tab-icon">🎵</span>
     <span class="tab-label">Музыка</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" data-page="education" onclick="navigate('education'); loadEducationPage()">
+    <span class="tab-icon">🎓</span>
+    <span class="tab-label">Обучение</span>
     <span class="tab-indicator"></span>
   </button>
   <button class="tab" data-page="more" onclick="navigate('more')">
@@ -2816,6 +2838,56 @@ async function cycleRole() {
   }
 }
 
+// ─── Admin: test patients ───
+
+async function createTestPatient() {
+  tg.HapticFeedback.impactOccurred('medium');
+  var res = await api('/api/admin/test_client', {});
+  if (res && res.ok && res.client) {
+    tg.showAlert('🧪 Тестовый пациент создан: ' + (res.client.first_name || 'Без имени'));
+    loadAdminClients();
+  } else {
+    tg.showAlert('Ошибка создания тестового пациента');
+  }
+}
+
+async function deleteTestPatient(chatId) {
+  tg.HapticFeedback.impactOccurred('medium');
+  var res = await api('/api/admin/test_client/delete', {chat_id: chatId});
+  if (res && res.ok) {
+    loadAdminClients();
+  } else {
+    tg.showAlert('Ошибка удаления');
+  }
+}
+
+// ─── Education page ───
+
+var _eduCurrentRole = 'client';
+
+async function loadEducationPage() {
+  var role = _eduCurrentRole || 'client';
+  qs('edu-content').textContent = 'Загрузка...';
+  try {
+    var res = await apiGet('/api/education/' + role);
+    if (res.ok && res.content) {
+      qs('edu-content').innerHTML = renderMarkdown(res.content);
+    } else {
+      qs('edu-content').textContent = 'Не удалось загрузить обучение. Попробуйте позже.';
+    }
+  } catch(e) {
+    qs('edu-content').textContent = 'Ошибка сети';
+  }
+}
+
+function switchEduRole(role) {
+  _eduCurrentRole = role;
+  document.querySelectorAll('#page-education .tab-sm').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.role === role);
+  });
+  loadEducationPage();
+}
+
 // Rename the onclick in the gear button to cycleRole
 // (the gear button will use cycleRole instead of toggleAdminMode)
 
@@ -2883,7 +2955,8 @@ async function loadAdminClients() {
       container.innerHTML = '<p style="font-size:13px;color:var(--hint);text-align:center;padding:20px">Пока нет клиентов</p>';
       return;
     }
-    container.innerHTML = clientsRes.clients.map(function(c) {
+    container.innerHTML = '<button class="btn btn-secondary" style="width:100%;font-size:12px;padding:8px;margin-bottom:10px" onclick="createTestPatient()">🧪 Создать тестового пациента</button>' +
+    clientsRes.clients.map(function(c) {
       var visitInfo = '';
       if (c.total_consultations > 0) {
         visitInfo = '🖐 ' + c.total_consultations + ' конс.';
@@ -2892,11 +2965,17 @@ async function loadAdminClients() {
           visitInfo += ' · ' + (days === 0 ? 'сегодня' : days + 'дн. назад');
         }
       }
-      return '<div class="card" style="cursor:pointer;margin-bottom:6px;padding:10px 12px" onclick="openAdminClient(\'' + c.chat_id + '\')">' +
-        '<div style="font-size:14px;font-weight:600">' + escHtml(c.name) + '</div>' +
+      var isTest = c.is_test;
+      var cardStyle = 'cursor:pointer;margin-bottom:6px;padding:10px 12px';
+      if (isTest) cardStyle += ';opacity:0.6;border-color:var(--hint)';
+      var testBadge = isTest ? ' <span style="font-size:11px;color:var(--hint)">🧪 Тест</span>' : '';
+      return '<div class="card" style="' + cardStyle + '" onclick="openAdminClient(\'' + c.chat_id + '\')">' +
+        '<div style="font-size:14px;font-weight:600">' + escHtml(c.name) + testBadge + '</div>' +
         '<div style="font-size:12px;color:var(--hint);margin-top:2px">' +
           (c.phone ? c.phone : '—') + (visitInfo ? ' · ' + visitInfo : '') +
         '</div>' +
+        (isTest ? '<div style="margin-top:4px"><button class="btn btn-danger-sm" onclick="event.stopPropagation();deleteTestPatient(' + c.chat_id + ')">🗑 Удалить тестового</button></div>' : '') +
+      '</div>';
       '</div>';
     }).join('');
   } catch(e) {

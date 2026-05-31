@@ -797,6 +797,40 @@ async def api_pre_session(chat_id: int):
     return {"ok": True, "briefing": briefing}
 
 
+@app.get("/api/education/{role}")
+async def api_education(role: str):
+    """Get education markdown content for a role: client / masseur / admin."""
+    import os
+    role_map = {"client": "education_client.md", "masseur": "education_masseur.md", "admin": "education_admin.md"}
+    fname = role_map.get(role)
+    if not fname:
+        return {"ok": False, "error": "Invalid role. Use: client, masseur, admin"}
+    fpath = os.path.join("config", fname)
+    if not os.path.exists(fpath):
+        return {"ok": False, "error": "Education file not found"}
+    with open(fpath, "r", encoding="utf-8") as f:
+        content = f.read()
+    return {"ok": True, "role": role, "content": content}
+
+
+@app.post("/api/admin/test_client")
+async def api_test_client_create(req: dict):
+    from core.client_profiles import create_test_patient
+    profile = create_test_patient()
+    if not profile:
+        return {"ok": False, "error": "Failed to create test patient"}
+    return {"ok": True, "client": profile}
+
+
+@app.post("/api/admin/test_client/delete")
+async def api_test_client_delete(req: dict, chat_id: int = 0):
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    from core.client_profiles import delete_test_patient
+    ok = delete_test_patient(chat_id)
+    return {"ok": ok}
+
+
 @app.get("/api/admin/masseurs")
 async def api_masseurs_list(chat_id: int = 0):
     """List all registered masseurs."""

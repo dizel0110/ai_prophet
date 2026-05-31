@@ -181,9 +181,12 @@ def get_all_profiles() -> List[Dict[str, Any]]:
     return result
 
 
-def get_stats() -> Dict[str, Any]:
+def get_stats(filter_test: bool = True) -> Dict[str, Any]:
     profiles = _load_profiles()
     records = _load_records()
+
+    if filter_test:
+        profiles = {k: v for k, v in profiles.items() if not v.get("is_test")}
 
     total_clients = len(profiles)
     total_consultations = sum(p.get("total_consultations", 0) for p in profiles.values())
@@ -241,3 +244,164 @@ def get_stats() -> Dict[str, Any]:
         "top_pain_locations": sorted(pain_locations.items(), key=lambda x: -x[1])[:5],
         "top_music_genres": sorted(music_genres.items(), key=lambda x: -x[1])[:5],
     }
+
+
+_TEST_NAMES = [
+    "Иван Петров", "Мария Иванова", "Алексей Смирнов", "Елена Кузнецова",
+    "Дмитрий Попов", "Ольга Васильева", "Сергей Новиков", "Анна Козлова",
+    "Михаил Зайцев", "Наталья Морозова", "Андрей Волков", "Татьяна Соколова",
+    "Павел Белов", "Юлия Романова", "Артём Крылов", "Екатерина Орлова",
+]
+
+_TEST_COMPLAINTS = [
+    "Боль в пояснице после работы за компьютером",
+    "Напряжение в шее и плечах, головные боли",
+    "Ноющая боль в пояснице после сна",
+    "Сколиоз, асимметрия плеч",
+    "Остеохондроз шейного отдела",
+    "Боли в коленях после бега",
+    "Усталость в ногах к вечеру",
+    "Мигрени, зажимы в верхней части спины",
+    "Боли в грудном отделе при сидении",
+    "Хроническое напряжение в пояснице",
+    "Бессонница на фоне стресса, напряжение в спине",
+    "Сутулость, боли между лопатками",
+    "Травма поясницы 2 года назад, периодические боли",
+    "Грыжа L4-L5, наблюдение",
+]
+
+_TEST_TECHNIQUES = [
+    "Классический массаж спины",
+    "Шведский массаж всего тела",
+    "Массаж шейно-воротниковой зоны",
+    "Стоун-терапия с элементами лимфодренажа",
+    "Спортивный массаж",
+    "Антицеллюлитный массаж",
+    "Тайский массаж спины",
+    "Миофасциальный релиз",
+]
+
+_TEST_MUSIC_GENRES = ["Ambient", "Nature", "Jazz", "Classical", "Spa", "Binaural"]
+_TEST_PAIN_LOCATIONS = ["Поясница", "Шея", "Плечи", "Грудной отдел", "Ноги", "Поясница и крестец"]
+_TEST_PAIN_TYPES = ["Хроническая", "Острая", "Тянущая", "Ноющая", "Резкая"]
+
+
+def _next_test_chat_id() -> int:
+    profiles = _load_profiles()
+    used = set()
+    for k, v in profiles.items():
+        if v.get("is_test"):
+            try:
+                used.add(int(k))
+            except ValueError:
+                pass
+    # Find next free id in range 90000000-90999999
+    base = 90000000
+    while base in used:
+        base += 1
+    return base
+
+
+import random
+
+
+def create_test_patient() -> Optional[Dict[str, Any]]:
+    """Create a test patient with realistic data. Returns profile dict."""
+    now = time.time()
+    chat_id = _next_test_chat_id()
+    name = random.choice(_TEST_NAMES)
+    age = random.randint(22, 65)
+    gender = "Мужской" if random.random() < 0.4 else "Женский"
+    phone = f"+7000{random.randint(100000, 999999)}"
+    complaints = random.choice(_TEST_COMPLAINTS)
+    pain_loc = random.choice(_TEST_PAIN_LOCATIONS)
+    pain_type = random.choice(_TEST_PAIN_TYPES)
+    technique = random.choice(_TEST_TECHNIQUES)
+    music = random.choice(_TEST_MUSIC_GENRES)
+    consultations_count = random.randint(1, 4)
+
+    profile = {
+        "chat_id": chat_id,
+        "first_name": name,
+        "phone": phone,
+        "first_visit": now - consultations_count * random.randint(7, 60) * 86400,
+        "last_visit": now - random.randint(0, 14) * 86400,
+        "total_consultations": consultations_count,
+        "consultations": [],
+        "latest_questionnaire": {},
+        "is_test": True,
+    }
+
+    questionnaire = {
+        "full_name": name,
+        "age": age,
+        "gender": gender,
+        "phone": phone,
+        "complaints": complaints,
+        "pain_location": pain_loc,
+        "pain_type": pain_type,
+    }
+
+    for i in range(consultations_count):
+        c_date = profile["first_visit"] + i * random.randint(5, 30) * 86400
+        c_tech = random.choice(_TEST_TECHNIQUES)
+        c_music = random.choice(_TEST_MUSIC_GENRES)
+        record = {
+            "consult_id": f"c_{chat_id}_{int(c_date)}",
+            "date": c_date,
+            "chat_id": chat_id,
+            "recommended_technique": c_tech,
+            "pain_location": pain_loc,
+            "pain_type": pain_type,
+            "complaints": complaints if i == consultations_count - 1 else random.choice(_TEST_COMPLAINTS),
+            "music_genre": c_music,
+            "photo_count": random.randint(0, 3),
+            "video_count": random.randint(0, 1),
+            "referral_specialists": [],
+            "has_contraindications": random.random() < 0.15,
+            "age": age,
+            "gender": gender,
+            "is_test": True,
+        }
+        profile["consultations"].append(record)
+
+    profile["latest_questionnaire"] = questionnaire
+
+    with _lock:
+        profiles = _load_profiles()
+        chat_key = str(chat_id)
+        profiles[chat_key] = profile
+        # Add records
+        records = _load_records()
+        for c in profile["consultations"]:
+            records[c["consult_id"]] = {
+                "chat_id": chat_id,
+                "date": c["date"],
+                "technique": c["recommended_technique"],
+                "is_test": True,
+            }
+        _save_profiles(profiles)
+        _save_records(records)
+
+    logger.info(f"Created test patient {chat_id}: {name}")
+    return profile
+
+
+def delete_test_patient(chat_id: int) -> bool:
+    """Delete a test patient by chat_id. Returns True if deleted."""
+    with _lock:
+        profiles = _load_profiles()
+        chat_key = str(chat_id)
+        if chat_key not in profiles or not profiles[chat_key].get("is_test"):
+            return False
+        # Remove consultation records
+        records = _load_records()
+        for c in profiles[chat_key].get("consultations", []):
+            cid = c.get("consult_id", "")
+            records.pop(cid, None)
+        _save_records(records)
+        # Remove profile
+        del profiles[chat_key]
+        _save_profiles(profiles)
+    logger.info(f"Deleted test patient {chat_id}")
+    return True
