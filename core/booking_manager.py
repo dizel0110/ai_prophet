@@ -189,6 +189,13 @@ def get_free_slots(masseur_chat_id: int, slot_date: str = None) -> List[Dict[str
               if s.get("masseur_chat_id") == masseur_chat_id
               and s.get("status") == "free"
               and (slot_date is None or s.get("slot_date") == slot_date)]
+    if not result:
+        sd = slot_date or date.today().isoformat()
+        generated = generate_slots(masseur_chat_id, sd, days=3)
+        _save_slots(generated)
+        result = [s for s in generated
+                  if s.get("status") == "free"
+                  and (slot_date is None or s.get("slot_date") == slot_date)]
     return result
 
 # ──────────────────── Bookings ────────────────────
