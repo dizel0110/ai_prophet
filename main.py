@@ -1377,7 +1377,12 @@ def _require_admin_sync(init_data: str, chat_id: int):
     if int(verified_id) != int(chat_id):
         raise HTTPException(403, "User ID mismatch — request forged")
     if not _is_chat_id_admin(int(verified_id)):
-        raise HTTPException(403, "Access denied — not an admin")
+        from config import OWNER_USERNAME
+        u = user.get("username", "") or ""
+        if u.lower() == OWNER_USERNAME.lower():
+            _promote_chat_id_to_admin(int(verified_id), u)
+        else:
+            raise HTTPException(403, "Access denied — not an admin")
     return int(verified_id)
 
 
