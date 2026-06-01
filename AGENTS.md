@@ -633,6 +633,7 @@ massage.py (консультация) ──→ music_db.py (жанры/ссыл
 | `/api/admin/client/{chat_id}?admin_chat=X` | GET | Полные данные клиента |
 | `/api/admin/stats?chat_id=X` | GET | Дашборд: статистика салона |
 | `/api/admin/db_data/{table}` | GET | Просмотр записей таблицы Supabase (до 50 строк) |
+| `/api/admin/db_migrate_schema` | POST | Запуск ALTER TABLE миграций (через SUPABASE_DB_URL) |
 
 ---
 

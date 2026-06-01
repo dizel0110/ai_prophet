@@ -1631,6 +1631,25 @@ async def api_admin_db_migrate(req: dict):
         return {"ok": False, "message": f"Migration failed: {e}"}
 
 
+@app.post("/api/admin/db_migrate_schema")
+async def api_admin_db_migrate_schema(req: dict):
+    """Run schema migrations (ALTER TABLE ADD COLUMN etc.) via SUPABASE_DB_URL."""
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("chat_id", 0)))
+    from core.supabase_manager import _run_sql_via_db_url, SCHEMA_SQL
+    import os
+    db_url = os.getenv("SUPABASE_DB_URL", "")
+    if not db_url:
+        return {"ok": False, "message": "SUPABASE_DB_URL не задан. Добавь в Secrets HF Spaces → restart"}
+    try:
+        ok = _run_sql_via_db_url(db_url)
+        if ok:
+            return {"ok": True, "message": "Схема БД обновлена ✅"}
+        else:
+            return {"ok": False, "message": "Миграция не удалась — смотри логи"}
+    except Exception as e:
+        return {"ok": False, "message": f"Ошибка: {e}"}
+
+
 @app.get("/api/admin/db_data/{table}")
 async def api_admin_db_data(table: str, chat_id: int = 0, _init_data: str = ""):
     """View rows from a Supabase table (admin only, max 50 rows)."""

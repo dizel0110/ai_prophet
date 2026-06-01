@@ -1119,6 +1119,7 @@ html{scroll-behavior:smooth}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadDbStatus()">🔄 Обновить</button>
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="syncDb()">📤 Sync JSON → DB</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="migrateSchema()">🔄 Мигрировать схему БД</button>
         </div>
         <div id="db-sync-msg" style="margin-top:6px;font-size:11px;color:var(--hint)"></div>
       </div>
@@ -2006,6 +2007,15 @@ async function syncDb() {
   var res = await api('/api/admin/db_migrate', {chat_id: u, _init_data: getInitData()});
   msg.textContent = res.ok ? '✅ ' + (res.message || 'Готово') : '❌ ' + (res.message || 'Ошибка');
   loadDbStatus();
+}
+async function migrateSchema() {
+  var u = uid();
+  if (!u) return;
+  var msg = qs('db-sync-msg');
+  msg.textContent = 'Миграция схемы...';
+  var res = await api('/api/admin/db_migrate_schema', {chat_id: u, _init_data: getInitData()});
+  msg.textContent = res.message || (res.ok ? '✅ Готово' : '❌ Ошибка');
+  if (res.ok) loadDbStatus();
 }
 
 const COUNTRY_CODES = [
