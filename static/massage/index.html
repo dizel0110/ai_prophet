@@ -582,6 +582,23 @@ html{scroll-behavior:smooth}
       <button class="bk-toggle active" data-role="client" onclick="switchBkRole('client')">👤 Клиент</button>
       <button class="bk-toggle" data-role="masseur" onclick="switchBkRole('masseur')">💆 Массажист</button>
     </div>
+    <div id="masseurSlotGrid" style="display:none;margin-bottom:12px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:600">📅 Сетка записи</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="masseurGridPrev" onclick="masseurGridDate(-1)" style="background:none;border:none;cursor:pointer;font-size:16px">◀</button>
+          <span id="masseurGridDateLabel"></span>
+          <button id="masseurGridNext" onclick="masseurGridDate(1)" style="background:none;border:none;cursor:pointer;font-size:16px">▶</button>
+          <button class="btn" style="font-size:11px;padding:2px 6px" onclick="masseurGridToday()">Сегодня</button>
+        </div>
+      </div>
+      <div id="masseurGridBody" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:400px;overflow-y:auto"></div>
+      <div style="display:flex;gap:10px;margin-top:4px;color:var(--hint);font-size:10px">
+        <span>🟢 Свободно</span>
+        <span>🟡 Ожидает</span>
+        <span>🔴 Занято</span>
+      </div>
+    </div>
     <div class="card" id="myBookingsList">
       <div class="loading">Загрузка...</div>
     </div>
@@ -3948,6 +3965,13 @@ function switchBkRole(role) {
     b.classList.toggle('active', b.getAttribute('data-role') === role);
   });
   tg.HapticFeedback.impactOccurred('light');
+  var grid = document.getElementById('masseurSlotGrid');
+  if (role === 'masseur') {
+    grid.style.display = 'block';
+    masseurGridToday();
+  } else {
+    grid.style.display = 'none';
+  }
   loadMyBookings();
 }
 
@@ -3986,6 +4010,71 @@ function loadMyBookings() {
     el.innerHTML = h;
   }).catch(function() {
     el.innerHTML = '<div style="text-align:center;padding:20px;color:#e74c3c">❌ Ошибка загрузки</div>';
+  });
+}
+
+var _masseurGridDate = new Date();
+
+function masseurGridToday() {
+  _masseurGridDate = new Date();
+  renderMasseurGrid();
+}
+
+function masseurGridDate(delta) {
+  _masseurGridDate.setDate(_masseurGridDate.getDate() + delta);
+  renderMasseurGrid();
+}
+
+function renderMasseurGrid() {
+  var u = uid();
+  if (!u) return;
+  var ds = localDateStr(_masseurGridDate);
+  document.getElementById('masseurGridDateLabel').textContent = ds;
+  var el = document.getElementById('masseurGridBody');
+  el.innerHTML = '<div class="loading" style="padding:12px">⏳ Загрузка...</div>';
+  apiGet('/api/massage/masseur_slots', {masseur_id: u, slot_date: ds}).then(function(d) {
+    if (!d.ok || !d.slots) {
+      el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--hint)">Нет данных</div>';
+      return;
+    }
+    var slots = d.slots;
+    if (slots.length === 0) {
+      el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--hint)">На этот день слоты не сгенерированы</div>';
+      return;
+    }
+    var h = '';
+    // Group consecutive slots by booking_id for span rendering
+    var groups = [];
+    var current = null;
+    slots.forEach(function(s) {
+      var bookingId = s.booking_id || 0;
+      var isBusy = s.status !== 'free';
+      if (current && current.booking_id === bookingId && current.isBusy === isBusy) {
+        current.count++;
+        current.end_time = s.start_time;
+      } else {
+        if (current) groups.push(current);
+        current = {start_time: s.start_time, end_time: s.start_time, booking_id: bookingId, status: s.status, isBusy: isBusy, count: 1};
+      }
+    });
+    if (current) groups.push(current);
+    var bg = {free:'#2ecc71', reserved:'#f39c12', booked:'#e74c3c'};
+    groups.forEach(function(g) {
+      var color = bg[g.status] || '#95a5a6';
+      var label = g.start_time;
+      if (g.count > 1) label += '–'+g.end_time;
+      if (g.status !== 'free' && g.booking_id) {
+        label += ' — '+ (g.service_name || '—');
+      }
+      h += '<div style="display:flex;align-items:center;padding:4px 8px;border-bottom:1px solid var(--border);gap:6px">'
+        + '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+color+'"></span>'
+        + '<span style="flex:1">'+label+'</span>'
+        + '<span style="font-size:10px;color:var(--hint)">'+({free:'свободно', reserved:'ожидает', booked:'занято'}[g.status]||g.status)+'</span>'
+        + '</div>';
+    });
+    el.innerHTML = h;
+  }).catch(function() {
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:#e74c3c">❌ Ошибка загрузки</div>';
   });
 }
 

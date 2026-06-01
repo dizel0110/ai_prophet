@@ -747,6 +747,16 @@ async def api_slots_month(masseur_id: int = 0, year: int = 0, month: int = 0, tz
     return {"ok": True, "days": total_map}
 
 
+@app.get("/api/massage/masseur_slots")
+async def api_masseur_slots(masseur_id: int = 0, slot_date: str = ""):
+    """Get ALL slots for a masseur on a date (free/reserved/booked)."""
+    if not masseur_id or not slot_date:
+        return {"ok": False, "error": "masseur_id and slot_date required"}
+    from core.booking_manager import get_masseur_slots
+    slots = get_masseur_slots(masseur_id, slot_date)
+    return {"ok": True, "slots": slots}
+
+
 @app.post("/api/massage/slots/generate")
 async def api_generate_slots(req: dict):
     """Generate time slots for a masseur."""

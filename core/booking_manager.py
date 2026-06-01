@@ -402,6 +402,35 @@ def get_bookings(for_chat_id: int = None, by_masseur: bool = False,
         result = [b for b in result if b.get("status") == status]
     return sorted(result, key=lambda x: x.get("created_at", 0), reverse=True)[:limit]
 
+
+def get_masseur_slots(masseur_id: int, slot_date: str) -> List[Dict[str, Any]]:
+    """Get ALL slots for a masseur on a date with status and booking info."""
+    slots = _load_json(SLOTS_PATH)
+    bookings = _load_json(BOOKINGS_PATH)
+    booking_map = {}
+    for b in bookings:
+        bid = b.get("id") or b.get("booking_id")
+        if bid:
+            booking_map[bid] = b
+    result = []
+    for s in slots:
+        if s.get("masseur_chat_id") == masseur_id and s.get("slot_date") == slot_date:
+            bid = s.get("booking_id", 0)
+            status = s.get("status", "free")
+            entry = {
+                "start_time": s["start_time"],
+                "duration_min": s.get("duration_min", 30),
+                "status": status,
+                "booking_id": bid,
+            }
+            if bid and bid in booking_map:
+                entry["service_name"] = booking_map[bid].get("service_name", "—")
+                entry["client_chat_id"] = booking_map[bid].get("client_chat_id")
+            result.append(entry)
+    result.sort(key=lambda x: x["start_time"])
+    return result
+
+
 # ──────────────────── Workload ────────────────────
 
 def get_workload(masseur_chat_id: int, week_start: str = None) -> Dict[str, Any]:
