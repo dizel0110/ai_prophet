@@ -390,7 +390,8 @@ def get_bookings(for_chat_id: int = None, by_masseur: bool = False,
         params["order"] = "created_at.desc"
         params["limit"] = str(limit)
         result = sb_query("bookings", params)
-        if isinstance(result, list):
+        if isinstance(result, list) and result:
+            sb_result = result
             return result
     bookings = _load_json(BOOKINGS_PATH)
     result = bookings
