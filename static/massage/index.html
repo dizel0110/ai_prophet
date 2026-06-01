@@ -1156,6 +1156,20 @@ html{scroll-behavior:smooth}
       </div>
     </details>
 
+    <!-- Masseur View (Admin impersonation) -->
+    <details id="admin-masseur-view-section" style="margin:12px 0">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--gold-dark);padding:4px 0">👁️ Посмотреть как массажист</summary>
+      <div style="font-size:12px;margin-top:6px;padding:8px;background:var(--bg);border-radius:8px">
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+          <select id="masseur-view-select" style="flex:1;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px" onchange="loadMasseurView()">
+            <option value="">— Выберите массажиста —</option>
+          </select>
+          <button class="btn" style="font-size:12px;padding:6px" onclick="loadMasseurViewList()">🔄</button>
+        </div>
+        <div id="masseur-view-content" style="font-size:11px;color:var(--hint);min-height:40px">Выберите массажиста для просмотра</div>
+      </div>
+    </details>
+
     <div class="sec-sub">👥 Клиенты</div>
     <div id="admin-client-list" style="margin-top:8px">
       <p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Загрузка...</p>
@@ -4406,6 +4420,101 @@ function resetBookingFlow() {
   document.getElementById('bookingStepsSection').style.display = 'none';
   document.querySelectorAll('.bk-error').forEach(function(e) { e.style.display = 'none'; });
 }
+
+// Masseur impersonation view (admin)
+var _masseurViewDate = new Date();
+
+function loadMasseurViewList() {
+  var u = uid();
+  if (!u) return;
+  apiGet('/api/admin/masseurs', {chat_id: u, _init_data: getInitData()}).then(function(d) {
+    var sel = document.getElementById('masseur-view-select');
+    if (!d.ok || !d.masseurs) { sel.innerHTML = '<option value="">Ошибка загрузки</option>'; return; }
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">— Выберите массажиста —</option>'
+      + d.masseurs.map(function(m) {
+        return '<option value="'+m.chat_id+'">'+(m.name||'ID '+m.chat_id)+'</option>';
+      }).join('');
+    sel.value = cur;
+  });
+}
+
+function loadMasseurView() {
+  var sel = document.getElementById('masseur-view-select');
+  var mid = parseInt(sel.value);
+  var el = document.getElementById('masseur-view-content');
+  if (!mid) { el.innerHTML = '<span style="color:var(--hint)">Выберите массажиста для просмотра</span>'; return; }
+  var u = uid();
+  if (!u) return;
+  // Load bookings as this masseur
+  apiGet('/api/massage/my_bookings', {chat_id: u, as_masseur: 1, masseur_id: mid}).then(function(bd) {
+    var h = '<div style="margin-bottom:6px"><b>💆 Записи к массажисту</b></div>';
+    if (!bd.ok || !bd.bookings || bd.bookings.length === 0) {
+      h += '<div style="color:var(--hint);padding:4px">Нет записей</div>';
+    } else {
+      bd.bookings.slice(0,10).forEach(function(b) {
+        var icons = {pending:'⏳', confirmed:'✅', cancelled:'❌'};
+        h += '<div style="padding:4px 0;border-bottom:1px solid var(--border)">'
+          + (icons[b.status]||'❓')+' <b>'+dateStr(b.slot_date||'')+'</b> в '+b.start_time
+          + ' <span style="color:var(--hint)">'+b.service_name+' '+b.duration_min+'мин · ID клиента: '+b.client_chat_id+'</span>'
+          + ' <span class="bk-status '+b.status+'">'+({pending:'⏳', confirmed:'✅', cancelled:'❌'}[b.status]||b.status)+'</span>'
+          + '</div>';
+      });
+    }
+    // Load slot grid for today
+    var ds = localDateStr(_masseurViewDate);
+    h += '<div style="margin-top:10px;margin-bottom:4px;display:flex;align-items:center;gap:6px">'
+      + '<button class="btn" style="font-size:10px;padding:2px 6px" onclick="masseurViewDate(-1)">◀</button>'
+      + '<b>📅 '+ds+'</b>'
+      + '<button class="btn" style="font-size:10px;padding:2px 6px" onclick="masseurViewDate(1)">▶</button>'
+      + '<button class="btn" style="font-size:10px;padding:2px 6px" onclick="masseurViewToday()">Сегодня</button>'
+      + '</div>';
+    h += '<div id="masseur-view-grid" style="font-size:10px">Загрузка...</div>';
+    el.innerHTML = h;
+    renderMasseurViewGrid(mid);
+  });
+}
+
+function masseurViewDate(delta) {
+  _masseurViewDate.setDate(_masseurViewDate.getDate() + delta);
+  loadMasseurView();
+}
+function masseurViewToday() {
+  _masseurViewDate = new Date();
+  loadMasseurView();
+}
+
+function renderMasseurViewGrid(mid) {
+  var ds = localDateStr(_masseurViewDate);
+  var el = document.getElementById('masseur-view-grid');
+  apiGet('/api/massage/masseur_slots', {masseur_id: mid, slot_date: ds}).then(function(d) {
+    if (!d.ok || !d.slots || d.slots.length === 0) {
+      el.innerHTML = '<span style="color:var(--hint)">Нет слотов на этот день</span>';
+      return;
+    }
+    var h = '';
+    var bg = {free:'#2ecc71', reserved:'#f39c12', booked:'#e74c3c'};
+    d.slots.forEach(function(s) {
+      var color = bg[s.status] || '#95a5a6';
+      h += '<div style="display:flex;align-items:center;padding:2px 4px;border-bottom:1px solid var(--border);gap:4px">'
+        + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+color+'"></span>'
+        + '<span style="flex:1">'+s.start_time+'</span>'
+        + '<span style="font-size:9px;color:var(--hint)">'+({free:'свободно', reserved:'ожидает', booked:'занято'}[s.status]||s.status)+'</span>'
+        + '</div>';
+    });
+    el.innerHTML = h;
+  });
+}
+
+// Load masseur list on admin page open
+document.addEventListener('DOMContentLoaded', function() {
+  var adminSection = document.getElementById('admin-masseur-view-section');
+  if (adminSection) {
+    adminSection.addEventListener('toggle', function() {
+      if (this.open) loadMasseurViewList();
+    });
+  }
+});
 
 // Version stamp for production verification
 (function(){ const v=document.createElement('div'); v.style.cssText='position:fixed;bottom:2px;right:4px;font-size:8px;color:var(--hint);opacity:0.4;z-index:999;pointer-events:none'; v.textContent='v2026.05.29'; document.body.appendChild(v); })();

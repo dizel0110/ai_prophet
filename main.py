@@ -856,13 +856,14 @@ async def api_cancel_booking(booking_id: int, req: dict = None):
 
 
 @app.get("/api/massage/my_bookings")
-async def api_my_bookings(chat_id: int = 0, as_masseur: int = 0, status: str = ""):
+async def api_my_bookings(chat_id: int = 0, as_masseur: int = 0, status: str = "", masseur_id: int = 0):
     """Get bookings for a user (client or masseur)."""
     if not chat_id:
         return {"ok": False, "error": "chat_id required"}
     from core.booking_manager import get_bookings
     by_masseur = bool(as_masseur)
-    bookings = get_bookings(chat_id, by_masseur=by_masseur, status=status or None)
+    lookup_id = masseur_id if by_masseur and masseur_id else chat_id
+    bookings = get_bookings(lookup_id, by_masseur=by_masseur, status=status or None)
     return {"ok": True, "bookings": bookings, "count": len(bookings)}
 
 
