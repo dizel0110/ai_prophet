@@ -4252,9 +4252,11 @@ function submitBookingFlow() {
     service_name: BK.selectedService,
     is_first_visit: !!BK.isNewClient,
     client_username: uname,
-  }).then(function(r) {
+    }).then(function(r) {
     if (r && r.ok) {
-      tg.showAlert('✅ Запись создана! Массажист получил уведомление.');
+      var msg = '✅ Запись создана! Массажист получил уведомление.';
+      if (r.warning) { msg += '\n\n⚠️ ' + r.warning; }
+      tg.showAlert(msg);
       resetBookingFlow();
       loadMyBookings();
     } else {

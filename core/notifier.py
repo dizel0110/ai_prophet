@@ -37,6 +37,8 @@ def _send_tg_sync(chat_id: int, text: str, reply_markup: dict = None) -> bool:
         r = requests.post(url, json=payload, timeout=10, proxies=proxies)
         if r.status_code != 200:
             logger.warning(f"TG notify to {chat_id}: {r.status_code} {r.text[:200]}")
+            if "chat not found" in r.text.lower():
+                logger.info(f"User {chat_id} hasn't started the bot — notification skipped")
         return r.status_code == 200
     except Exception as e:
         logger.warning(f"TG notify to {chat_id}: {e}")

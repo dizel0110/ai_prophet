@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   status TEXT DEFAULT 'pending',
   is_first_visit BOOLEAN DEFAULT true,
   client_note TEXT DEFAULT '',
+  client_username TEXT DEFAULT '',
   masseur_note TEXT DEFAULT '',
   cancelled_by TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -112,6 +113,9 @@ ALTER TABLE masseur_settings DROP CONSTRAINT IF EXISTS masseur_settings_chat_id_
 ALTER TABLE masseur_settings ADD COLUMN IF NOT EXISTS name TEXT DEFAULT '';
 ALTER TABLE masseur_settings ADD COLUMN IF NOT EXISTS specialties JSONB DEFAULT '[]';
 ALTER TABLE masseur_settings ADD COLUMN IF NOT EXISTS created_at DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS client_username TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS slot_date TEXT DEFAULT '';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS start_time TEXT DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS admin_users (
   chat_id BIGINT PRIMARY KEY REFERENCES profiles(chat_id),

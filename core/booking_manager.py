@@ -277,6 +277,8 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
         "masseur_chat_id": masseur_chat_id,
         "service_name": service_name,
         "duration_min": duration_min,
+        "slot_date": slot_date,
+        "start_time": start_time,
         "status": "pending",
         "is_first_visit": is_first_visit,
         "client_note": note,
@@ -294,16 +296,19 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
                 sb_req("PATCH", f"time_slots?masseur_chat_id=eq.{masseur_chat_id}&slot_date=eq.{slot_date}&start_time=eq.{start_time}&duration_min=eq.{duration_min}", {"status": "reserved", "client_chat_id": client_chat_id, "booking_id": booking_id})
     bookings = _load_json(BOOKINGS_PATH)
     booking["id"] = int(time.time() * 1000) % 10000000000
-    booking["slot_date"] = slot_date
-    booking["start_time"] = start_time
     bookings.append(booking)
     _save_json(BOOKINGS_PATH, bookings)
     booking_id = booking.get("id")
-    try:
-        from core.notifier import notify_booking_created
-        notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time, client_username, booking_id)
-    except Exception as e:
-        logger.warning(f"Notify create failed: {e}")
+    errors = []
+    if sb_req:
+        try:
+            from core.notifier import notify_booking_created
+            notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time, client_username, booking_id)
+        except Exception as e:
+            logger.warning(f"Notify create failed: {e}")
+            errors.append("notify")
+    if errors:
+        booking["_errors"] = errors
     return booking
 
 def confirm_booking(booking_id: int) -> bool:

@@ -804,7 +804,16 @@ async def api_create_booking(req: dict):
                              duration, service, note, first_visit, client_username)
     if not booking:
         return {"ok": False, "error": "Нельзя создать больше 2 активных записей"}
-    return {"ok": True, "booking": booking}
+    warn = []
+    if booking.get("_errors"):
+        if "notify" in booking["_errors"]:
+            warn.append("Массажист ещё не активировал бота — уведомление не доставлено")
+        if "supabase" in booking["_errors"]:
+            warn.append("Не удалось сохранить в БД, запись сохранена локально")
+    resp = {"ok": True, "booking": booking}
+    if warn:
+        resp["warning"] = " ".join(warn)
+    return resp
 
 
 @app.post("/api/massage/book/{booking_id}/confirm")

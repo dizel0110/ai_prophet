@@ -276,6 +276,12 @@ async def cmd_start(message: types.Message):
     username = message.from_user.first_name or "путник"
     greeting = get_adaptive_greeting(username)
     
+    # Если массажист с неподтверждёнными записями — одно сообщение
+    try:
+        _notify_masseur_pending_bookings(message.chat.id)
+    except Exception:
+        pass
+
     # Проверяем VIP режим
     chat_id = str(message.chat.id)
     # Очищаем старые временные файлы пользователя перед началом сессии
@@ -304,6 +310,28 @@ async def cmd_start(message: types.Message):
         reply_markup=get_main_menu(vip_mode=is_vip),
         parse_mode="Markdown"
     )
+
+
+def _notify_masseur_pending_bookings(chat_id: int) -> None:
+    """Если пользователь — массажист и у него есть pending брони, отправляет одно сообщение."""
+    from core.masseur_diary import is_masseur
+    if not is_masseur(chat_id):
+        return
+    from core.booking_manager import get_bookings
+    pending = get_bookings(for_chat_id=chat_id, status="pending", as_masseur=True)
+    if not pending:
+        return
+    count = len(pending)
+    from core.notifier import _mini_app_url
+    mini_url = _mini_app_url()
+    text = (
+        f"\U0001f514 *У вас {count} {'нов' if count == 1 else ''}а{'я' if count == 1 else 'ых'} зап{'ись' if count == 1 else 'и'} на сеанс!*\n\n"
+        f"Откройте Mini App, чтобы подтвердить или отменить:\n"
+        f"[Открыть Mini App]({mini_url})"
+    )
+    from core.notifier import _send_tg_sync
+    _send_tg_sync(chat_id, text)
+
 
 @router.message(Command("playlist"))
 async def cmd_playlist(message: types.Message, bot: Bot):
