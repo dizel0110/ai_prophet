@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from config import TOKEN, PORT, PLATFORM, DATA_DIR
 from core.network import apply_dns_patch
-from handlers import messages, vip, limits, massage
+from handlers import messages, vip, limits, massage, booking
 
 # Настройка логов
 LOG_DIR = "logs"
@@ -60,6 +60,7 @@ if STATIC_DIR.exists():
 dp = Dispatcher()
 dp.include_router(vip.router)
 dp.include_router(limits.router)
+dp.include_router(booking.router)   # /book, /my_bookings before massage/messages
 dp.include_router(massage.router)
 dp.include_router(messages.router)
 
@@ -713,6 +714,99 @@ async def api_booking_request(req: dict):
         logger.warning(f"Failed to save booking: {e}")
 
     return {"ok": True}
+
+
+# ──────────────────── Booking System API ────────────────────
+
+@app.get("/api/massage/masseurs_available")
+async def api_masseurs_available():
+    """List masseurs with availability."""
+    from core.booking_manager import get_available_masseurs
+    masseurs = get_available_masseurs()
+    return {"ok": True, "masseurs": masseurs}
+
+
+@app.get("/api/massage/slots")
+async def api_slots(masseur_id: int = 0, slot_date: str = ""):
+    """Get free slots for a masseur on a date."""
+    if not masseur_id or not slot_date:
+        return {"ok": False, "error": "masseur_id and slot_date required"}
+    from core.booking_manager import get_free_slots
+    slots = get_free_slots(masseur_id, slot_date)
+    return {"ok": True, "slots": slots, "count": len(slots)}
+
+
+@app.post("/api/massage/slots/generate")
+async def api_generate_slots(req: dict):
+    """Generate time slots for a masseur."""
+    masseur_id = req.get("masseur_id", 0)
+    start_date = req.get("start_date", "")
+    days = req.get("days", 7)
+    if not masseur_id:
+        return {"ok": False, "error": "masseur_id required"}
+    from core.booking_manager import generate_slots, _save_slots
+    slots = generate_slots(masseur_id, start_date, days)
+    _save_slots(slots)
+    return {"ok": True, "count": len(slots), "message": f"Создано {len(slots)} слотов"}
+
+
+@app.post("/api/massage/book")
+async def api_create_booking(req: dict):
+    """Create a new booking."""
+    client_id = req.get("client_chat_id", 0)
+    masseur_id = req.get("masseur_chat_id", 0)
+    slot_date = req.get("slot_date", "")
+    start_time = req.get("start_time", "")
+    duration = req.get("duration_min", 60)
+    service = req.get("service_name", "")
+    note = req.get("note", "")
+    first_visit = req.get("is_first_visit", False)
+    if not client_id or not masseur_id or not slot_date or not start_time:
+        return {"ok": False, "error": "Missing required fields"}
+    from core.booking_manager import create_booking
+    booking = create_booking(client_id, masseur_id, slot_date, start_time,
+                             duration, service, note, first_visit)
+    if not booking:
+        return {"ok": False, "error": "Failed to create booking"}
+    return {"ok": True, "booking": booking}
+
+
+@app.post("/api/massage/book/{booking_id}/confirm")
+async def api_confirm_booking(booking_id: int):
+    """Confirm a booking."""
+    from core.booking_manager import confirm_booking
+    result = confirm_booking(booking_id)
+    return {"ok": result, "message": "Запись подтверждена" if result else "Ошибка подтверждения"}
+
+
+@app.post("/api/massage/book/{booking_id}/cancel")
+async def api_cancel_booking(booking_id: int, req: dict = None):
+    """Cancel a booking (checks deadline)."""
+    cancelled_by = (req or {}).get("cancelled_by", "client")
+    from core.booking_manager import cancel_booking
+    result = cancel_booking(booking_id, cancelled_by)
+    return {"ok": result.get("ok"), "reason": result.get("reason"), "message": result.get("message")}
+
+
+@app.get("/api/massage/my_bookings")
+async def api_my_bookings(chat_id: int = 0, as_masseur: int = 0, status: str = ""):
+    """Get bookings for a user (client or masseur)."""
+    if not chat_id:
+        return {"ok": False, "error": "chat_id required"}
+    from core.booking_manager import get_bookings
+    by_masseur = bool(as_masseur)
+    bookings = get_bookings(chat_id, by_masseur=by_masseur, status=status or None)
+    return {"ok": True, "bookings": bookings, "count": len(bookings)}
+
+
+@app.get("/api/massage/workload")
+async def api_workload(masseur_id: int = 0, week_start: str = ""):
+    """Get workload stats for a masseur."""
+    if not masseur_id:
+        return {"ok": False, "error": "masseur_id required"}
+    from core.booking_manager import get_workload
+    wl = get_workload(masseur_id, week_start or None)
+    return {"ok": True, "workload": wl}
 
 
 # ──────────────────── Massage Diary & Roles API ────────────────────

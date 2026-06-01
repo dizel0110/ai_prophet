@@ -520,8 +520,8 @@ html{scroll-behavior:smooth}
         <div class="contact-icon">📍</div>
         <div><div class="contact-label">Адрес</div><div class="contact-value">Москва, м. Центральная</div></div>
       </div>
-      <button class="btn btn-primary" onclick="showBookingForm()">📝 Записаться онлайн</button>
-      <button class="btn btn-secondary" onclick="openLink('https://wa.me/79991234567?text=Здравствуйте!+Хочу+записаться+на+массаж')">📱 Запись через WhatsApp</button>
+      <button class="btn btn-primary" onclick="startBookingFlow()">📝 Записаться онлайн</button>
+      <a class="btn btn-secondary" href="https://wa.me/79991234567?text=Здравствуйте!+Хочу+записаться+на+массаж" target="_blank">📱 Запись через WhatsApp</a>
     </div>
     <div class="card">
       <div class="sec-title" style="font-size:15px">Часы работы</div>
@@ -532,7 +532,78 @@ html{scroll-behavior:smooth}
       </div>
     </div>
   </div>
+  <div class="sec" id="bookingStepsSection" style="display:none">
+    <div class="sec-title">📅 Онлайн-запись</div>
+    <div class="booking-steps" id="bookingSteps">
+      <div class="bk-step active" data-step="1">📆</div>
+      <div class="bk-step" data-step="2">🕐</div>
+      <div class="bk-step" data-step="3">💆</div>
+      <div class="bk-step" data-step="4">✅</div>
+    </div>
+    <div class="card" id="bookingStepContent">
+      <div id="bkStep1">
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите дату</div>
+        <div id="bookingCalendar"></div>
+        <div id="bkError1" class="error-text" style="display:none;margin-top:10px"></div>
+      </div>
+      <div id="bkStep2" style="display:none">
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">Выберите время</div>
+        <div style="font-size:13px;color:var(--hint);margin-bottom:12px" id="bkDateLabel"></div>
+        <div id="bkTimeSlots"></div>
+        <div id="bkError2" class="error-text" style="display:none;margin-top:10px"></div>
+      </div>
+      <div id="bkStep3" style="display:none">
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите услугу</div>
+        <div id="bkServices"></div>
+      </div>
+      <div id="bkStep4" style="display:none">
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Подтверждение</div>
+        <div id="bkConfirmDetails" style="margin-bottom:16px;font-size:14px;line-height:2"></div>
+        <button class="btn btn-primary" onclick="submitBookingFlow()" style="width:100%">✅ Подтвердить запись</button>
+        <button class="btn btn-secondary" onclick="resetBookingFlow()" style="width:100%;margin-top:8px">🔄 Начать заново</button>
+        <div id="bkError4" class="error-text" style="display:none;margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="sec" id="myBookingsSection">
+    <div class="sec-title">📋 Мои записи</div>
+    <div class="sec-sub">Ваши активные и прошлые сеансы</div>
+    <div class="card" id="myBookingsList">
+      <div class="loading">Загрузка...</div>
+    </div>
+  </div>
 </div>
+
+<style>
+.booking-steps { display:flex; gap:8px; justify-content:center; margin-bottom:16px; }
+.bk-step { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; background:var(--border); transition:all .3s; }
+.bk-step.active { background:var(--gold); transform:scale(1.1); }
+.bk-step.done { background:var(--success); }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-header { text-align:center; font-size:11px; color:var(--hint); padding:4px 0; font-weight:600; }
+.cal-day { text-align:center; padding:8px 0; border-radius:8px; font-size:14px; cursor:pointer; transition:all .2s; }
+.cal-day:hover { background:var(--border); }
+.cal-day.selected { background:var(--gold); color:#fff; font-weight:700; }
+.cal-day.past { color:var(--hint); opacity:0.4; cursor:default; pointer-events:none; }
+.cal-day.today { border:2px solid var(--gold-dark); }
+.cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.cal-nav button { background:none; border:none; font-size:20px; cursor:pointer; padding:4px 12px; color:var(--gold-dark); }
+.cal-nav span { font-size:15px; font-weight:600; }
+.slot-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.slot-btn { padding:10px 8px; border:1px solid var(--border); border-radius:10px; background:var(--card); font-size:13px; cursor:pointer; text-align:center; transition:all .2s; font-family:inherit; }
+.slot-btn:hover { border-color:var(--gold); background:var(--gold-bg); }
+.slot-btn.selected { border-color:var(--gold); background:var(--gold); color:#fff; font-weight:600; }
+.svc-btn { display:block; width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--card); font-size:14px; cursor:pointer; text-align:left; margin-bottom:8px; transition:all .2s; font-family:inherit; }
+.svc-btn:hover { border-color:var(--gold); background:var(--gold-bg); }
+.svc-btn.selected { border-color:var(--gold); background:var(--gold); color:#fff; }
+.error-text { color:#e74c3c; font-size:13px; }
+.booking-entry { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.booking-entry:last-child { border-bottom:none; }
+.bk-status { font-size:12px; padding:2px 8px; border-radius:4px; }
+.bk-status.pending { background:#fff3cd; color:#856404; }
+.bk-status.confirmed { background:#d4edda; color:#155724; }
+.bk-status.cancelled { background:#f8d7da; color:#721c24; }
+</style>
 
 <!-- PAGE: MORE (Reviews + Blog + Channel) -->
 <div class="page" id="page-more">
@@ -1188,7 +1259,7 @@ html{scroll-behavior:smooth}
     <span class="tab-label">О нас</span>
     <span class="tab-indicator"></span>
   </button>
-  <button class="tab" data-page="booking" onclick="navigate('booking')">
+  <button class="tab" data-page="booking" onclick="navigate('booking'); loadMyBookings()">
     <span class="tab-icon">📞</span>
     <span class="tab-label">Запись</span>
     <span class="tab-indicator"></span>
@@ -1246,6 +1317,7 @@ function navigate(page) {
   tg.HapticFeedback.impactOccurred('light');
   window.scrollTo(0, 0);
   if (page === 'ai') { loadMassageResults(); checkQuestionnaireStatus(); checkQuestionnaireProgress(); }
+  if (page === 'booking') { loadMyBookings(); }
 }
 
 const BOT_USERNAME = 'ai_prophet_io_bot';
@@ -3734,6 +3806,191 @@ function closeSessionModal() { qs('sessionModal').style.display = 'none'; }
 function showCert(src) { tg.HapticFeedback.impactOccurred('medium'); qs('certModalImg').src = src; qs('certModal').style.display = 'flex'; }
 function closeCertModal() { qs('certModal').style.display = 'none'; }
 // Initial page entry animation for home
+
+// ─── Booking System (Phase B) ───
+
+var BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0};
+
+function loadMyBookings() {
+  var u = uid();
+  if (!u) return;
+  apiGet('/api/massage/my_bookings', {chat_id: u}).then(function(d) {
+    var el = document.getElementById('myBookingsList');
+    if (!d.ok || !d.bookings || d.bookings.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--hint)">У вас пока нет записей</div>';
+      return;
+    }
+    var h = '';
+    d.bookings.slice(0,10).forEach(function(b) {
+      var icons = {pending:'⏳', confirmed:'✅', cancelled:'❌'};
+      var cls = b.status || 'pending';
+      h += '<div class="booking-entry"><div>'
+        + (icons[cls]||'❓')+' <b>'+dateStr(b.slot_date||'')+'</b> в '+b.start_time+'<br>'
+        + '<span style="font-size:12px;color:var(--hint)">💆 '+(b.service_name||'—')+' / '+b.duration_min+'мин</span></div>'
+        + '<span class="bk-status '+cls+'">'+
+          {pending:'⏳ Ожидает', confirmed:'✅ Подтверждён', cancelled:'❌ Отменён'}[cls]||cls+'</span></div>';
+    });
+    el.innerHTML = h;
+  });
+}
+
+function dateStr(s) { try { var d=new Date(s); return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear(); } catch(e) { return s; } }
+
+function startBookingFlow() {
+  tg.HapticFeedback.impactOccurred('medium');
+  BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0};
+  document.getElementById('bookingStepsSection').style.display = 'block';
+  document.getElementById('myBookingsSection').scrollIntoView({behavior:'smooth'});
+  showBkStep(1);
+  renderBookingCalendar();
+}
+
+function showBkStep(n) {
+  BK.step = n;
+  document.querySelectorAll('.bk-step').forEach(function(s) {
+    var sn = parseInt(s.getAttribute('data-step'));
+    s.classList.toggle('active', sn === n);
+    s.classList.toggle('done', sn < n);
+  });
+  for (var i=1;i<=4;i++) {
+    var el = document.getElementById('bkStep'+i);
+    if (el) el.style.display = i === n ? 'block' : 'none';
+  }
+}
+
+function renderBookingCalendar() {
+  var today = new Date();
+  var year = today.getFullYear();
+  var month = today.getMonth();
+  var el = document.getElementById('bookingCalendar');
+  var h = '<div class="cal-nav"><span>'+['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][month]+' '+year+'</span></div>';
+  h += '<div class="cal-grid">';
+  var days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  days.forEach(function(d) { h += '<div class="cal-header">'+d+'</div>'; });
+  var firstDow = new Date(year, month, 1).getDay();
+  firstDow = firstDow === 0 ? 6 : firstDow - 1;
+  for (var i=0;i<firstDow;i++) h += '<div></div>';
+  var daysInMonth = new Date(year, month+1, 0).getDate();
+  for (var d=1; d<=daysInMonth; d++) {
+    var dt = new Date(year, month, d);
+    var dateStr = dt.toISOString().slice(0,10);
+    var isPast = dt < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    var isToday = dateStr === today.toISOString().slice(0,10);
+    var cls = 'cal-day';
+    if (isPast) cls += ' past';
+    if (isToday) cls += ' today';
+    if (BK.selectedDate === dateStr) cls += ' selected';
+    h += '<div class="'+cls+'" onclick="selectBkDate(\''+dateStr+'\')">'+d+'</div>';
+  }
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+function selectBkDate(dateStr) {
+  BK.selectedDate = dateStr;
+  tg.HapticFeedback.impactOccurred('light');
+  renderBookingCalendar();
+  document.getElementById('bkDateLabel').textContent = 'Дата: '+dateStr;
+  loadTimeSlots(dateStr);
+  showBkStep(2);
+}
+
+function loadTimeSlots(dateStr) {
+  var u = uid();
+  var el = document.getElementById('bkTimeSlots');
+  var err = document.getElementById('bkError2');
+  el.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
+  err.style.display = 'none';
+  apiGet('/api/massage/slots', {masseur_id: u, slot_date: dateStr}).then(function(d) {
+    if (!d.ok || !d.slots || d.slots.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--hint)">😕 На эту дату нет свободных слотов.<br><a href="#" onclick="showBkStep(1);return false">◀ Выбрать другую дату</a></div>';
+      return;
+    }
+    var h = '<div class="slot-grid">';
+    d.slots.forEach(function(s) {
+      var sel = BK.selectedTime === s.start_time && BK.selectedDur === s.duration_min;
+      h += '<button class="slot-btn'+(sel?' selected':'')+'" onclick="selectBkSlot(\''+s.start_time+'\','+s.duration_min+')">'+s.start_time+'<br><span style="font-size:11px;color:var(--hint)">'+s.duration_min+'мин</span></button>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  }).catch(function() {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:#e74c3c">❌ Ошибка загрузки. Попробуйте позже.</div>';
+  });
+}
+
+function selectBkSlot(time, dur) {
+  BK.selectedTime = time;
+  BK.selectedDur = dur;
+  tg.HapticFeedback.impactOccurred('light');
+  loadTimeSlots(BK.selectedDate);
+  renderServices();
+  showBkStep(3);
+}
+
+function renderServices() {
+  var services = ['Классический массаж','Антицеллюлитный массаж','Спортивный массаж','Массаж спины и шеи','Стоун-терапия','Медовый массаж','Тайский массаж','Массаж лица','Аромамассаж','Бамбуковый массаж','Лимфодренажный массаж','Экспресс-программа'];
+  var el = document.getElementById('bkServices');
+  var h = '';
+  services.forEach(function(svc, i) {
+    var sel = BK.selectedService === svc;
+    h += '<button class="svc-btn'+(sel?' selected':'')+'" onclick="selectBkService('+i+',\''+svc+'\')">'+svc+'</button>';
+  });
+  el.innerHTML = h;
+}
+
+function selectBkService(idx, name) {
+  BK.selectedService = name;
+  tg.HapticFeedback.impactOccurred('light');
+  renderServices();
+  showConfirmStep();
+}
+
+function showConfirmStep() {
+  var el = document.getElementById('bkConfirmDetails');
+  el.innerHTML = '📆 <b>Дата:</b> '+BK.selectedDate+'<br>⏱ <b>Время:</b> '+BK.selectedTime+' ('+BK.selectedDur+' мин)<br>💆 <b>Услуга:</b> '+BK.selectedService;
+  showBkStep(4);
+}
+
+function submitBookingFlow() {
+  var u = uid();
+  if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
+  tg.HapticFeedback.impactOccurred('medium');
+  var btn = document.querySelector('#bkStep4 .btn-primary');
+  btn.disabled = true;
+  btn.textContent = '⏳ Отправка...';
+  api('/api/massage/book', {
+    client_chat_id: u,
+    masseur_chat_id: u,
+    slot_date: BK.selectedDate,
+    start_time: BK.selectedTime,
+    duration_min: BK.selectedDur,
+    service_name: BK.selectedService,
+  }).then(function(r) {
+    if (r && r.ok) {
+      tg.showAlert('✅ Запись создана! Массажист получил уведомление.');
+      resetBookingFlow();
+      loadMyBookings();
+    } else {
+      document.getElementById('bkError4').style.display = 'block';
+      document.getElementById('bkError4').textContent = '❌ ' + ((r && r.error) || 'Ошибка сервера');
+      btn.disabled = false;
+      btn.textContent = '✅ Подтвердить запись';
+    }
+  }).catch(function() {
+    document.getElementById('bkError4').style.display = 'block';
+    document.getElementById('bkError4').textContent = '❌ Ошибка сети';
+    btn.disabled = false;
+    btn.textContent = '✅ Подтвердить запись';
+  });
+}
+
+function resetBookingFlow() {
+  BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0};
+  document.getElementById('bookingStepsSection').style.display = 'none';
+  document.getElementById('bkError1').style.display = 'none';
+  document.getElementById('bkError2').style.display = 'none';
+  document.getElementById('bkError4').style.display = 'none';
+}
 
 // Version stamp for production verification
 (function(){ const v=document.createElement('div'); v.style.cssText='position:fixed;bottom:2px;right:4px;font-size:8px;color:var(--hint);opacity:0.4;z-index:999;pointer-events:none'; v.textContent='v2026.05.29'; document.body.appendChild(v); })();
