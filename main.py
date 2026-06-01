@@ -1600,6 +1600,26 @@ async def api_admin_db_migrate(req: dict):
         return {"ok": False, "message": f"Migration failed: {e}"}
 
 
+@app.get("/api/admin/db_data/{table}")
+async def api_admin_db_data(table: str, chat_id: int = 0, _init_data: str = ""):
+    """View rows from a Supabase table (admin only, max 50 rows)."""
+    _require_admin_sync(_init_data, chat_id)
+    allowed_tables = ("profiles", "consultations", "diary_entries", "time_slots",
+                      "bookings", "masseur_settings", "admin_users")
+    if table not in allowed_tables:
+        return {"ok": False, "error": "Table not allowed"}
+    from core.supabase_manager import query
+    try:
+        rows = query(table)
+        if not rows:
+            return {"ok": True, "rows": [], "count": 0}
+        # Limit to 50 rows for display
+        rows = rows[:50]
+        return {"ok": True, "rows": rows, "count": len(rows)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # ──────────────────── Server ────────────────────
 
 def start_web():

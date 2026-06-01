@@ -632,7 +632,7 @@ massage.py (консультация) ──→ music_db.py (жанры/ссыл
 | `/api/admin/clients?chat_id=X` | GET | Список клиентов (только с анкетой) |
 | `/api/admin/client/{chat_id}?admin_chat=X` | GET | Полные данные клиента |
 | `/api/admin/stats?chat_id=X` | GET | Дашборд: статистика салона |
-| `/api/admin/client/{chat_id}/timeline?chat_id=X` | GET | Хронология консультаций клиента |
+| `/api/admin/db_data/{table}` | GET | Просмотр записей таблицы Supabase (до 50 строк) |
 
 ---
 

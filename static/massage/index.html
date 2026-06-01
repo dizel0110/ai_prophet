@@ -1111,6 +1111,7 @@ html{scroll-behavior:smooth}
           <span id="db-status-text">Проверка...</span>
         </div>
         <div id="db-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;font-size:11px"></div>
+        <div id="db-table-viewer" style="display:none;margin-bottom:8px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadDbStatus()">🔄 Обновить</button>
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="syncDb()">📤 Sync JSON → DB</button>
@@ -1945,10 +1946,53 @@ async function loadDbStatus() {
   Object.keys(res.tables).forEach(function(tbl) {
     var cnt = res.tables[tbl] || 0;
     total += cnt;
-    html += '<div style="padding:2px 4px;background:var(--card);border-radius:4px">' + tbl + ': <b>' + cnt + '</b></div>';
+    html += '<div style="padding:2px 4px;background:var(--card);border-radius:4px;cursor:pointer" onclick="loadTableData(\'' + tbl + '\')" title="👀 Показать записи">' + tbl + ': <b>' + cnt + '</b> <span style="font-size:9px;color:var(--hint)">👀</span></div>';
   });
   html += '<div style="padding:2px 4px;font-weight:600;color:var(--gold)">Всего: ' + total + ' записей</div>';
   tables.innerHTML = html;
+  // Hide table data viewer
+  var dv = qs('db-table-viewer');
+  if (dv) dv.style.display = 'none';
+}
+async function loadTableData(tbl) {
+  var u = uid();
+  if (!u) return;
+  var dv = qs('db-table-viewer');
+  dv.style.display = 'block';
+  dv.innerHTML = '<p style="font-size:11px;color:var(--hint);padding:4px">Загрузка ' + tbl + '...</p>';
+  var res = await apiGet('/api/admin/db_data/' + tbl, {chat_id: u, _init_data: getInitData()});
+  if (!res.ok || !res.rows) {
+    dv.innerHTML = '<p style="color:#e74c3c;font-size:11px">Ошибка: ' + (res.error || res.message || 'Неизвестно') + '</p>';
+    return;
+  }
+  if (res.rows.length === 0) {
+    dv.innerHTML = '<p style="color:var(--hint);font-size:11px;padding:4px">Нет записей</p>';
+    return;
+  }
+  // Build a table
+  var cols = Object.keys(res.rows[0]);
+  var html = '<div style="max-height:300px;overflow:auto;font-size:10px;margin-top:4px"><table style="width:100%;border-collapse:collapse">';
+  html += '<thead><tr>';
+  cols.forEach(function(c) {
+    html += '<th style="text-align:left;padding:3px 4px;position:sticky;top:0;background:var(--card);border-bottom:1px solid rgba(255,255,255,0.1);white-space:nowrap">' + c + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  res.rows.forEach(function(row) {
+    html += '<tr>';
+    cols.forEach(function(c) {
+      var v = row[c];
+      if (v === null || v === undefined) v = '';
+      else if (typeof v === 'object') v = JSON.stringify(v).slice(0, 60);
+      else v = String(v).slice(0, 60);
+      html += '<td style="padding:2px 4px;border-bottom:1px solid rgba(255,255,255,0.05);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(v) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  dv.innerHTML = html;
+}
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 async function syncDb() {
   var u = uid();
