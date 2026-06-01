@@ -1601,11 +1601,13 @@ async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0, _
 # ──────────────────── DB Admin ────────────────────
 
 @app.get("/api/admin/db_status")
+_sync_in_progress = False
+
 async def api_admin_db_status(chat_id: int = 0, _init_data: str = ""):
     """Supabase connection status + table row counts."""
     _require_admin_sync(_init_data, chat_id)
     from core.supabase_manager import SUPABASE_ENABLED, check_tables_exist, _sb_req
-    result = {"ok": True, "supabase_enabled": SUPABASE_ENABLED, "connected": False, "tables": {}, "error": None}
+    result = {"ok": True, "supabase_enabled": SUPABASE_ENABLED, "connected": False, "tables": {}, "error": None, "sync_in_progress": _sync_in_progress}
     if not SUPABASE_ENABLED:
         result["error"] = "SUPABASE_URL or SUPABASE_SERVICE_KEY missing in env"
         return result
@@ -1640,14 +1642,24 @@ async def api_admin_db_status(chat_id: int = 0, _init_data: str = ""):
 
 @app.post("/api/admin/db_migrate")
 async def api_admin_db_migrate(req: dict):
-    """Trigger JSON → Supabase migration (admin only)."""
+    """Trigger JSON → Supabase migration (admin only) — runs in background thread."""
+    global _sync_in_progress
     _require_admin_sync(req.get("_init_data", ""), int(req.get("chat_id", 0)))
+    if _sync_in_progress:
+        return {"ok": False, "message": "Синхронизация уже выполняется"}
+    import threading
     from core.supabase_manager import migrate_from_json
-    try:
-        migrate_from_json()
-        return {"ok": True, "message": "Migration complete"}
-    except Exception as e:
-        return {"ok": False, "message": f"Migration failed: {e}"}
+    def _run():
+        global _sync_in_progress
+        _sync_in_progress = True
+        try:
+            migrate_from_json()
+        except Exception as e:
+            logger.warning(f"Background sync error: {e}")
+        finally:
+            _sync_in_progress = False
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "message": "Синхронизация запущена в фоне — проверь статус через База данных"}
 
 
 @app.post("/api/admin/db_migrate_schema")

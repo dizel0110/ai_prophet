@@ -1918,7 +1918,10 @@ function qsv(id) { const e = qs(id); return e ? e.value.trim() : ''; }
 
 async function api(endpoint, data) {
   try {
-    const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    const ac = new AbortController();
+    const to = setTimeout(function() { ac.abort(); }, 25000);
+    const r = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data), signal: ac.signal });
+    clearTimeout(to);
     const txt = await r.text();
     try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
@@ -1964,7 +1967,7 @@ async function loadDbStatus() {
     return;
   }
   indicator.style.background = '#4caf50';
-  text.textContent = '✅ Supabase подключен';
+  text.textContent = '✅ Supabase подключен' + (res.sync_in_progress ? ' (🔄 синхронизация...)' : '');
   var html = '', total = 0;
   Object.keys(res.tables).forEach(function(tbl) {
     var cnt = res.tables[tbl] || 0;
@@ -2021,10 +2024,10 @@ async function syncDb() {
   var u = uid();
   if (!u) return;
   var msg = qs('db-sync-msg');
-  msg.textContent = 'Синхронизация...';
+  msg.textContent = 'Синхронизация запущена (фон)...';
   var res = await api('/api/admin/db_migrate', {chat_id: u, _init_data: getInitData()});
   msg.textContent = res.ok ? '✅ ' + (res.message || 'Готово') : '❌ ' + (res.message || 'Ошибка');
-  loadDbStatus();
+  setTimeout(function() { loadDbStatus(); }, 2000);
 }
 async function migrateSchema() {
   var u = uid();
