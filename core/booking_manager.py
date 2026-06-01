@@ -210,7 +210,8 @@ def get_free_slots(masseur_chat_id: int, slot_date: str = None, tz_offset: int =
 def create_booking(client_chat_id: int, masseur_chat_id: int,
                    slot_date: str, start_time: str, duration_min: int = 60,
                    service_name: str = "", note: str = "",
-                   is_first_visit: bool = False) -> Optional[Dict[str, Any]]:
+                   is_first_visit: bool = False,
+                   client_username: str = "") -> Optional[Dict[str, Any]]:
     """Create a new booking (status: pending)."""
     sb_req, sb_query = _init_sb()
     booking = {
@@ -221,6 +222,7 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
         "status": "pending",
         "is_first_visit": is_first_visit,
         "client_note": note,
+        "client_username": client_username,
         "created_at": datetime.utcnow().isoformat(),
     }
     if sb_req:
@@ -240,7 +242,7 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
     _save_json(BOOKINGS_PATH, bookings)
     try:
         from core.notifier import notify_booking_created
-        notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time)
+        notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time, client_username)
     except Exception as e:
         logger.warning(f"Notify create failed: {e}")
     return booking

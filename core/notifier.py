@@ -36,14 +36,18 @@ def _send_tg_sync(chat_id: int, text: str) -> bool:
 
 def notify_booking_created(client_chat_id: int, masseur_chat_id: int,
                            service: str, slot_date: str, start_time: str,
-                           client_name: str = "") -> None:
+                           client_username: str = "") -> None:
+    if client_username:
+        contact = f"@{client_username}"
+    else:
+        contact = f"ID {client_chat_id}"
+    link = f"tg://user?id={client_chat_id}"
     text = (
         f"\U0001f4c5 *Новая запись на сеанс*\n\n"
-        f"\U0001f464 Клиент: {client_name or f'ID {client_chat_id}'}\n"
-        f"\U0001f486 Услуга: {service or 'Не указана'}\n"
-        f"\U0001f4c6 Дата: {slot_date}\n"
-        f"\u23f1 Время: {start_time}\n"
-        f"\U0001f194 {client_chat_id}"
+        f"\U0001f464 *Клиент:* [{contact}]({link})\n"
+        f"\U0001f486 *Услуга:* {service or 'Не указана'}\n"
+        f"\U0001f4c6 *Дата:* {slot_date}\n"
+        f"\u23f1 *Время:* {start_time}"
     )
     _send_tg_sync(masseur_chat_id, text)
 

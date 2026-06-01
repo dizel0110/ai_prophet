@@ -551,16 +551,19 @@ html{scroll-behavior:smooth}
         <div style="font-size:13px;color:var(--hint);margin-bottom:12px" id="bkDateLabel"></div>
         <div id="bkTimeSlots"></div>
         <div id="bkError2" class="error-text" style="display:none;margin-top:10px"></div>
+        <button class="btn btn-secondary" onclick="showBkStep(1)" style="width:100%;margin-top:10px">◀ Назад</button>
       </div>
       <div id="bkStep3" style="display:none">
         <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите услугу</div>
         <div id="bkServices"></div>
+        <button class="btn btn-secondary" onclick="showBkStep(2)" style="width:100%;margin-top:10px">◀ Назад</button>
       </div>
       <div id="bkStep4" style="display:none">
         <div style="font-size:16px;font-weight:600;margin-bottom:12px">Подтверждение</div>
         <div id="bkConfirmDetails" style="margin-bottom:16px;font-size:14px;line-height:2"></div>
         <button class="btn btn-primary" onclick="submitBookingFlow()" style="width:100%">✅ Подтвердить запись</button>
-        <button class="btn btn-secondary" onclick="resetBookingFlow()" style="width:100%;margin-top:8px">🔄 Начать заново</button>
+        <button class="btn btn-secondary" onclick="showBkStep(3)" style="width:100%;margin-top:8px">◀ Назад</button>
+        <button class="btn btn-secondary" onclick="resetBookingFlow()" style="width:100%;margin-top:4px">🔄 Начать заново</button>
         <div id="bkError4" class="error-text" style="display:none;margin-top:10px"></div>
       </div>
     </div>
@@ -1070,6 +1073,25 @@ html{scroll-behavior:smooth}
       <div id="stats-techniques" style="margin:6px 0"></div>
       <div id="stats-demographics" style="display:flex;gap:12px;margin:6px 0;font-size:12px"></div>
     </div>
+
+    <!-- Masseur management -->
+    <details style="margin:12px 0">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--gold-dark);padding:4px 0">💆 Массажисты</summary>
+      <div style="font-size:12px;margin-top:6px;padding:8px;background:var(--bg);border-radius:8px">
+        <div id="admin-masseur-list" style="margin-bottom:8px;font-size:11px">Загрузка...</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <input id="masseur-reg-chat" placeholder="Telegram ID массажиста" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:var(--card);color:var(--text)">
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <input id="masseur-reg-name" placeholder="Имя (например, Юлия)" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:var(--card);color:var(--text)">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="registerMasseur()">✅ Добавить</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadMasseurs()">🔄 Обновить</button>
+        </div>
+        <div id="masseur-reg-msg" style="margin-top:6px;font-size:11px;color:var(--hint)"></div>
+      </div>
+    </details>
 
     <!-- DB Status -->
     <details id="admin-db-section" style="margin:12px 0">
@@ -3882,7 +3904,38 @@ function masseurCancelBooking(id) {
   });
 }
 
+function loadMasseurs() {
+  var u = uid();
+  if (!u) return;
+  apiGet('/api/admin/masseurs', {chat_id: u}).then(function(d) {
+    var el = document.getElementById('admin-masseur-list');
+    if (!d.ok || !d.masseurs || d.masseurs.length === 0) {
+      el.innerHTML = '<span style="color:var(--hint)">Нет зарегистрированных массажистов</span>';
+      return;
+    }
+    el.innerHTML = d.masseurs.map(function(m) {
+      return '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+        + '<span>💆 <b>'+(m.name||'—')+'</b> <span style="color:var(--hint)">(ID '+m.chat_id+')</span></span>'
+        + '<span style="font-size:11px;color:var(--hint)">'+(m.specialties||[]).join(', ')+'</span>'
+        + '</div>';
+    }).join('');
+  });
+}
+
+function registerMasseur() {
+  var u = uid();
+  var chatId = parseInt(document.getElementById('masseur-reg-chat').value);
+  var name = document.getElementById('masseur-reg-name').value.trim();
+  var msg = document.getElementById('masseur-reg-msg');
+  if (!chatId || !name) { msg.textContent = '❌ Введите ID и имя'; return; }
+  api('/api/admin/masseur', {chat_id: chatId, name: name, specialties: [], admin_chat: u}).then(function(d) {
+    msg.textContent = d.ok ? '✅ Массажист '+name+' добавлен' : '❌ '+(d.error||'Ошибка');
+    if (d.ok) { document.getElementById('masseur-reg-chat').value = ''; document.getElementById('masseur-reg-name').value = ''; loadMasseurs(); }
+  });
+}
+
 function dateStr(s) { try { var d=new Date(s); return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear(); } catch(e) { return s; } }
+function localDateStr(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 function startBookingFlow() {
   tg.HapticFeedback.impactOccurred('medium');
@@ -3913,22 +3966,23 @@ function renderBookingCalendar() {
   var el = document.getElementById('bookingCalendar');
   var h = '<div class="cal-nav"><span>'+['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'][month]+' '+year+'</span></div>';
   h += '<div class="cal-grid">';
-  var days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-  days.forEach(function(d) { h += '<div class="cal-header">'+d+'</div>'; });
+  var dayNames = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  dayNames.forEach(function(d) { h += '<div class="cal-header">'+d+'</div>'; });
   var firstDow = new Date(year, month, 1).getDay();
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
   for (var i=0;i<firstDow;i++) h += '<div></div>';
   var daysInMonth = new Date(year, month+1, 0).getDate();
+  var todayLocal = localDateStr(today);
   for (var d=1; d<=daysInMonth; d++) {
     var dt = new Date(year, month, d);
-    var dateStr = dt.toISOString().slice(0,10);
+    var dStr = localDateStr(dt);
     var isPast = dt < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    var isToday = dateStr === today.toISOString().slice(0,10);
+    var isToday = dStr === todayLocal;
     var cls = 'cal-day';
     if (isPast) cls += ' past';
     if (isToday) cls += ' today';
-    if (BK.selectedDate === dateStr) cls += ' selected';
-    h += '<div class="'+cls+'" onclick="selectBkDate(\''+dateStr+'\')">'+d+'</div>';
+    if (BK.selectedDate === dStr) cls += ' selected';
+    h += '<div class="'+cls+'" onclick="selectBkDate(\''+dStr+'\')">'+d+'</div>';
   }
   h += '</div>';
   el.innerHTML = h;
@@ -4003,6 +4057,8 @@ function showConfirmStep() {
 function submitBookingFlow() {
   var u = uid();
   if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
+  var uname = '';
+  try { uname = tg.initDataUnsafe?.user?.username || ''; } catch(e) {}
   tg.HapticFeedback.impactOccurred('medium');
   var btn = document.querySelector('#bkStep4 .btn-primary');
   btn.disabled = true;
@@ -4014,6 +4070,7 @@ function submitBookingFlow() {
     start_time: BK.selectedTime,
     duration_min: BK.selectedDur,
     service_name: BK.selectedService,
+    client_username: uname,
   }).then(function(r) {
     if (r && r.ok) {
       tg.showAlert('✅ Запись создана! Массажист получил уведомление.');

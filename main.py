@@ -761,11 +761,12 @@ async def api_create_booking(req: dict):
     service = req.get("service_name", "")
     note = req.get("note", "")
     first_visit = req.get("is_first_visit", False)
+    client_username = req.get("client_username", "")
     if not client_id or not masseur_id or not slot_date or not start_time:
         return {"ok": False, "error": "Missing required fields"}
     from core.booking_manager import create_booking
     booking = create_booking(client_id, masseur_id, slot_date, start_time,
-                             duration, service, note, first_visit)
+                             duration, service, note, first_visit, client_username)
     if not booking:
         return {"ok": False, "error": "Failed to create booking"}
     return {"ok": True, "booking": booking}
