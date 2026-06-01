@@ -1600,9 +1600,9 @@ async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0, _
 
 # ──────────────────── DB Admin ────────────────────
 
-@app.get("/api/admin/db_status")
 _sync_in_progress = False
 
+@app.get("/api/admin/db_status")
 async def api_admin_db_status(chat_id: int = 0, _init_data: str = ""):
     """Supabase connection status + table row counts."""
     _require_admin_sync(_init_data, chat_id)
