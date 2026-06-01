@@ -1092,6 +1092,7 @@ html{scroll-behavior:smooth}
       <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--gold-dark);padding:4px 0">💆 Массажисты</summary>
       <div style="font-size:12px;margin-top:6px;padding:8px;background:var(--bg);border-radius:8px">
         <div id="admin-masseur-list" style="margin-bottom:8px;font-size:11px">Загрузка...</div>
+        <div class="sec-sub" style="margin:8px 0 4px">➕ Добавить массажиста</div>
         <div style="display:flex;gap:8px;margin-bottom:6px">
           <input id="masseur-reg-chat" placeholder="Telegram ID массажиста" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:var(--card);color:var(--text)">
         </div>
@@ -4006,18 +4007,20 @@ function masseurCancelBooking(id) {
 function loadMasseurs() {
   var u = uid();
   if (!u) return;
+  var el = document.getElementById('admin-masseur-list');
+  el.innerHTML = '<span style="color:var(--hint);font-size:11px">⏳ Загрузка...</span>';
   apiGet('/api/admin/masseurs', {chat_id: u, _init_data: getInitData()}).then(function(d) {
-    var el = document.getElementById('admin-masseur-list');
     if (!d.ok || !d.masseurs || d.masseurs.length === 0) {
-      el.innerHTML = '<span style="color:var(--hint)">Нет зарегистрированных массажистов</span>';
+      el.innerHTML = '<span style="color:var(--hint);font-size:12px">👆 Добавьте массажиста выше. После добавления он появится здесь и в списке при бронировании.</span>';
       return;
     }
-    el.innerHTML = d.masseurs.map(function(m) {
-      return '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
-        + '<span>💆 <b>'+(m.name||'—')+'</b> <span style="color:var(--hint)">(ID '+m.chat_id+')</span></span>'
-        + '<span style="font-size:11px;color:var(--hint)">'+(m.specialties||[]).join(', ')+'</span>'
-        + '</div>';
-    }).join('');
+    el.innerHTML = '<div style="font-size:11px;color:var(--hint);margin-bottom:4px">Зарегистрированные массажисты:</div>'
+      + d.masseurs.map(function(m) {
+        return '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px">'
+          + '<span>💆 <b>'+(m.name||'—')+'</b> <span style="color:var(--hint)">(ID '+m.chat_id+')</span></span>'
+          + '<span style="font-size:11px;color:var(--hint)">'+(m.specialties||[]).join(', ')+'</span>'
+          + '</div>';
+      }).join('');
   });
 }
 
