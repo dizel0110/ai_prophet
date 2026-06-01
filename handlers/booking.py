@@ -197,13 +197,47 @@ async def on_bk_confirm(call: types.CallbackQuery):
             f"📆 {st['slot_date']} в {st['start_time']}\n"
             f"💆 {st.get('service_name', 'Классический массаж')}\n"
             f"🆔 №{booking.get('id')}\n\n"
-            f"Статус: ⏳ ожидает подтверждения\n"
+            f"Статус: ⏳ ожидает подтверждения массажиста\n"
             f"Массажист получил уведомление.",
             parse_mode="Markdown",
         )
     else:
         await call.message.edit_text("❌ Ошибка при создании записи. Попробуйте позже.")
     _clear_state(chat_id)
+
+# ─── Notification callback handlers (masseur confirm/cancel) ───
+
+@router.callback_query(lambda c: c.data and c.data.startswith("bk_notify_"))
+async def on_notify_action(call: types.CallbackQuery):
+    await call.answer()
+    parts = call.data.split(":")
+    action = parts[0].replace("bk_notify_", "")
+    if len(parts) < 2:
+        return
+    try:
+        booking_id = int(parts[1])
+    except ValueError:
+        return
+    if action == "confirm":
+        ok = confirm_booking(booking_id)
+        if ok:
+            await call.message.edit_text(
+                call.message.text + "\n\n✅ *Подтверждено*",
+                parse_mode="Markdown",
+            )
+            await call.answer("✅ Запись подтверждена", show_alert=True)
+        else:
+            await call.answer("❌ Ошибка подтверждения", show_alert=True)
+    elif action == "cancel":
+        result = cancel_booking(booking_id, cancelled_by="masseur")
+        if result.get("ok"):
+            await call.message.edit_text(
+                call.message.text + "\n\n❌ *Отменено*",
+                parse_mode="Markdown",
+            )
+            await call.answer("❌ Запись отменена", show_alert=True)
+        else:
+            await call.answer(f"❌ {result.get('message', 'Ошибка')}", show_alert=True)
 
 @router.callback_query(lambda c: c.data == "bk_back")
 async def on_bk_back(call: types.CallbackQuery):

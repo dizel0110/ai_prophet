@@ -45,7 +45,8 @@ def _send_tg_sync(chat_id: int, text: str, reply_markup: dict = None) -> bool:
 
 def notify_booking_created(client_chat_id: int, masseur_chat_id: int,
                            service: str, slot_date: str, start_time: str,
-                           client_username: str = "") -> None:
+                           client_username: str = "",
+                           booking_id: int = 0) -> None:
     if client_username:
         contact = f"@{client_username}"
     else:
@@ -60,10 +61,16 @@ def notify_booking_created(client_chat_id: int, masseur_chat_id: int,
     )
     mini_url = _mini_app_url()
     keyboard = {
-        "inline_keyboard": [[
-            {"text": "\U0001f4c5 Посмотреть в Mini App", "url": mini_url},
-            {"text": "\U0001f4ac Написать клиенту", "url": link},
-        ]]
+        "inline_keyboard": [
+            [
+                {"text": "\u2705 \u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", "callback_data": f"bk_notify_confirm:{booking_id}"},
+                {"text": "\u274c \u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", "callback_data": f"bk_notify_cancel:{booking_id}"},
+            ],
+            [
+                {"text": "\U0001f4c5 Mini App", "url": mini_url},
+                {"text": "\U0001f4ac \u041d\u0430\u043f\u0438\u0441\u0430\u0442\u044c", "url": link},
+            ],
+        ]
     }
     _send_tg_sync(masseur_chat_id, text, reply_markup=keyboard)
 

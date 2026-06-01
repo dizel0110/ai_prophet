@@ -764,11 +764,20 @@ async def api_create_booking(req: dict):
     client_username = req.get("client_username", "")
     if not client_id or not masseur_id or not slot_date or not start_time:
         return {"ok": False, "error": "Missing required fields"}
+    # Questionnaire gate: must have a profile <30 days old
+    import time
+    from core.client_profiles import get_profile
+    profile = get_profile(client_id)
+    if not profile:
+        return {"ok": False, "error": "Требуется заполнить медицинскую анкету перед записью"}
+    last = profile.get("last_visit", 0)
+    if last and (time.time() - last) / 86400 > 30:
+        return {"ok": False, "error": "Анкета устарела — пройдите чек-ап"}
     from core.booking_manager import create_booking
     booking = create_booking(client_id, masseur_id, slot_date, start_time,
                              duration, service, note, first_visit, client_username)
     if not booking:
-        return {"ok": False, "error": "Failed to create booking"}
+        return {"ok": False, "error": "Нельзя создать больше 2 активных записей"}
     return {"ok": True, "booking": booking}
 
 

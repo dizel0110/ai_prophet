@@ -212,7 +212,12 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
                    service_name: str = "", note: str = "",
                    is_first_visit: bool = False,
                    client_username: str = "") -> Optional[Dict[str, Any]]:
-    """Create a new booking (status: pending)."""
+    """Create a new booking (status: pending). Returns None if limit exceeded."""
+    # Check pending limit: max 2 pending bookings per client
+    existing = get_bookings(for_chat_id=client_chat_id, status="pending")
+    if len(existing) >= 2:
+        logger.warning(f"Client {client_chat_id} has {len(existing)} pending bookings, rejecting")
+        return None
     sb_req, sb_query = _init_sb()
     booking = {
         "client_chat_id": client_chat_id,
@@ -240,9 +245,10 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
     booking["start_time"] = start_time
     bookings.append(booking)
     _save_json(BOOKINGS_PATH, bookings)
+    booking_id = booking.get("id")
     try:
         from core.notifier import notify_booking_created
-        notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time, client_username)
+        notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time, client_username, booking_id)
     except Exception as e:
         logger.warning(f"Notify create failed: {e}")
     return booking
