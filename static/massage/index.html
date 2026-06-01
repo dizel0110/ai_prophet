@@ -159,8 +159,8 @@ body{font-family:-apple-system,system-ui,'Georgia',serif;background:var(--bg);co
 .channel-card{background:linear-gradient(135deg,rgba(196,154,108,.1),rgba(166,124,78,.05));border:1px solid rgba(196,154,108,.25)}
 
 /* Bottom Nav */
-.tab-bar{position:fixed;bottom:0;left:0;right:0;height:var(--tab-h);background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;padding:0 4px;z-index:100;backdrop-filter:blur(10px)}
-.tab{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:none;background:none;cursor:pointer;min-width:52px;transition:all .2s;font-family:inherit}
+.tab-bar{position:fixed;bottom:0;left:0;right:0;height:var(--tab-h);background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;justify-content:flex-start;padding:0 4px;z-index:100;backdrop-filter:blur(10px)}.tab-bar::-webkit-scrollbar{display:none}
+.tab{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border:none;background:none;cursor:pointer;min-width:52px;flex-shrink:0;transition:all .2s;font-family:inherit}
 .tab-icon{font-size:20px;line-height:1;transition:transform .2s}
 
 .tab-label{font-size:10px;color:var(--hint);font-weight:500;transition:color .2s}
@@ -2169,6 +2169,7 @@ function renderMarkdown(t) {
     return '%%EMBED_' + i + '%%';
   });
   var result = t
+    .replace(/\[ACTION:[^\]]*\]/g, '').replace(/\[ДЕЙСТВИЕ:[^\]]*\]/g, '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<b>$1</b>')
@@ -2210,9 +2211,29 @@ function addMsg(role, text, name, isHtml) {
   c.appendChild(b); c.scrollTop=c.scrollHeight;
   const old = qs('chat-suggestions'); if(old) old.remove();
   if(role==='ai'){
+    const wrap = document.createElement('div'); wrap.id='chat-suggestions'; wrap.style='display:flex;flex-wrap:wrap;gap:6px;padding:4px 0';
+    // Render ACTION markers as buttons
+    const acts = parseActions(text);
+    acts.forEach(function(a) {
+      var label = '';
+      if (a.type==='open_specialist') label = '🔄 Перейти к ' + (a.param||'специалисту');
+      else if (a.type==='play_music') label = '🎵 Музыка: ' + (a.param||'жанр');
+      else if (a.type==='start_consultation') label = '📋 Пройти диагностику';
+      else if (a.type==='go_booking') label = '📅 Записаться';
+      if (label) {
+        var btn = document.createElement('button'); btn.textContent=label; btn.className='btn btn-secondary'; btn.style='font-size:12px;padding:6px 12px;width:auto;min-width:0;margin:0';
+        btn.onclick=function(act){ return function(){
+          if (act.type==='open_specialist' && act.param) { closeSpecialistChat(); setTimeout(function() { openSpecialistChat(act.param); }, 200); }
+          else if (act.type==='play_music' && act.param) { closeSpecialistChat(); navigate('music'); setTimeout(function() { loadGenreTracks(act.param); }, 300); }
+          else if (act.type==='start_consultation') { closeSpecialistChat(); openConsultForm(); }
+          else if (act.type==='go_booking') { closeSpecialistChat(); navigate('booking'); }
+        };}(a);
+        wrap.appendChild(btn);
+      }
+    });
+    // Question suggestions
     const qs = text.match(/[^.!?]*\?/g);
     if(qs && qs.length){
-      const wrap = document.createElement('div'); wrap.id='chat-suggestions'; wrap.style='display:flex;flex-wrap:wrap;gap:6px;padding:4px 0';
       qs.slice(0,3).forEach(q => {
         const btn = document.createElement('button'); btn.textContent=q.trim().slice(0,40); btn.className='btn btn-secondary'; btn.style='font-size:12px;padding:6px 12px;width:auto;min-width:0;margin:0';
         btn.onclick=() => {
@@ -2221,6 +2242,8 @@ function addMsg(role, text, name, isHtml) {
         };
         wrap.appendChild(btn);
       });
+    }
+    if (wrap.children.length) {
       c.parentElement.insertBefore(wrap, c.nextSibling);
     }
   }
