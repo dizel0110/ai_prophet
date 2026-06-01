@@ -319,6 +319,28 @@ python -m pytest tests/ -v
 
 Test pattern: unit tests mock all network calls (`@patch`), test core logic only (parsing, caching, genre data). No tests that hit real APIs or Telegram.
 
+### Code Coverage
+
+**~1031 строк** тестового кода в 4 файлах:
+
+| Файл | Строк | Что покрывает |
+|------|-------|---------------|
+| `test_booking.py` | 319 | Слоты, бронь, подтверждение/отмена, workload, `get_available_masseurs` |
+| `test_music_player.py` | 296 | Поиск, кэш, жанры, `IA`-поиск |
+| `test_questionnaire.py` | 247 | Шаги, валидация, обязательные поля, типы |
+| `test_client_profiles.py` | 161 | Профили, консультации, quick checkup, статистика |
+
+**Правило:** любой новый модуль в `core/` или новая существенная логика (не багфикс строки на 2) должна сопровождаться тестом. Исключение — изменения UI/хендлеров (Telegram, HTML).
+
+**Не покрыто тестами (нужно):**
+- `core/agents/orchestrator.py`
+- `core/agents/agent_factory.py`
+- `core/agents/music_db.py`
+- `core/supabase_manager.py` (сложно — network, но можно мокнуть `_sb_req`)
+- `core/masseur_diary.py`
+- `core/booking_manager.py:get_available_masseurs()` — приоритет полей (name > email > fallback)
+- `handlers/` — сложно без бота, но `handlers/booking.py` можно с моками aiogram
+
 ### Push Policy
 | Change Type | Action |
 |-------------|--------|
