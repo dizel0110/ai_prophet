@@ -112,7 +112,8 @@ def _date_range(start_date: str, days: int = 7):
 
 def generate_slots(masseur_chat_id: int, start_date: str = None, days: int = 7,
                    work_hours: dict = None, durations: list = None,
-                   break_start: str = "13:00", break_end: str = "13:30") -> List[Dict[str, Any]]:
+                   break_start: str = "13:00", break_end: str = "13:30",
+                   tz_offset: int = None) -> List[Dict[str, Any]]:
     """Generate time slots for a masseur for the next N days."""
     if work_hours is None:
         work_hours = DEFAULT_WORK_HOURS
@@ -125,7 +126,10 @@ def generate_slots(masseur_chat_id: int, start_date: str = None, days: int = 7,
 
     slots = []
     dt_start = date.today().isoformat() if not start_date else start_date
-    now = datetime.now()
+    if tz_offset is not None:
+        now = datetime.utcnow() + timedelta(minutes=tz_offset)
+    else:
+        now = datetime.now()
     now_min = now.hour * 60 + now.minute
     for day_str in _date_range(dt_start, days):
         slot_time = wh_start
@@ -177,7 +181,7 @@ def _save_slots(slots: list):
             keys.add(_slot_key(s))
     _save_json(SLOTS_PATH, existing)
 
-def get_free_slots(masseur_chat_id: int, slot_date: str = None) -> List[Dict[str, Any]]:
+def get_free_slots(masseur_chat_id: int, slot_date: str = None, tz_offset: int = None) -> List[Dict[str, Any]]:
     """Get free slots for a masseur on a given date."""
     sb_req, sb_query = _init_sb()
     if sb_req:
@@ -194,7 +198,7 @@ def get_free_slots(masseur_chat_id: int, slot_date: str = None) -> List[Dict[str
               and (slot_date is None or s.get("slot_date") == slot_date)]
     if not result:
         sd = slot_date or date.today().isoformat()
-        generated = generate_slots(masseur_chat_id, sd, days=3)
+        generated = generate_slots(masseur_chat_id, sd, days=3, tz_offset=tz_offset)
         _save_slots(generated)
         result = [s for s in generated
                   if s.get("status") == "free"

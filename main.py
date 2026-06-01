@@ -727,12 +727,12 @@ async def api_masseurs_available():
 
 
 @app.get("/api/massage/slots")
-async def api_slots(masseur_id: int = 0, slot_date: str = ""):
+async def api_slots(masseur_id: int = 0, slot_date: str = "", tz_offset: int = None):
     """Get free slots for a masseur on a date."""
     if not masseur_id or not slot_date:
         return {"ok": False, "error": "masseur_id and slot_date required"}
     from core.booking_manager import get_free_slots
-    slots = get_free_slots(masseur_id, slot_date)
+    slots = get_free_slots(masseur_id, slot_date, tz_offset)
     return {"ok": True, "slots": slots, "count": len(slots)}
 
 

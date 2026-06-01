@@ -7,16 +7,25 @@ logger = logging.getLogger(__name__)
 
 
 def _send_tg_sync(chat_id: int, text: str) -> bool:
-    """Send Telegram message via Bot API directly (sync, no asyncio)."""
+    """Send Telegram message via Bot API (sync, respects PROXY_URL/TELEGRAM_API_URL)."""
     try:
         from config import TOKEN
-        import requests
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        import requests, os
+
+        telegram_api_url = os.getenv("TELEGRAM_API_URL")
+        base_url = (telegram_api_url or "https://api.telegram.org").rstrip("/")
+        url = f"{base_url}/bot{TOKEN}/sendMessage"
+
+        proxy_url = os.getenv("PROXY_URL")
+        proxies = None
+        if proxy_url:
+            proxies = {"https": proxy_url, "http": proxy_url}
+
         r = requests.post(url, json={
             "chat_id": chat_id,
             "text": text,
             "parse_mode": "Markdown",
-        }, timeout=10)
+        }, timeout=10, proxies=proxies)
         if r.status_code != 200:
             logger.warning(f"TG notify to {chat_id}: {r.status_code} {r.text[:200]}")
         return r.status_code == 200

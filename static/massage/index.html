@@ -568,6 +568,10 @@ html{scroll-behavior:smooth}
   <div class="sec" id="myBookingsSection">
     <div class="sec-title">📋 Мои записи</div>
     <div class="sec-sub">Ваши активные и прошлые сеансы</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="bk-toggle active" data-role="client" onclick="switchBkRole('client')">👤 Клиент</button>
+      <button class="bk-toggle" data-role="masseur" onclick="switchBkRole('masseur')">💆 Массажист</button>
+    </div>
     <div class="card" id="myBookingsList">
       <div class="loading">Загрузка...</div>
     </div>
@@ -603,6 +607,11 @@ html{scroll-behavior:smooth}
 .bk-status.pending { background:#fff3cd; color:#856404; }
 .bk-status.confirmed { background:#d4edda; color:#155724; }
 .bk-status.cancelled { background:#f8d7da; color:#721c24; }
+.bk-toggle { flex:1; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--card); font-size:13px; cursor:pointer; text-align:center; font-family:inherit; transition:all .2s; }
+.bk-toggle.active { background:var(--gold); color:#fff; border-color:var(--gold); font-weight:600; }
+.bk-action { font-size:11px; padding:4px 10px; border-radius:6px; border:none; cursor:pointer; font-family:inherit; }
+.bk-action.confirm { background:#27ae60; color:#fff; }
+.bk-action.cancel { background:#e74c3c; color:#fff; }
 </style>
 
 <!-- PAGE: MORE (Reviews + Blog + Channel) -->
@@ -3809,28 +3818,67 @@ function closeCertModal() { qs('certModal').style.display = 'none'; }
 
 // ─── Booking System (Phase B) ───
 
-var BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0};
+var BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client'};
+
+function switchBkRole(role) {
+  BK.role = role;
+  document.querySelectorAll('.bk-toggle').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-role') === role);
+  });
+  tg.HapticFeedback.impactOccurred('light');
+  loadMyBookings();
+}
 
 function loadMyBookings() {
   var u = uid();
-  if (!u) return;
-  apiGet('/api/massage/my_bookings', {chat_id: u}).then(function(d) {
-    var el = document.getElementById('myBookingsList');
+  if (!u) { return; }
+  var el = document.getElementById('myBookingsList');
+  el.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
+  var isMasseur = BK.role === 'masseur';
+  apiGet('/api/massage/my_bookings', {chat_id: u, as_masseur: isMasseur ? 1 : 0}).then(function(d) {
     if (!d.ok || !d.bookings || d.bookings.length === 0) {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--hint)">У вас пока нет записей</div>';
       return;
     }
     var h = '';
-    d.bookings.slice(0,10).forEach(function(b) {
+    d.bookings.slice(0,20).forEach(function(b) {
       var icons = {pending:'⏳', confirmed:'✅', cancelled:'❌'};
       var cls = b.status || 'pending';
       h += '<div class="booking-entry"><div>'
         + (icons[cls]||'❓')+' <b>'+dateStr(b.slot_date||'')+'</b> в '+b.start_time+'<br>'
-        + '<span style="font-size:12px;color:var(--hint)">💆 '+(b.service_name||'—')+' / '+b.duration_min+'мин</span></div>'
-        + '<span class="bk-status '+cls+'">'+
-          {pending:'⏳ Ожидает', confirmed:'✅ Подтверждён', cancelled:'❌ Отменён'}[cls]||cls+'</span></div>';
+        + '<span style="font-size:12px;color:var(--hint)">💆 '+(b.service_name||'—')+' / '+b.duration_min+'мин';
+      if (isMasseur) {
+        h += ' — 👤 ID '+b.client_chat_id;
+      }
+      h += '</span></div><div style="display:flex;gap:4px;align-items:center">';
+      h += '<span class="bk-status '+cls+'">'+
+        {pending:'⏳ Ожидает', confirmed:'✅ Подтверждён', cancelled:'❌ Отменён'}[cls]||cls+'</span>';
+      if (cls === 'pending' && isMasseur && b.id) {
+        h += '<button class="bk-action confirm" onclick="masseurConfirmBooking('+b.id+')">✅</button>';
+        h += '<button class="bk-action cancel" onclick="masseurCancelBooking('+b.id+')">❌</button>';
+      }
+      h += '</div></div>';
     });
     el.innerHTML = h;
+  }).catch(function() {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:#e74c3c">❌ Ошибка загрузки</div>';
+  });
+}
+
+function masseurConfirmBooking(id) {
+  tg.HapticFeedback.impactOccurred('medium');
+  api('/api/massage/book/'+id+'/confirm', {}).then(function(r) {
+    tg.showAlert(r && r.ok ? '✅ Запись подтверждена' : '❌ '+(r&&r.message||'Ошибка'));
+    loadMyBookings();
+  });
+}
+
+function masseurCancelBooking(id) {
+  if (!confirm('Отменить эту запись?')) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  api('/api/massage/book/'+id+'/cancel', {cancelled_by:'masseur'}).then(function(r) {
+    tg.showAlert(r && r.ok ? '❌ Запись отменена' : '❌ '+(r&&r.message||'Ошибка'));
+    loadMyBookings();
   });
 }
 
@@ -3901,7 +3949,8 @@ function loadTimeSlots(dateStr) {
   var err = document.getElementById('bkError2');
   el.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
   err.style.display = 'none';
-  apiGet('/api/massage/slots', {masseur_id: u, slot_date: dateStr}).then(function(d) {
+  var tzOff = -new Date().getTimezoneOffset();
+  apiGet('/api/massage/slots', {masseur_id: u, slot_date: dateStr, tz_offset: tzOff}).then(function(d) {
     if (!d.ok || !d.slots || d.slots.length === 0) {
       el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--hint)">😕 На эту дату нет свободных слотов.<br><a href="#" onclick="showBkStep(1);return false">◀ Выбрать другую дату</a></div>';
       return;
