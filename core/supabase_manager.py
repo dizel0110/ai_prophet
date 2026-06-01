@@ -197,30 +197,37 @@ def _run_sql_via_db_url(db_url: str) -> bool:
 
 
 def init_schema():
-    """Auto-create tables on startup.
+    """Auto-create/migrate tables on startup.
     
-    Tries:
-      1. Check via REST API if tables already exist → done
-      2. Direct Postgres connection via SUPABASE_DB_URL
-      3. Logs manual instructions for Supabase SQL Editor
+    Runs CREATE TABLE IF NOT EXISTS + ALTER TABLE ADD COLUMN IF NOT EXISTS
+    on every startup (idempotent). Safe for existing tables.
     """
     if not SUPABASE_ENABLED:
         logger.info("Supabase not configured — using JSON file storage")
         return False
 
-    if check_tables_exist():
-        logger.info("Supabase tables already exist")
-        return True
+    # Check if tables already exist
+    tables_exist = check_tables_exist()
+    if tables_exist:
+        logger.info("Supabase tables exist, running migrations...")
+    else:
+        logger.info("Supabase tables not found, creating...")
 
-    # Try direct/psycopg2 connection
+    # Always try to run SQL (CREATE IF NOT EXISTS + ALTER TABLE ADD COLUMN IF NOT EXISTS)
     db_url = os.getenv("SUPABASE_DB_URL", "")
     if db_url:
         if _run_sql_via_db_url(db_url):
             return True
     else:
-        logger.warning("SUPABASE_DB_URL not set")
+        logger.warning("SUPABASE_DB_URL not set — auto-migrations skipped")
+        logger.warning("To apply schema fixes, run this SQL in Supabase SQL Editor:")
+        for line in SCHEMA_SQL.strip().split("\n"):
+            logger.warning(f"  {line}")
+        if tables_exist:
+            return True
 
-    _log_manual_sql_instructions()
+    if not tables_exist:
+        _log_manual_sql_instructions()
     return False
 
 

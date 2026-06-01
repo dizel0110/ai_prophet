@@ -1193,7 +1193,9 @@ async def api_masseur_set(req: dict):
     if sb_confirmed:
         msg += " и сохранён в Supabase. После перезапуска Space всё восстановится автоматически."
     else:
-        msg += " (только JSON, Supabase не доступен)"
+        msg += " (только JSON)"
+        if SUPABASE_ENABLED:
+            msg += " Таблица masseur_settings требует миграции."
 
     return {"ok": True, "message": msg, "supabase_confirmed": sb_confirmed}
 
