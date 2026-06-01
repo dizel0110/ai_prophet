@@ -1934,7 +1934,9 @@ async function loadDbStatus() {
   if (!res.supabase_enabled || !res.connected) {
     text.textContent = '⚠️ Supabase не подключен';
     indicator.style.background = 'orange';
-    tables.innerHTML = '<p style="color:var(--hint)">Работаем с JSON-файлами</p>';
+    var errHtml = '<p style="color:var(--hint)">Работаем с JSON-файлами</p>';
+    if (res.error) errHtml += '<p style="color:#e74c3c;font-size:12px;word-break:break-all">' + res.error + '</p>';
+    tables.innerHTML = errHtml;
     return;
   }
   indicator.style.background = '#4caf50';

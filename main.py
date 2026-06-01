@@ -1540,15 +1540,36 @@ async def api_admin_db_status(chat_id: int = 0, _init_data: str = ""):
     """Supabase connection status + table row counts."""
     _require_admin_sync(_init_data, chat_id)
     from core.supabase_manager import SUPABASE_ENABLED, check_tables_exist, _sb_req
-    result = {"ok": True, "supabase_enabled": SUPABASE_ENABLED, "connected": False, "tables": {}}
+    result = {"ok": True, "supabase_enabled": SUPABASE_ENABLED, "connected": False, "tables": {}, "error": None}
     if not SUPABASE_ENABLED:
+        result["error"] = "SUPABASE_URL or SUPABASE_SERVICE_KEY missing in env"
         return result
-    result["connected"] = check_tables_exist()
+    try:
+        result["connected"] = check_tables_exist()
+    except Exception as e:
+        result["error"] = f"check_tables_exist raised: {e}"
+        return result
     if result["connected"]:
         for tbl in ("profiles", "consultations", "diary_entries", "time_slots",
                      "bookings", "masseur_settings", "admin_users"):
-            rows = _sb_req("GET", f"{tbl}?limit=9999")
-            result["tables"][tbl] = len(rows) if isinstance(rows, list) else 0
+            try:
+                rows = _sb_req("GET", f"{tbl}?limit=9999")
+                result["tables"][tbl] = len(rows) if isinstance(rows, list) else 0
+            except Exception as e:
+                result["tables"][tbl] = f"err: {e}"
+    else:
+        # Diagnostic: try a raw request and capture the error
+        try:
+            import requests as _r
+            from config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+            _url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/profiles?limit=1"
+            _resp = _r.get(_url, headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            }, timeout=15)
+            result["error"] = f"REST API returned {_resp.status_code}: {_resp.text[:200]}"
+        except Exception as e:
+            result["error"] = f"REST API request failed: {e}"
     return result
 
 
