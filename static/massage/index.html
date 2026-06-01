@@ -4459,22 +4459,40 @@ function loadMasseurView() {
   if (!mid) { el.innerHTML = '<span style="color:var(--hint)">Выберите массажиста для просмотра</span>'; return; }
   var u = uid();
   if (!u) return;
-  // Load bookings as this masseur
-  apiGet('/api/massage/my_bookings', {chat_id: u, as_masseur: 1, masseur_id: mid}).then(function(bd) {
-    var h = '<div style="margin-bottom:6px"><b>💆 Записи к массажисту</b></div>';
+  // Load clients + bookings in parallel
+  Promise.all([
+    apiGet('/api/admin/masseur_clients/' + mid, {chat_id: u, _init_data: getInitData()}),
+    apiGet('/api/massage/my_bookings', {chat_id: u, as_masseur: 1, masseur_id: mid})
+  ]).then(function(results) {
+    var cd = results[0], bd = results[1];
+    // Clients section
+    var h = '<div style="margin-bottom:8px"><b>👥 Клиенты массажиста</b></div>';
+    if (cd.ok && cd.clients && cd.clients.length > 0) {
+      h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">';
+      cd.clients.forEach(function(c) {
+        var badge = c.total_consultations > 1 ? '🔄' : '🔰';
+        h += '<div style="padding:4px 8px;background:var(--card);border-radius:6px;font-size:11px;cursor:pointer" onclick="openAdminClient('+c.chat_id+')">'
+          + badge + ' ' + escHtml(c.name || 'ID '+c.chat_id) + ' <span style="color:var(--hint)">· '+c.total_consultations+' конс.</span></div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div style="color:var(--hint);padding:4px;margin-bottom:8px">Нет клиентов</div>';
+    }
+    // Bookings section
+    h += '<div style="margin-bottom:6px"><b>💆 Записи</b></div>';
     if (!bd.ok || !bd.bookings || bd.bookings.length === 0) {
       h += '<div style="color:var(--hint);padding:4px">Нет записей</div>';
     } else {
       bd.bookings.slice(0,10).forEach(function(b) {
         var icons = {pending:'⏳', confirmed:'✅', cancelled:'❌'};
-        h += '<div style="padding:4px 0;border-bottom:1px solid var(--border)">'
-          + (icons[b.status]||'❓')+' <b>'+dateStr(b.slot_date||'')+'</b> в '+b.start_time
-          + ' <span style="color:var(--hint)">'+b.service_name+' '+b.duration_min+'мин · ID клиента: '+b.client_chat_id+'</span>'
-          + ' <span class="bk-status '+b.status+'">'+({pending:'⏳', confirmed:'✅', cancelled:'❌'}[b.status]||b.status)+'</span>'
+        h += '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+          + '<span>' + (icons[b.status]||'❓')+' <b>'+dateStr(b.slot_date||'')+'</b> в '+b.start_time
+          + ' <span style="color:var(--hint)">'+b.service_name+' '+b.duration_min+'мин</span></span>'
+          + '<span style="font-size:10px"><a href="#" onclick="openAdminClient('+b.client_chat_id+');return false" style="color:var(--link)">👤 клиент</a></span>'
           + '</div>';
       });
     }
-    // Load slot grid for today
+    // Slot grid
     var ds = localDateStr(_masseurViewDate);
     h += '<div style="margin-top:10px;margin-bottom:4px;display:flex;align-items:center;gap:6px">'
       + '<button class="btn" style="font-size:10px;padding:2px 6px" onclick="masseurViewDate(-1)">◀</button>'

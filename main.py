@@ -1761,6 +1761,30 @@ async def api_admin_fix_first_visit(req: dict):
     return {"ok": True, "message": f"Исправлено {fixed} записей", "fixed": fixed}
 
 
+@app.get("/api/admin/masseur_clients/{masseur_id}")
+async def api_admin_masseur_clients(masseur_id: int, chat_id: int = 0, _init_data: str = ""):
+    """Get unique clients of a masseur (admin only)."""
+    _require_admin_sync(_init_data, chat_id)
+    from core.booking_manager import get_bookings
+    from core.client_profiles import get_profile
+    bookings = get_bookings()
+    seen = set()
+    clients = []
+    for b in sorted(bookings, key=lambda x: x.get("slot_date", "") + "|" + x.get("start_time", ""), reverse=True):
+        cid = b.get("client_chat_id")
+        if cid and cid not in seen and b.get("masseur_id") == masseur_id and b.get("status") in ("pending", "confirmed"):
+            seen.add(cid)
+            prof = get_profile(cid)
+            clients.append({
+                "chat_id": cid,
+                "name": (prof or {}).get("name", ""),
+                "last_visit": b.get("slot_date", ""),
+                "total_consultations": (prof or {}).get("total_consultations", 0),
+                "has_questionnaire": bool(prof and prof.get("questionnaire_data"))
+            })
+    return {"ok": True, "clients": clients}
+
+
 # ──────────────────── Server ────────────────────
 
 def start_web():
