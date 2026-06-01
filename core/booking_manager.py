@@ -125,11 +125,14 @@ def generate_slots(masseur_chat_id: int, start_date: str = None, days: int = 7,
 
     slots = []
     dt_start = date.today().isoformat() if not start_date else start_date
+    now = datetime.now()
+    now_min = now.hour * 60 + now.minute
     for day_str in _date_range(dt_start, days):
         slot_time = wh_start
         while slot_time + min(durations) <= wh_end:
             in_break = br_start < slot_time < br_end or br_start < slot_time + min(durations) < br_end
-            if not in_break:
+            is_past = day_str == date.today().isoformat() and slot_time <= now_min
+            if not in_break and not is_past:
                 for dur in sorted(durations):
                     if slot_time + dur <= wh_end:
                         next_br = br_start < slot_time + dur < br_end
@@ -235,7 +238,7 @@ def create_booking(client_chat_id: int, masseur_chat_id: int,
         from core.notifier import notify_booking_created
         notify_booking_created(client_chat_id, masseur_chat_id, service_name, slot_date, start_time)
     except Exception as e:
-        logger.debug(f"Notify create: {e}")
+        logger.warning(f"Notify create failed: {e}")
     return booking
 
 def confirm_booking(booking_id: int) -> bool:
@@ -257,7 +260,7 @@ def confirm_booking(booking_id: int) -> bool:
                 from core.notifier import notify_booking_confirmed
                 notify_booking_confirmed(b.get("client_chat_id"), b.get("masseur_chat_id"), b.get("slot_date"), b.get("start_time"))
             except Exception as e:
-                logger.debug(f"Notify confirm: {e}")
+                logger.warning(f"Notify confirm failed: {e}")
             return True
     return False
 
@@ -301,7 +304,7 @@ def cancel_booking(booking_id: int, cancelled_by: str = "client") -> dict:
                 from core.notifier import notify_booking_cancelled
                 notify_booking_cancelled(b.get("client_chat_id"), b.get("masseur_chat_id"), b.get("slot_date"), b.get("start_time"), cancelled_by)
             except Exception as e:
-                logger.debug(f"Notify cancel: {e}")
+                logger.warning(f"Notify cancel failed: {e}")
             return {"ok": True, "reason": "cancelled", "message": "Запись отменена"}
     return {"ok": False, "reason": "not_found", "message": "Запись не найдена"}
 
