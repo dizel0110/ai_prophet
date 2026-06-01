@@ -1146,7 +1146,7 @@ html{scroll-behavior:smooth}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadDbStatus()">🔄 Обновить</button>
-          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="showDbSchema()">📐 Схема</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px;background:var(--card);color:var(--hint)" onclick="fixFirstVisit()">🔧 Исправить флаги is_first_visit</button>
         </div>
         <div style="margin-top:6px;font-size:10px;color:var(--hint);line-height:1.4">
           💡 Миграции схемы и синхронизация JSON→DB выполняются автоматически при старте сервера.
@@ -4321,17 +4321,30 @@ function loadTimeSlots(dateStr) {
   el.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
   err.style.display = 'none';
   var tzOff = -new Date().getTimezoneOffset();
-  apiGet('/api/massage/slots', {masseur_id: mid, slot_date: dateStr, tz_offset: tzOff}).then(function(d) {
+  apiGet('/api/massage/slots/all', {masseur_id: mid, slot_date: dateStr, tz_offset: tzOff}).then(function(d) {
     if (!d.ok || !d.slots || d.slots.length === 0) {
-      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--hint)">😕 На эту дату нет свободных слотов.<br><a href="#" onclick="showBkStep(1);return false">◀ Выбрать другую дату</a></div>';
+      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--hint)">😕 На эту дату нет слотов.<br><a href="#" onclick="showBkStep(1);return false">◀ Выбрать другую дату</a></div>';
       return;
     }
     var h = '<div class="slot-grid">';
     d.slots.forEach(function(s) {
+      var status = s.status || 'free';
       var sel = BK.selectedTime === s.start_time && BK.selectedDur === s.duration_min;
-      h += '<button class="slot-btn'+(sel?' selected':'')+'" onclick="selectBkSlot(\''+s.start_time+'\','+s.duration_min+')">'+s.start_time+'<br><span style="font-size:11px;color:var(--hint)">'+s.duration_min+'мин</span></button>';
+      var bg = {free:'var(--card)', reserved:'rgba(243,156,18,0.15)', booked:'rgba(231,76,60,0.15)'}[status] || 'var(--card)';
+      var cursor = status === 'free' ? 'pointer' : 'not-allowed';
+      var border = status === 'free' ? (sel ? '2px solid var(--gold)' : '1px solid var(--border)')
+        : '1px solid ' + ({free:'var(--border)', reserved:'#f39c12', booked:'#e74c3c'}[status]||'var(--border)');
+      var slotLabel = s.start_time+'<br><span style="font-size:11px">'+s.duration_min+'мин</span>';
+      if (status === 'reserved') slotLabel += '<br><span style="font-size:9px;color:#f39c12">⏳ ожидает</span>';
+      else if (status === 'booked') slotLabel += '<br><span style="font-size:9px;color:#e74c3c">🔴 занято</span>';
+      var clickAttr = status === 'free' ? "selectBkSlot('"+s.start_time+"',"+s.duration_min+")" : '';
+      h += '<button class="slot-btn'+(sel?' selected':'')+'" style="background:'+bg+';cursor:'+cursor+';border:'+border+';opacity:"'
+        + (status === 'free' ? 1 : 0.7) + '" onclick="'+clickAttr+'">'+slotLabel+'</button>';
     });
     h += '</div>';
+    h += '<div style="display:flex;gap:8px;margin-top:6px;font-size:10px;color:var(--hint);justify-content:center">'
+      + '<span>🟢 свободно</span><span>🟡 ожидает</span><span>🔴 занято</span>'
+      + '</div>';
     el.innerHTML = h;
   }).catch(function() {
     el.innerHTML = '<div style="text-align:center;padding:16px;color:#e74c3c">❌ Ошибка загрузки. Попробуйте позже.</div>';
@@ -4515,6 +4528,18 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
+function fixFirstVisit() {
+  var u = uid();
+  if (!u) return;
+  tg.showConfirm('Исправить флаг is_first_visit для всех записей?', function(ok) {
+    if (!ok) return;
+    api('/api/admin/fix_first_visit', {chat_id: u, _init_data: getInitData()}).then(function(r) {
+      tg.showAlert(r.ok ? '✅ '+r.message : '❌ '+(r.message||'Ошибка'));
+      loadDbStatus();
+    });
+  });
+}
 
 // Version stamp for production verification
 (function(){ const v=document.createElement('div'); v.style.cssText='position:fixed;bottom:2px;right:4px;font-size:8px;color:var(--hint);opacity:0.4;z-index:999;pointer-events:none'; v.textContent='v2026.05.29'; document.body.appendChild(v); })();

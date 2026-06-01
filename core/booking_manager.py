@@ -208,6 +208,19 @@ def get_free_slots(masseur_chat_id: int, slot_date: str = None, tz_offset: int =
     return result
 
 
+def get_all_slots_for_client(masseur_chat_id: int, slot_date: str, tz_offset: int = None) -> List[Dict[str, Any]]:
+    """Get ALL slots (free/reserved/booked) for a client booking view."""
+    slots = _load_json(SLOTS_PATH)
+    result = [s for s in slots
+              if s.get("masseur_chat_id") == masseur_chat_id
+              and s.get("slot_date") == slot_date]
+    if not result:
+        generated = generate_slots(masseur_chat_id, slot_date, days=3, tz_offset=tz_offset)
+        _save_slots(generated)
+        result = [s for s in generated if s.get("slot_date") == slot_date]
+    return result
+
+
 def get_booked_slots_for_month(masseur_chat_id: int, year: int, month: int, tz_offset: int = None) -> dict:
     """Get slot count per day for a month: {date: {total: N, free: N}}."""
     from calendar import monthrange

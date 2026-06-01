@@ -729,11 +729,21 @@ async def api_masseurs_available():
 
 @app.get("/api/massage/slots")
 async def api_slots(masseur_id: int = 0, slot_date: str = "", tz_offset: int = None):
-    """Get free slots for a masseur on a date."""
+    """Get free slots for a masseur on a date (for client booking)."""
     if not masseur_id or not slot_date:
         return {"ok": False, "error": "masseur_id and slot_date required"}
     from core.booking_manager import get_free_slots
     slots = get_free_slots(masseur_id, slot_date, tz_offset)
+    return {"ok": True, "slots": slots, "count": len(slots)}
+
+
+@app.get("/api/massage/slots/all")
+async def api_slots_all(masseur_id: int = 0, slot_date: str = "", tz_offset: int = None):
+    """Get ALL slots with status for a masseur on a date (client view with colors)."""
+    if not masseur_id or not slot_date:
+        return {"ok": False, "error": "masseur_id and slot_date required"}
+    from core.booking_manager import get_all_slots_for_client
+    slots = get_all_slots_for_client(masseur_id, slot_date, tz_offset)
     return {"ok": True, "slots": slots, "count": len(slots)}
 
 
@@ -1724,6 +1734,31 @@ async def api_admin_db_data(table: str, chat_id: int = 0, _init_data: str = ""):
         return {"ok": True, "rows": rows, "count": len(rows)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/admin/fix_first_visit")
+async def api_admin_fix_first_visit(req: dict):
+    """Fix is_first_visit flag for all bookings based on actual booking history."""
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("chat_id", 0)))
+    from core.booking_manager import get_bookings, _save_json, BOOKINGS_PATH
+    bookings = get_bookings()
+    if not bookings:
+        return {"ok": True, "message": "Нет записей для исправления", "fixed": 0}
+    from collections import Counter
+    client_counts = Counter()
+    for b in bookings:
+        cid = b.get("client_chat_id")
+        if cid:
+            client_counts[cid] += 1
+    fixed = 0
+    for b in bookings:
+        cid = b.get("client_chat_id")
+        should_be_first = client_counts.get(cid, 0) <= 1
+        if b.get("is_first_visit") != should_be_first:
+            b["is_first_visit"] = should_be_first
+            fixed += 1
+    _save_json(BOOKINGS_PATH, bookings)
+    return {"ok": True, "message": f"Исправлено {fixed} записей", "fixed": fixed}
 
 
 # ──────────────────── Server ────────────────────
