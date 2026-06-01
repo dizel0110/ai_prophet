@@ -3977,7 +3977,9 @@ function loadMyBookings() {
         {pending:'⏳ Ожидает', confirmed:'✅ Подтверждён', cancelled:'❌ Отменён'}[cls]||cls+'</span>';
       if (cls === 'pending' && isMasseur && b.id) {
         h += '<button class="bk-action confirm" onclick="masseurConfirmBooking('+b.id+')">✅</button>';
-        h += '<button class="bk-action cancel" onclick="masseurCancelBooking('+b.id+')">❌</button>';
+        h += '<button class="bk-action cancel" onclick="clientCancelBooking('+b.id+')">❌</button>';
+      } else if (cls === 'pending' && b.id) {
+        h += '<button class="bk-action cancel" onclick="clientCancelBooking('+b.id+')" style="margin-left:auto">❌ Отменить</button>';
       }
       h += '</div></div>';
     });
@@ -3999,6 +4001,15 @@ function masseurCancelBooking(id) {
   if (!confirm('Отменить эту запись?')) return;
   tg.HapticFeedback.impactOccurred('medium');
   api('/api/massage/book/'+id+'/cancel', {cancelled_by:'masseur'}).then(function(r) {
+    tg.showAlert(r && r.ok ? '❌ Запись отменена' : '❌ '+(r&&r.message||'Ошибка'));
+    loadMyBookings();
+  });
+}
+
+function clientCancelBooking(id) {
+  if (!confirm('❌ Отменить запись?')) return;
+  tg.HapticFeedback.impactOccurred('medium');
+  api('/api/massage/book/'+id+'/cancel', {cancelled_by:'client'}).then(function(r) {
     tg.showAlert(r && r.ok ? '❌ Запись отменена' : '❌ '+(r&&r.message||'Ошибка'));
     loadMyBookings();
   });
