@@ -254,7 +254,16 @@ def get_stats(filter_test: bool = True) -> Dict[str, Any]:
             if mg:
                 music_genres[mg] = music_genres.get(mg, 0) + 1
             cd = c.get("date", 0)
-            if cd >= today_start:
+            if isinstance(cd, str):
+                try:
+                    from datetime import datetime
+                    cd_dt = datetime.fromisoformat(cd.replace("Z", "+00:00"))
+                    cd_ts = cd_dt.timestamp()
+                except Exception:
+                    cd_ts = 0
+            else:
+                cd_ts = float(cd)
+            if cd_ts >= today_start:
                 today_count += 1
 
     sorted_techniques = sorted(technique_counts.items(), key=lambda x: -x[1])[:10]
