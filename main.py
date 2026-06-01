@@ -1868,6 +1868,56 @@ async def start_bot_polling():
     if not IS_HF_SPACE:
         await bot.delete_webhook(drop_pending_updates=True)
 
+    # ─── Booking background task: auto-cancel, reminders, morning digest ───
+    async def booking_housekeeping():
+        while True:
+            try:
+                from core.booking_manager import (
+                    auto_cancel_expired_pending,
+                    get_pending_reminder_candidates,
+                    should_send_morning_digest,
+                    get_pending_bookings_grouped_by_masseur,
+                )
+                from core.notifier import (
+                    notify_pending_reminder,
+                    notify_morning_digest,
+                )
+                # 1. Auto-cancel expired pending bookings (<=60 min to session)
+                cancelled = auto_cancel_expired_pending()
+                if cancelled:
+                    logger.info(f"🧹 Auto-cancelled {len(cancelled)} bookings")
+
+                # 2. Remind masseurs about pending bookings ~3h before
+                upcoming = get_pending_reminder_candidates()
+                if upcoming:
+                    by_masseur = {}
+                    for b in upcoming:
+                        mid = b.get("masseur_chat_id")
+                        if mid not in by_masseur:
+                            by_masseur[mid] = 0
+                        by_masseur[mid] += 1
+                    for mid, cnt in by_masseur.items():
+                        try:
+                            notify_pending_reminder(mid, cnt)
+                            logger.info(f"⏰ Reminded masseur {mid} about {cnt} pending bookings")
+                        except Exception as e:
+                            logger.warning(f"Reminder notify to {mid} failed: {e}")
+
+                # 3. Morning digest at 09:00
+                if should_send_morning_digest():
+                    grouped = get_pending_bookings_grouped_by_masseur()
+                    for mid, blist in grouped.items():
+                        try:
+                            notify_morning_digest(mid, len(blist))
+                            logger.info(f"🌅 Morning digest to masseur {mid}: {len(blist)} pending")
+                        except Exception as e:
+                            logger.warning(f"Morning digest to {mid} failed: {e}")
+            except Exception as e:
+                logger.warning(f"Booking housekeeping error: {e}")
+            await asyncio.sleep(60)
+
+    asyncio.create_task(booking_housekeeping())
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":

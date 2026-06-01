@@ -446,6 +446,143 @@ def get_masseur_slots(masseur_id: int, slot_date: str) -> List[Dict[str, Any]]:
 
 # ──────────────────── Workload ────────────────────
 
+# ──────────────────── Auto-Cancel & Reminders ────────────────────
+
+def get_auto_cancel_candidates(now: datetime = None) -> List[Dict]:
+    """Return list of pending bookings where session starts <= 60 min from now."""
+    if now is None:
+        now = datetime.now()
+    bookings = _load_json(BOOKINGS_PATH)
+    candidates = []
+    for b in bookings:
+        if b.get("status") != "pending":
+            continue
+        sd = b.get("slot_date", "")
+        st = b.get("start_time", "")
+        try:
+            dt = datetime.strptime(f"{sd} {st}", "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        minutes_until = (dt - now).total_seconds() / 60
+        if 0 <= minutes_until <= 60:
+            candidates.append(b)
+    return candidates
+
+
+def auto_cancel_expired_pending() -> List[Dict]:
+    """Auto-cancel pending bookings where session <=60 min away. Returns cancelled list."""
+    candidates = get_auto_cancel_candidates()
+    if not candidates:
+        return []
+    bookings = _load_json(BOOKINGS_PATH)
+    cancelled = []
+    changed = False
+    cb_ids = {b.get("id") for b in candidates}
+    for b in bookings:
+        if b.get("id") in cb_ids and b.get("status") == "pending":
+            b["status"] = "cancelled"
+            b["cancelled_by"] = "auto"
+            b["cancelled_at"] = time.time()
+            b["cancel_reason"] = "Массажист не подтвердил запись"
+            cancelled.append(b)
+            changed = True
+    if changed:
+        _save_json(BOOKINGS_PATH, bookings)
+        # Try to notify client + free slot in Supabase
+        sb_req, sb_query = _init_sb()
+        for c in cancelled:
+            try:
+                from core.notifier import notify_auto_cancel
+                notify_auto_cancel(
+                    c.get("client_chat_id"), c.get("masseur_chat_id"),
+                    c.get("slot_date"), c.get("start_time"),
+                    c.get("service_name", "")
+                )
+            except Exception as e:
+                logger.warning(f"Auto-cancel notify failed: {e}")
+            if sb_req:
+                try:
+                    bid = c.get("id")
+                    sb_req("PATCH", f"bookings?id=eq.{bid}", {
+                        "status": "cancelled", "cancelled_by": "auto",
+                        "cancelled_at": datetime.utcnow().isoformat()
+                    })
+                    sb_req("PATCH",
+                        f"time_slots?masseur_chat_id=eq.{c['masseur_chat_id']}"
+                        f"&slot_date=eq.{c['slot_date']}"
+                        f"&start_time=eq.{c['start_time']}"
+                        f"&duration_min=eq.{c.get('duration_min', 60)}",
+                        {"status": "free", "client_chat_id": None, "booking_id": None}
+                    )
+                except Exception as e:
+                    logger.warning(f"Auto-cancel supabase failed: {e}")
+        logger.info(f"Auto-cancelled {len(cancelled)} pending bookings")
+    return cancelled
+
+
+def get_pending_reminder_candidates(now: datetime = None) -> List[Dict]:
+    """Return pending bookings where session is ~3h away (175-190 min window)."""
+    if now is None:
+        now = datetime.now()
+    bookings = _load_json(BOOKINGS_PATH)
+    candidates = []
+    for b in bookings:
+        if b.get("status") != "pending":
+            continue
+        sd = b.get("slot_date", "")
+        st = b.get("start_time", "")
+        try:
+            dt = datetime.strptime(f"{sd} {st}", "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        minutes_until = (dt - now).total_seconds() / 60
+        if 175 <= minutes_until <= 190:
+            candidates.append(b)
+    return candidates
+
+
+def get_just_after_0900(now: datetime = None) -> bool:
+    """Check if current time is between 09:00 and 09:05."""
+    if now is None:
+        now = datetime.now()
+    return now.hour == 9 and now.minute < 5
+
+
+_MORNING_DIGEST_SENT_DATE = None
+
+
+def should_send_morning_digest(now: datetime = None) -> bool:
+    """Returns True once per day at ~09:00."""
+    global _MORNING_DIGEST_SENT_DATE
+    if now is None:
+        now = datetime.now()
+    if get_just_after_0900(now):
+        today = now.date().isoformat()
+        if _MORNING_DIGEST_SENT_DATE != today:
+            _MORNING_DIGEST_SENT_DATE = today
+            return True
+    return False
+
+
+def reset_morning_digest_for_test():
+    global _MORNING_DIGEST_SENT_DATE
+    _MORNING_DIGEST_SENT_DATE = None
+
+
+def get_pending_bookings_grouped_by_masseur() -> Dict[int, List[Dict]]:
+    """Return all pending bookings grouped by masseur chat_id."""
+    bookings = _load_json(BOOKINGS_PATH)
+    result = {}
+    for b in bookings:
+        if b.get("status") != "pending":
+            continue
+        mid = b.get("masseur_chat_id")
+        if mid not in result:
+            result[mid] = []
+        result[mid].append(b)
+    return result
+
+
 def get_workload(masseur_chat_id: int, week_start: str = None) -> Dict[str, Any]:
     """Get workload stats for a masseur for a given week."""
     sb_req, sb_query = _init_sb()

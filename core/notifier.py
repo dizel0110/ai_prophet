@@ -115,3 +115,50 @@ def notify_booking_cancelled(client_chat_id: int, masseur_chat_id: int,
             f"\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u0441\u0430\u043b\u043e\u043d\u043e\u043c \u0434\u043b\u044f \u0443\u0442\u043e\u0447\u043d\u0435\u043d\u0438\u044f."
         )
         _send_tg_sync(client_chat_id, c_text)
+
+
+def notify_auto_cancel(client_chat_id: int, masseur_chat_id: int,
+                       slot_date: str, start_time: str,
+                       service_name: str = "") -> None:
+    """Notify client + masseur about auto-cancellation (masseur didn't confirm)."""
+    mini_url = _mini_app_url()
+    c_text = (
+        f"\u274c *\u0417\u0430\u043f\u0438\u0441\u044c \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u0430*\n\n"
+        f"\U0001f4c6 {slot_date} \u0432 {start_time}\n"
+        f"\U0001f486 {service_name or '\u0421\u0435\u0430\u043d\u0441'}\n\n"
+        f"\u041c\u0430\u0441\u0441\u0430\u0436\u0438\u0441\u0442 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b \u0437\u0430\u043f\u0438\u0441\u044c. "
+        f"\u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c\u0441\u044f \u043d\u0430 \u0434\u0440\u0443\u0433\u043e\u0435 \u0432\u0440\u0435\u043c\u044f \u0438\u043b\u0438 \u043a \u0434\u0440\u0443\u0433\u043e\u043c\u0443 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442\u0443."
+    )
+    c_kb = {"inline_keyboard": [[{"text": "\U0001f4c5 \u0417\u0430\u043f\u0438\u0441\u0430\u0442\u044c\u0441\u044f", "url": mini_url}]]}
+    _send_tg_sync(client_chat_id, c_text, reply_markup=c_kb)
+    m_text = (
+        f"\u274c *\u0410\u0432\u0442\u043e\u043e\u0442\u043c\u0435\u043d\u0430 \u0437\u0430\u043f\u0438\u0441\u0438*\n\n"
+        f"\U0001f4c6 {slot_date} \u0432 {start_time}\n"
+        f"\U0001f464 \u041a\u043b\u0438\u0435\u043d\u0442: ID {client_chat_id}\n"
+        f"\u041f\u0440\u0438\u0447\u0438\u043d\u0430: \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e \u0432\u043e\u0432\u0440\u0435\u043c\u044f"
+    )
+    _send_tg_sync(masseur_chat_id, m_text)
+
+
+def notify_pending_reminder(masseur_chat_id: int, count: int) -> None:
+    """Remind masseur about pending unconfirmed bookings (3h before session)."""
+    mini_url = _mini_app_url()
+    text = (
+        f"\u23f0 *\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435*\n\n"
+        f"\u0423 \u0432\u0430\u0441 {count} \u043d\u0435\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0445 \u0437\u0430\u043f\u0438\u0441\u0435\u0439.\n"
+        f"\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0438\u0445 \u0432 Mini App, \u0438\u043d\u0430\u0447\u0435 \u0437\u0430 1 \u0447\u0430\u0441 \u0434\u043e \u0441\u0435\u0430\u043d\u0441\u0430 \u043e\u043d\u0438 \u0431\u0443\u0434\u0443\u0442 \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u044b."
+    )
+    kb = {"inline_keyboard": [[{"text": "\U0001f4c5 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0437\u0430\u043f\u0438\u0441\u0438", "url": mini_url}]]}
+    _send_tg_sync(masseur_chat_id, text, reply_markup=kb)
+
+
+def notify_morning_digest(masseur_chat_id: int, pending_count: int) -> None:
+    """Send morning digest to masseur summarizing pending bookings."""
+    mini_url = _mini_app_url()
+    text = (
+        f"\U0001f305 *\u0414\u043e\u0431\u0440\u043e\u0435 \u0443\u0442\u0440\u043e!*\n\n"
+        f"\u0423 \u0432\u0430\u0441 {pending_count} \u0437\u0430\u043f\u0438\u0441\u0435\u0439 \u043e\u0436\u0438\u0434\u0430\u044e\u0442 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f.\n"
+        f"\U0001f550 \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0440\u0430\u0441\u043f\u0438\u0441\u0430\u043d\u0438\u0435."
+    )
+    kb = {"inline_keyboard": [[{"text": "\U0001f4c5 \u041e\u0442\u043a\u0440\u044b\u0442\u044c", "url": mini_url}]]}
+    _send_tg_sync(masseur_chat_id, text, reply_markup=kb)
