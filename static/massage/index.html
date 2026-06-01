@@ -1118,8 +1118,8 @@ html{scroll-behavior:smooth}
         <div id="db-table-viewer" style="display:none;margin-bottom:8px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadDbStatus()">🔄 Обновить</button>
-          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="syncDb()">📤 Sync JSON → DB</button>
-          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="migrateSchema()">🔄 Мигрировать схему БД</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="syncDb()" title="Переносит JSON-файлы (data/) в Supabase. Нужно при первом подключении Supabase к уже работающему боту.">📤 Sync JSON → DB</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="migrateSchema()" title="Добавляет недостающие колонки в таблицы Supabase (ALTER TABLE). Нужно после обновления кода, если таблицы были созданы старой версией.">🔄 Мигрировать схему БД</button>
         </div>
         <div id="db-sync-msg" style="margin-top:6px;font-size:11px;color:var(--hint)"></div>
       </div>
