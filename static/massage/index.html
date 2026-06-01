@@ -4209,7 +4209,7 @@ async function startBookingFlow() {
   BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client',isNewClient:false};
   var u = uid();
   var st = await apiGet('/api/massage/client_status', {chat_id: u});
-  BK.isNewClient = !(st && st.has_profile);
+  BK.isNewClient = !(st && st.has_bookings);
   document.getElementById('bookingStepsSection').style.display = 'block';
   document.getElementById('myBookingsSection').scrollIntoView({behavior:'smooth'});
   showBkStep(1);
@@ -4338,6 +4338,8 @@ function renderServices() {
   var el = document.getElementById('bkServices');
   var h = '';
   services.forEach(function(svc, i) {
+    // Hide первичный приём for returning clients
+    if (!BK.isNewClient && i === 0) return;
     var sel = BK.selectedService === svc;
     var disabled = BK.isNewClient && i > 0;
     var hint = disabled ? '<br><span style="font-size:11px;color:var(--hint)">✔️ Сначала — первичный приём</span>' : '';

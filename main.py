@@ -773,13 +773,17 @@ async def api_generate_slots(req: dict):
 
 @app.get("/api/massage/client_status")
 async def api_client_status(chat_id: int = 0):
-    """Check if client has a profile/questionnaire (for первичный приём gate)."""
+    """Check if client has a profile/questionnaire/bookings (for первичный приём gate)."""
     from core.client_profiles import get_profile
+    from core.booking_manager import get_bookings
     profile = get_profile(chat_id)
+    bookings = get_bookings(client_chat_id=chat_id) or []
+    has_bookings = any(b.get("status") in ("pending", "confirmed") for b in bookings)
     return {
         "ok": True,
         "has_profile": bool(profile),
         "has_questionnaire": bool(profile and bool(profile.get("latest_questionnaire"))),
+        "has_bookings": has_bookings,
     }
 
 
@@ -800,15 +804,23 @@ async def api_create_booking(req: dict):
     # Questionnaire gate: new clients can only book "Первичный приём"
     import time
     from core.client_profiles import get_profile
+    from core.booking_manager import get_bookings
     profile = get_profile(client_id)
+    bookings = get_bookings(client_chat_id=client_id) or []
+    has_any_booking = any(b.get("status") in ("pending", "confirmed", "cancelled") for b in bookings)
     is_primary = "первичный" in (service or "").lower()
-    if not profile:
+    if not has_any_booking:
         if not is_primary:
             return {"ok": False, "error": "Новым клиентам доступна только услуга «Первичный приём (с консультацией)»"}
     else:
-        last = profile.get("last_visit", 0)
-        if last and (time.time() - last) / 86400 > 30:
-            return {"ok": False, "error": "Анкета устарела — пройдите чек-ап"}
+        if is_primary:
+            return {"ok": False, "error": "Эта услуга доступна только при первом визите"}
+        if profile:
+            last = profile.get("last_visit", 0)
+            if last and (time.time() - last) / 86400 > 30:
+                return {"ok": False, "error": "Анкета устарела — пройдите чек-ап"}
+    # Determine is_first_visit from actual booking history, not frontend
+    first_visit = not has_any_booking
     from core.booking_manager import create_booking
     booking = create_booking(client_id, masseur_id, slot_date, start_time,
                              duration, service, note, first_visit, client_username)
