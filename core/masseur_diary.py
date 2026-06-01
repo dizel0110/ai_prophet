@@ -55,8 +55,13 @@ def add_diary_entry(chat_id: int, masseur_chat_id: int, entry: dict) -> bool:
         entry["created_at"] = time.time()
         data[key].append(entry)
         _save_json(DIARY_PATH, data)
-        logger.info(f"Diary entry saved for chat {chat_id} by masseur {masseur_chat_id}")
-        return True
+    if SUPABASE_ENABLED:
+        supabase_entry = {k: v for k, v in entry.items()}
+        supabase_entry["client_chat_id"] = chat_id
+        supabase_entry["session_date"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(entry.get("created_at", time.time())))
+        _sb_req("POST", "diary_entries", supabase_entry)
+    logger.info(f"Diary entry saved for chat {chat_id} by masseur {masseur_chat_id}")
+    return True
 
 
 def get_diary(chat_id: int) -> List[Dict[str, Any]]:

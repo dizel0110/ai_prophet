@@ -41,15 +41,26 @@ CREATE TABLE IF NOT EXISTS consultations (
 CREATE TABLE IF NOT EXISTS diary_entries (
   id BIGSERIAL PRIMARY KEY,
   masseur_chat_id BIGINT NOT NULL,
-  client_chat_id BIGINT REFERENCES profiles(chat_id),
+  client_chat_id BIGINT NOT NULL,
   session_date TIMESTAMPTZ DEFAULT now(),
-  planned_technique TEXT DEFAULT '',
-  actual_technique TEXT DEFAULT '',
+  technique TEXT DEFAULT '',
+  intensity TEXT DEFAULT '',
+  tools TEXT DEFAULT '',
+  tissue_state TEXT DEFAULT '',
+  client_feedback TEXT DEFAULT '',
+  recommendations TEXT DEFAULT '',
+  rating INT DEFAULT 5,
   notes TEXT DEFAULT '',
-  subjective_feeling INT DEFAULT 5,
-  pain_level INT DEFAULT 0,
   is_test BOOLEAN DEFAULT false
 );
+
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS technique TEXT DEFAULT '';
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS intensity TEXT DEFAULT '';
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS tools TEXT DEFAULT '';
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS tissue_state TEXT DEFAULT '';
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS client_feedback TEXT DEFAULT '';
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS recommendations TEXT DEFAULT '';
+ALTER TABLE diary_entries ADD COLUMN IF NOT EXISTS rating INT DEFAULT 5;
 
 CREATE TABLE IF NOT EXISTS time_slots (
   id BIGSERIAL PRIMARY KEY,
@@ -481,12 +492,16 @@ def restore_from_supabase():
             json.dump(out, f, ensure_ascii=False, indent=2)
         logger.info(f"Restored {len(masseurs)} masseurs → masseurs.json")
 
-    # 7. Diary entries → masseur_diary.json
+    # 7. Diary entries → masseur_diary.json (grouped by client_chat_id)
     diary = query("diary_entries")
     if diary:
+        grouped = {}
+        for d in diary:
+            cid = str(d.get("client_chat_id", ""))
+            grouped.setdefault(cid, []).append(d)
         diary_path = os.path.join(DATA_DIR, "masseur_diary.json")
         with open(diary_path, "w", encoding="utf-8") as f:
-            json.dump(diary, f, ensure_ascii=False, indent=2)
+            json.dump(grouped, f, ensure_ascii=False, indent=2)
         logger.info(f"Restored {len(diary)} diary entries → masseur_diary.json")
 
     logger.info("Supabase → JSON restore complete")
