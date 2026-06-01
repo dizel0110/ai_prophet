@@ -22,6 +22,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from config import TOKEN, PORT, PLATFORM, DATA_DIR
+from core.tg_auth import verify_init_data
 from core.network import apply_dns_patch
 from handlers import messages, vip, limits, massage, booking
 
@@ -1077,6 +1078,7 @@ async def api_education(chat_id: int = 0, role: str = "client"):
 
 @app.post("/api/admin/test_client")
 async def api_test_client_create(req: dict):
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("chat_id", 0)))
     from core.client_profiles import create_test_patient
     profile = create_test_patient()
     if not profile:
@@ -1087,6 +1089,7 @@ async def api_test_client_create(req: dict):
 @app.post("/api/admin/test_client/empty")
 async def api_test_client_empty(req: dict):
     """Create test patient WITHOUT questionnaire (for training/testing)."""
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("chat_id", 0)))
     from core.client_profiles import _next_test_chat_id, _load_profiles, _save_profiles
     import time, random
     cid = _next_test_chat_id()
@@ -1109,19 +1112,20 @@ async def api_test_client_empty(req: dict):
 
 
 @app.post("/api/admin/test_client/delete")
-async def api_test_client_delete(req: dict, chat_id: int = 0):
-    if not chat_id:
+async def api_test_client_delete(req: dict):
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("admin_chat", 0)))
+    target_chat_id = int(req.get("chat_id", 0))
+    if not target_chat_id:
         return {"ok": False, "error": "Missing chat_id"}
     from core.client_profiles import delete_test_patient
-    ok = delete_test_patient(chat_id)
+    ok = delete_test_patient(target_chat_id)
     return {"ok": ok}
 
 
 @app.get("/api/admin/masseurs")
-async def api_masseurs_list(chat_id: int = 0):
+async def api_masseurs_list(chat_id: int = 0, _init_data: str = ""):
     """List all registered masseurs."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(_init_data, chat_id)
     from core.masseur_diary import get_masseurs
     return {"ok": True, "masseurs": get_masseurs()}
 
@@ -1129,12 +1133,10 @@ async def api_masseurs_list(chat_id: int = 0):
 @app.post("/api/admin/masseur")
 async def api_masseur_set(req: dict):
     """Register or update a masseur (admin only)."""
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("admin_chat", 0)))
     chat_id = int(req.get("chat_id", 0))
     name = req.get("name", "").strip()
     specialties = req.get("specialties", [])
-    admin_chat = req.get("admin_chat", 0)
-    if not admin_chat or not _is_chat_id_admin(admin_chat):
-        return {"ok": False, "error": "Access denied"}
     if not chat_id or not name:
         return {"ok": False, "error": "Missing chat_id or name"}
     from core.masseur_diary import set_masseur
@@ -1345,6 +1347,25 @@ def _promote_chat_id_to_admin(chat_id: int, username: str):
         pass
 
 
+def _require_admin_sync(init_data: str, chat_id: int):
+    """Verify init_data HMAC and check admin. Returns verified user_id or raises."""
+    from fastapi import HTTPException
+    if not init_data:
+        raise HTTPException(400, "Missing _init_data (required for admin access)")
+    try:
+        user = verify_init_data(init_data, TOKEN)
+    except ValueError as e:
+        raise HTTPException(403, f"initData verification failed: {e}")
+    verified_id = user.get("id")
+    if not verified_id:
+        raise HTTPException(403, "No user ID in initData")
+    if int(verified_id) != int(chat_id):
+        raise HTTPException(403, "User ID mismatch — request forged")
+    if not _is_chat_id_admin(int(verified_id)):
+        raise HTTPException(403, "Access denied — not an admin")
+    return int(verified_id)
+
+
 @app.get("/api/admin/identify")
 async def api_admin_identify(chat_id: int = 0, username: str = ""):
     """Check user role: admin, masseur, or client."""
@@ -1378,10 +1399,9 @@ async def api_admin_mode(req: dict):
 
 
 @app.get("/api/admin/clients")
-async def api_admin_clients(chat_id: int = 0):
+async def api_admin_clients(chat_id: int = 0, _init_data: str = ""):
     """List all clients with questionnaire data (admin only)."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(_init_data, chat_id)
     clients = []
     seen = set()
     settings_path = os.path.join(DATA_DIR, "user_settings.json")
@@ -1462,10 +1482,9 @@ async def api_admin_clients(chat_id: int = 0):
 
 
 @app.get("/api/admin/client/{target_chat_id}")
-async def api_admin_client(target_chat_id: str, chat_id: int = 0):
+async def api_admin_client(target_chat_id: str, chat_id: int = 0, _init_data: str = ""):
     """Get full client data including export (admin only)."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(_init_data, chat_id)
     from handlers.massage import _get_user_data, _get_questionnaire
     data = _get_user_data(target_chat_id)
     q = _get_questionnaire(target_chat_id)
@@ -1481,20 +1500,18 @@ async def api_admin_client(target_chat_id: str, chat_id: int = 0):
 
 
 @app.get("/api/admin/stats")
-async def api_admin_stats(chat_id: int = 0):
+async def api_admin_stats(chat_id: int = 0, _init_data: str = ""):
     """Dashboard statistics (admin only)."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(_init_data, chat_id)
     from core.client_profiles import get_stats
     stats = get_stats()
     return {"ok": True, "stats": stats}
 
 
 @app.get("/api/admin/client/{target_chat_id}/timeline")
-async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0):
+async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0, _init_data: str = ""):
     """Client consultation timeline (admin only)."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(_init_data, chat_id)
     from core.client_profiles import get_timeline, get_profile
     timeline = get_timeline(target_chat_id)
     profile = get_profile(target_chat_id)
@@ -1504,10 +1521,9 @@ async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0):
 # ──────────────────── DB Admin ────────────────────
 
 @app.get("/api/admin/db_status")
-async def api_admin_db_status(chat_id: int = 0):
+async def api_admin_db_status(chat_id: int = 0, _init_data: str = ""):
     """Supabase connection status + table row counts."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(_init_data, chat_id)
     from core.supabase_manager import SUPABASE_ENABLED, check_tables_exist, _sb_req
     result = {"ok": True, "supabase_enabled": SUPABASE_ENABLED, "connected": False, "tables": {}}
     if not SUPABASE_ENABLED:
@@ -1522,10 +1538,9 @@ async def api_admin_db_status(chat_id: int = 0):
 
 
 @app.post("/api/admin/db_migrate")
-async def api_admin_db_migrate(chat_id: int = 0):
+async def api_admin_db_migrate(req: dict):
     """Trigger JSON → Supabase migration (admin only)."""
-    if not chat_id or not _is_chat_id_admin(chat_id):
-        return {"ok": False, "error": "Access denied"}
+    _require_admin_sync(req.get("_init_data", ""), int(req.get("chat_id", 0)))
     from core.supabase_manager import migrate_from_json
     try:
         migrate_from_json()

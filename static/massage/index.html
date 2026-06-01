@@ -1884,6 +1884,9 @@ function uid() {
   return fallback;
 }
 
+function getInitData() {
+  try { return tg.initData || ''; } catch(e) { return ''; }
+}
 function qs(id) { const e = document.getElementById(id); return e ? e : null; }
 function qsv(id) { const e = qs(id); return e ? e.value.trim() : ''; }
 
@@ -1924,7 +1927,7 @@ async function loadDbStatus() {
   var tables = qs('db-tables');
   text.textContent = 'Загрузка...';
   indicator.style.background = 'gray';
-  var res = await apiGet('/api/admin/db_status', {chat_id: u});
+  var res = await apiGet('/api/admin/db_status', {chat_id: u, _init_data: getInitData()});
   if (!res.ok) { text.textContent = 'Ошибка'; return; }
   if (!res.supabase_enabled || !res.connected) {
     text.textContent = '⚠️ Supabase не подключен';
@@ -1948,7 +1951,7 @@ async function syncDb() {
   if (!u) return;
   var msg = qs('db-sync-msg');
   msg.textContent = 'Синхронизация...';
-  var res = await api('/api/admin/db_migrate', {chat_id: u});
+  var res = await api('/api/admin/db_migrate', {chat_id: u, _init_data: getInitData()});
   msg.textContent = res.ok ? '✅ ' + (res.message || 'Готово') : '❌ ' + (res.message || 'Ошибка');
   loadDbStatus();
 }
@@ -3080,7 +3083,7 @@ async function cycleRole() {
 
 async function createTestPatient() {
   tg.HapticFeedback.impactOccurred('medium');
-  var res = await api('/api/admin/test_client', {});
+  var res = await api('/api/admin/test_client', {chat_id: u, _init_data: getInitData()});
   if (res && res.ok && res.client) {
     tg.showAlert('🧪 Тестовый пациент создан: ' + (res.client.first_name || 'Без имени'));
     loadAdminClients();
@@ -3091,7 +3094,7 @@ async function createTestPatient() {
 
 async function createEmptyTestPatient() {
   tg.HapticFeedback.impactOccurred('medium');
-  var res = await api('/api/admin/test_client/empty', {});
+  var res = await api('/api/admin/test_client/empty', {chat_id: u, _init_data: getInitData()});
   if (res && res.ok && res.client) {
     tg.showAlert('🧪 Пустой тестовый создан: ' + (res.client.first_name || 'Без имени'));
     loadAdminClients();
@@ -3102,7 +3105,7 @@ async function createEmptyTestPatient() {
 
 async function deleteTestPatient(chatId) {
   tg.HapticFeedback.impactOccurred('medium');
-  var res = await api('/api/admin/test_client/delete', {chat_id: chatId});
+  var res = await api('/api/admin/test_client/delete', {chat_id: chatId, admin_chat: u, _init_data: getInitData()});
   if (res && res.ok) {
     loadAdminClients();
   } else {
@@ -3166,8 +3169,8 @@ async function loadAdminClients() {
   const container = qs('admin-client-list');
   try {
     var [clientsRes, statsRes] = await Promise.all([
-      apiGet('/api/admin/clients', {chat_id: u}),
-      apiGet('/api/admin/stats', {chat_id: u}),
+      apiGet('/api/admin/clients', {chat_id: u, _init_data: getInitData()}),
+      apiGet('/api/admin/stats', {chat_id: u, _init_data: getInitData()}),
     ]);
 
     // Stats
@@ -3260,8 +3263,8 @@ async function openAdminClient(chatId) {
   tg.HapticFeedback.impactOccurred('medium');
   try {
   var [clientRes, timelineRes, diaryRes, pathRes] = await Promise.all([
-    apiGet('/api/admin/client/' + chatId, {chat_id: u}),
-    apiGet('/api/admin/client/' + chatId + '/timeline', {chat_id: u}),
+    apiGet('/api/admin/client/' + chatId, {chat_id: u, _init_data: getInitData()}),
+    apiGet('/api/admin/client/' + chatId + '/timeline', {chat_id: u, _init_data: getInitData()}),
     apiGet('/api/massage/diary_summary/' + chatId),
     apiGet('/api/massage/client_path/' + chatId),
   ]);
@@ -3941,7 +3944,7 @@ function masseurCancelBooking(id) {
 function loadMasseurs() {
   var u = uid();
   if (!u) return;
-  apiGet('/api/admin/masseurs', {chat_id: u}).then(function(d) {
+  apiGet('/api/admin/masseurs', {chat_id: u, _init_data: getInitData()}).then(function(d) {
     var el = document.getElementById('admin-masseur-list');
     if (!d.ok || !d.masseurs || d.masseurs.length === 0) {
       el.innerHTML = '<span style="color:var(--hint)">Нет зарегистрированных массажистов</span>';
@@ -3962,7 +3965,7 @@ function registerMasseur() {
   var name = document.getElementById('masseur-reg-name').value.trim();
   var msg = document.getElementById('masseur-reg-msg');
   if (!chatId || !name) { msg.textContent = '❌ Введите ID и имя'; return; }
-  api('/api/admin/masseur', {chat_id: chatId, name: name, specialties: [], admin_chat: u}).then(function(d) {
+  api('/api/admin/masseur', {chat_id: chatId, name: name, specialties: [], admin_chat: u, _init_data: getInitData()}).then(function(d) {
     msg.textContent = d.ok ? '✅ Массажист '+name+' добавлен' : '❌ '+(d.error||'Ошибка');
     if (d.ok) { document.getElementById('masseur-reg-chat').value = ''; document.getElementById('masseur-reg-name').value = ''; loadMasseurs(); }
   });

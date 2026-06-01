@@ -386,6 +386,29 @@ Test pattern: unit tests mock all network calls (`@patch`), test core logic only
 
 **Пока не реализовано** — требует определения устройства клиента (+ User-Agent / navigator), загрузки ~ГБ весов, и UI для согласия.
 
+## HMAC Authentication (core/tg_auth.py)
+
+Telegram Mini App `initData` верифицируется через HMAC-SHA256 на сервере.
+
+**Как работает:**
+1. Mini App имеет доступ к `tg.initData` (raw string, подписанный Telegram)
+2. При каждом админском API-запросе Mini App отправляет `_init_data` (query для GET, body для POST)
+3. `core/tg_auth.py:verify_init_data()` проверяет HMAC-SHA256 подпись, используя бот-токен
+4. **Бот-токен НИКОГДА не покидает сервер** — HMAC вычисляется сервером из `"WebAppData"` и токена
+5. После верификации извлекается `user.id` — это реальный Telegram ID пользователя
+6. `_require_admin_sync()` в `main.py` проверяет: initData валиден → user.id совпадает с переданным chat_id → user.id является админом
+
+**Защищённые endpointы** (все админские операции, 11 endpoints):
+- `api_admin_clients`, `api_admin_client`, `api_admin_stats`, `api_admin_client_timeline`
+- `api_admin_db_status`, `api_admin_db_migrate`
+- `api_masseurs_list`, `api_masseur_set`
+- `api_test_client_create`, `api_test_client_empty`, `api_test_client_delete`
+
+**Безопасность:**
+- initData подписан Telegram — сфальсифицировать без бот-токена невозможно
+- Даже при перехвате initData злоумышленник может только "выдать себя" за того же пользователя (replay), но chat_id mismatch не даст использовать чужой ID
+- Для full security можно добавить проверку `auth_date` (>24h = reject), пока не реализовано
+
 ## MCP (Model Context Protocol)
 
 Playwright MCP сервер установлен для opencode. Конфигурация: `~/.config/opencode/opencode.jsonc`
