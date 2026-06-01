@@ -23,6 +23,12 @@ for part in ADMIN_IDS_RAW.split(","):
     if part and part.isdigit():
         ADMIN_IDS.add(int(part))
 
+# Supabase (опционально)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
+
 # Mini App URL — Telegram требует HTTPS
 # На HF Spaces формируется автоматически, для локали — GitHub Pages или ngrok
 LOCAL_MINI_APP_URL = os.getenv("MINI_APP_URL", "https://dizel0110.github.io/ai_prophet/")

@@ -20,6 +20,9 @@ duckduckgo-search
 # Media (требует ffmpeg в системе)
 yt-dlp
 
+# Database (опционально, для Supabase)
+psycopg2-binary
+
 # ─── Опционально (не влезает на HF Spaces free) ───
 # Локальная транскрибация Whisper. ~2GB с torch.
 # На HF Spaces используем HF Router/Api (Whisper).

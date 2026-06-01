@@ -1420,6 +1420,14 @@ async def start_bot_polling():
             logger.warning(f"⚠️ Не удалось полностью очистить temp: {e}")
     else: os.makedirs(cfg.TEMP_DIR)
 
+    # Supabase: auto-create tables + migrate data
+    try:
+        from core.supabase_manager import init_schema, migrate_from_json
+        if init_schema():
+            migrate_from_json()
+    except Exception as e:
+        logger.warning(f"Supabase init skipped: {e}")
+
     from aiogram.types import BotCommand
     from config import HF_TOKEN, GEMINI_KEY
 
