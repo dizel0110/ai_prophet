@@ -535,36 +535,43 @@ html{scroll-behavior:smooth}
   <div class="sec" id="bookingStepsSection" style="display:none">
     <div class="sec-title">📅 Онлайн-запись</div>
     <div class="booking-steps" id="bookingSteps">
-      <div class="bk-step active" data-step="1">📆</div>
-      <div class="bk-step" data-step="2">🕐</div>
-      <div class="bk-step" data-step="3">💆</div>
-      <div class="bk-step" data-step="4">✅</div>
+      <div class="bk-step active" data-step="1">💇</div>
+      <div class="bk-step" data-step="2">📆</div>
+      <div class="bk-step" data-step="3">🕐</div>
+      <div class="bk-step" data-step="4">💆</div>
+      <div class="bk-step" data-step="5">✅</div>
     </div>
     <div class="card" id="bookingStepContent">
       <div id="bkStep1">
-        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите дату</div>
-        <div id="bookingCalendar"></div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите массажиста</div>
+        <div id="bkMasseurs"></div>
         <div id="bkError1" class="error-text" style="display:none;margin-top:10px"></div>
       </div>
       <div id="bkStep2" style="display:none">
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите дату</div>
+        <div id="bookingCalendar"></div>
+        <button class="btn btn-secondary" onclick="showBkStep(1)" style="width:100%;margin-top:10px">◀ Назад</button>
+        <div id="bkError2" class="error-text" style="display:none;margin-top:10px"></div>
+      </div>
+      <div id="bkStep3" style="display:none">
         <div style="font-size:16px;font-weight:600;margin-bottom:4px">Выберите время</div>
         <div style="font-size:13px;color:var(--hint);margin-bottom:12px" id="bkDateLabel"></div>
         <div id="bkTimeSlots"></div>
-        <div id="bkError2" class="error-text" style="display:none;margin-top:10px"></div>
-        <button class="btn btn-secondary" onclick="showBkStep(1)" style="width:100%;margin-top:10px">◀ Назад</button>
-      </div>
-      <div id="bkStep3" style="display:none">
-        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите услугу</div>
-        <div id="bkServices"></div>
         <button class="btn btn-secondary" onclick="showBkStep(2)" style="width:100%;margin-top:10px">◀ Назад</button>
+        <div id="bkError3" class="error-text" style="display:none;margin-top:10px"></div>
       </div>
       <div id="bkStep4" style="display:none">
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px">Выберите услугу</div>
+        <div id="bkServices"></div>
+        <button class="btn btn-secondary" onclick="showBkStep(3)" style="width:100%;margin-top:10px">◀ Назад</button>
+      </div>
+      <div id="bkStep5" style="display:none">
         <div style="font-size:16px;font-weight:600;margin-bottom:12px">Подтверждение</div>
         <div id="bkConfirmDetails" style="margin-bottom:16px;font-size:14px;line-height:2"></div>
         <button class="btn btn-primary" onclick="submitBookingFlow()" style="width:100%">✅ Подтвердить запись</button>
-        <button class="btn btn-secondary" onclick="showBkStep(3)" style="width:100%;margin-top:8px">◀ Назад</button>
+        <button class="btn btn-secondary" onclick="showBkStep(4)" style="width:100%;margin-top:8px">◀ Назад</button>
         <button class="btn btn-secondary" onclick="resetBookingFlow()" style="width:100%;margin-top:4px">🔄 Начать заново</button>
-        <div id="bkError4" class="error-text" style="display:none;margin-top:10px"></div>
+        <div id="bkError5" class="error-text" style="display:none;margin-top:10px"></div>
       </div>
     </div>
   </div>
@@ -3840,7 +3847,34 @@ function closeCertModal() { qs('certModal').style.display = 'none'; }
 
 // ─── Booking System (Phase B) ───
 
-var BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client'};
+var BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client'};
+
+function loadMasseurList() {
+  apiGet('/api/massage/masseurs_available').then(function(d) {
+    var el = document.getElementById('bkMasseurs');
+    if (!d.ok || !d.masseurs || d.masseurs.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--hint)">Нет доступных массажистов</div>';
+      return;
+    }
+    var h = '';
+    d.masseurs.forEach(function(m) {
+      var sel = BK.selectedMasseurId === m.chat_id;
+      h += '<button class="svc-btn'+(sel?' selected':'')+'" onclick="selectBkMasseur('+m.chat_id+',\''+(m.name||'').replace(/'/g,"\\'")+'\')">💆 '+(m.name||'Массажист '+m.chat_id)+'</button>';
+    });
+    el.innerHTML = h;
+  }).catch(function() {
+    document.getElementById('bkMasseurs').innerHTML = '<div style="text-align:center;padding:16px;color:#e74c3c">❌ Ошибка загрузки</div>';
+  });
+}
+
+function selectBkMasseur(id, name) {
+  BK.selectedMasseurId = id;
+  BK.selectedMasseur = name;
+  tg.HapticFeedback.impactOccurred('light');
+  loadMasseurList();
+  renderBookingCalendar();
+  showBkStep(2);
+}
 
 function switchBkRole(role) {
   BK.role = role;
@@ -3939,11 +3973,11 @@ function localDateStr(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).pad
 
 function startBookingFlow() {
   tg.HapticFeedback.impactOccurred('medium');
-  BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0};
+  BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client'};
   document.getElementById('bookingStepsSection').style.display = 'block';
   document.getElementById('myBookingsSection').scrollIntoView({behavior:'smooth'});
   showBkStep(1);
-  renderBookingCalendar();
+  loadMasseurList();
 }
 
 function showBkStep(n) {
@@ -3953,7 +3987,7 @@ function showBkStep(n) {
     s.classList.toggle('active', sn === n);
     s.classList.toggle('done', sn < n);
   });
-  for (var i=1;i<=4;i++) {
+  for (var i=1;i<=5;i++) {
     var el = document.getElementById('bkStep'+i);
     if (el) el.style.display = i === n ? 'block' : 'none';
   }
@@ -3994,17 +4028,18 @@ function selectBkDate(dateStr) {
   renderBookingCalendar();
   document.getElementById('bkDateLabel').textContent = 'Дата: '+dateStr;
   loadTimeSlots(dateStr);
-  showBkStep(2);
+  showBkStep(3);
 }
 
 function loadTimeSlots(dateStr) {
-  var u = uid();
+  var mid = BK.selectedMasseurId;
+  if (!mid) { return; }
   var el = document.getElementById('bkTimeSlots');
-  var err = document.getElementById('bkError2');
+  var err = document.getElementById('bkError3');
   el.innerHTML = '<div class="loading">⏳ Загрузка...</div>';
   err.style.display = 'none';
   var tzOff = -new Date().getTimezoneOffset();
-  apiGet('/api/massage/slots', {masseur_id: u, slot_date: dateStr, tz_offset: tzOff}).then(function(d) {
+  apiGet('/api/massage/slots', {masseur_id: mid, slot_date: dateStr, tz_offset: tzOff}).then(function(d) {
     if (!d.ok || !d.slots || d.slots.length === 0) {
       el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--hint)">😕 На эту дату нет свободных слотов.<br><a href="#" onclick="showBkStep(1);return false">◀ Выбрать другую дату</a></div>';
       return;
@@ -4027,7 +4062,7 @@ function selectBkSlot(time, dur) {
   tg.HapticFeedback.impactOccurred('light');
   loadTimeSlots(BK.selectedDate);
   renderServices();
-  showBkStep(3);
+  showBkStep(4);
 }
 
 function renderServices() {
@@ -4050,8 +4085,8 @@ function selectBkService(idx, name) {
 
 function showConfirmStep() {
   var el = document.getElementById('bkConfirmDetails');
-  el.innerHTML = '📆 <b>Дата:</b> '+BK.selectedDate+'<br>⏱ <b>Время:</b> '+BK.selectedTime+' ('+BK.selectedDur+' мин)<br>💆 <b>Услуга:</b> '+BK.selectedService;
-  showBkStep(4);
+  el.innerHTML = '💆 <b>Массажист:</b> '+(BK.selectedMasseur||'—')+'<br>📆 <b>Дата:</b> '+BK.selectedDate+'<br>⏱ <b>Время:</b> '+BK.selectedTime+' ('+BK.selectedDur+' мин)<br>💆 <b>Услуга:</b> '+BK.selectedService;
+  showBkStep(5);
 }
 
 function submitBookingFlow() {
@@ -4060,12 +4095,12 @@ function submitBookingFlow() {
   var uname = '';
   try { uname = tg.initDataUnsafe?.user?.username || ''; } catch(e) {}
   tg.HapticFeedback.impactOccurred('medium');
-  var btn = document.querySelector('#bkStep4 .btn-primary');
+  var btn = document.querySelector('#bkStep5 .btn-primary');
   btn.disabled = true;
   btn.textContent = '⏳ Отправка...';
   api('/api/massage/book', {
     client_chat_id: u,
-    masseur_chat_id: u,
+    masseur_chat_id: BK.selectedMasseurId || u,
     slot_date: BK.selectedDate,
     start_time: BK.selectedTime,
     duration_min: BK.selectedDur,
@@ -4077,25 +4112,23 @@ function submitBookingFlow() {
       resetBookingFlow();
       loadMyBookings();
     } else {
-      document.getElementById('bkError4').style.display = 'block';
-      document.getElementById('bkError4').textContent = '❌ ' + ((r && r.error) || 'Ошибка сервера');
+      document.getElementById('bkError5').style.display = 'block';
+      document.getElementById('bkError5').textContent = '❌ ' + ((r && r.error) || 'Ошибка сервера');
       btn.disabled = false;
       btn.textContent = '✅ Подтвердить запись';
     }
   }).catch(function() {
-    document.getElementById('bkError4').style.display = 'block';
-    document.getElementById('bkError4').textContent = '❌ Ошибка сети';
+    document.getElementById('bkError5').style.display = 'block';
+    document.getElementById('bkError5').textContent = '❌ Ошибка сети';
     btn.disabled = false;
     btn.textContent = '✅ Подтвердить запись';
   });
 }
 
 function resetBookingFlow() {
-  BK = {selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0};
+  BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:BK.role};
   document.getElementById('bookingStepsSection').style.display = 'none';
-  document.getElementById('bkError1').style.display = 'none';
-  document.getElementById('bkError2').style.display = 'none';
-  document.getElementById('bkError4').style.display = 'none';
+  document.querySelectorAll('.bk-error').forEach(function(e) { e.style.display = 'none'; });
 }
 
 // Version stamp for production verification

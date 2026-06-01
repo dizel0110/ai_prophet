@@ -6,7 +6,12 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def _send_tg_sync(chat_id: int, text: str) -> bool:
+def _mini_app_url() -> str:
+    from config import get_base_url
+    return f"{get_base_url().rstrip('/')}/#page-booking"
+
+
+def _send_tg_sync(chat_id: int, text: str, reply_markup: dict = None) -> bool:
     """Send Telegram message via Bot API (sync, respects PROXY_URL/TELEGRAM_API_URL)."""
     try:
         from config import TOKEN
@@ -21,11 +26,15 @@ def _send_tg_sync(chat_id: int, text: str) -> bool:
         if proxy_url:
             proxies = {"https": proxy_url, "http": proxy_url}
 
-        r = requests.post(url, json={
+        payload = {
             "chat_id": chat_id,
             "text": text,
             "parse_mode": "Markdown",
-        }, timeout=10, proxies=proxies)
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+
+        r = requests.post(url, json=payload, timeout=10, proxies=proxies)
         if r.status_code != 200:
             logger.warning(f"TG notify to {chat_id}: {r.status_code} {r.text[:200]}")
         return r.status_code == 200
@@ -49,35 +58,47 @@ def notify_booking_created(client_chat_id: int, masseur_chat_id: int,
         f"\U0001f4c6 *Дата:* {slot_date}\n"
         f"\u23f1 *Время:* {start_time}"
     )
-    _send_tg_sync(masseur_chat_id, text)
+    mini_url = _mini_app_url()
+    keyboard = {
+        "inline_keyboard": [[
+            {"text": "\U0001f4c5 Посмотреть в Mini App", "url": mini_url},
+            {"text": "\U0001f4ac Написать клиенту", "url": link},
+        ]]
+    }
+    _send_tg_sync(masseur_chat_id, text, reply_markup=keyboard)
 
 
 def notify_booking_confirmed(client_chat_id: int, masseur_chat_id: int,
-                             slot_date: str, start_time: str) -> None:
+                              slot_date: str, start_time: str) -> None:
+    mini_url = _mini_app_url()
     c_text = (
         f"\u2705 *Запись подтверждена*\n\n"
         f"\U0001f4c6 {slot_date} в {start_time}\n"
         f"\u0416\u0434\u0451\u043c \u0432\u0430\u0441!"
     )
-    _send_tg_sync(client_chat_id, c_text)
+    c_kb = {"inline_keyboard": [[{"text": "\U0001f4c5 Mini App", "url": mini_url}]]}
+    _send_tg_sync(client_chat_id, c_text, reply_markup=c_kb)
     m_text = (
         f"\u2705 *Клиент подтвердил запись*\n\n"
         f"\U0001f4c6 {slot_date} в {start_time}\n"
         f"\U0001f194 {client_chat_id}"
     )
-    _send_tg_sync(masseur_chat_id, m_text)
+    m_kb = {"inline_keyboard": [[{"text": "\U0001f4ac Написать клиенту", "url": f"tg://user?id={client_chat_id}"}]]}
+    _send_tg_sync(masseur_chat_id, m_text, reply_markup=m_kb)
 
 
 def notify_booking_cancelled(client_chat_id: int, masseur_chat_id: int,
-                             slot_date: str, start_time: str,
-                             by: str = "client") -> None:
+                              slot_date: str, start_time: str,
+                              by: str = "client") -> None:
+    mini_url = _mini_app_url()
     who = "клиент" if by == "client" else "массажист"
     m_text = (
         f"\u274c *Запись отменена ({who})*\n\n"
         f"\U0001f4c6 {slot_date} в {start_time}\n"
         f"\U0001f194 {client_chat_id}"
     )
-    _send_tg_sync(masseur_chat_id, m_text)
+    m_kb = {"inline_keyboard": [[{"text": "\U0001f4c5 Mini App", "url": mini_url}]]}
+    _send_tg_sync(masseur_chat_id, m_text, reply_markup=m_kb)
     if by == "masseur":
         c_text = (
             f"\u274c *Ваша запись отменена массажистом*\n\n"
