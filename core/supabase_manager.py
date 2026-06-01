@@ -93,7 +93,10 @@ CREATE TABLE IF NOT EXISTS bookings (
 );
 
 CREATE TABLE IF NOT EXISTS masseur_settings (
-  chat_id BIGINT PRIMARY KEY REFERENCES profiles(chat_id),
+  chat_id BIGINT PRIMARY KEY,
+  name TEXT DEFAULT '',
+  specialties JSONB DEFAULT '[]',
+  created_at DOUBLE PRECISION DEFAULT 0,
   email TEXT DEFAULT '',
   notify_tg BOOLEAN DEFAULT true,
   notify_email BOOLEAN DEFAULT false,
@@ -104,6 +107,11 @@ CREATE TABLE IF NOT EXISTS masseur_settings (
   cancel_deadline_min INT DEFAULT 60,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE masseur_settings DROP CONSTRAINT IF EXISTS masseur_settings_chat_id_fkey;
+ALTER TABLE masseur_settings ADD COLUMN IF NOT EXISTS name TEXT DEFAULT '';
+ALTER TABLE masseur_settings ADD COLUMN IF NOT EXISTS specialties JSONB DEFAULT '[]';
+ALTER TABLE masseur_settings ADD COLUMN IF NOT EXISTS created_at DOUBLE PRECISION DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS admin_users (
   chat_id BIGINT PRIMARY KEY REFERENCES profiles(chat_id),
@@ -128,7 +136,6 @@ def _sb_headers():
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": "application/json",
-        "Accept": "application/json",
     }
 
 
@@ -137,7 +144,7 @@ def _sb_req(method: str, path: str, data: dict = None):
     try:
         resp = req.request(method, url, json=data, headers=_sb_headers(), timeout=15)
         if resp.status_code >= 400 and resp.status_code != 201:
-            logger.debug(f"Supabase {method} {path}: {resp.status_code}")
+            logger.warning(f"Supabase {method} {path}: {resp.status_code} {resp.text[:200]}")
             return None
         return resp.json() if resp.content else {}
     except Exception as e:
@@ -219,11 +226,23 @@ def init_schema():
 
 def upsert(table: str, data: dict, conflict_col: str = "chat_id"):
     """Upsert a row via REST API (requires unique constraint on conflict_col)."""
+    def _try(data, path_override=None):
+        url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{(path_override or table).lstrip('/')}"
+        headers = _sb_headers()
+        headers["Prefer"] = "resolution=merge-duplicates"
+        try:
+            resp = req.request("POST", url, json=data, headers=headers, timeout=15)
+            if resp.status_code >= 400:
+                logger.warning(f"Supabase upsert {path_override or table}: {resp.status_code} {resp.text[:200]}")
+                return None
+            return resp.json() if resp.content else {}
+        except Exception as e:
+            logger.warning(f"Supabase upsert failed: {e}")
+            return None
     path = f"{table}?on_conflict={conflict_col}"
-    resp = _sb_req("POST", path, data)
+    resp = _try(data, path)
     if resp is None:
-        # Fallback: try plain POST (insert) without upsert
-        resp = _sb_req("POST", table, data)
+        resp = _try(data, table)
     return resp
 
 
