@@ -610,6 +610,8 @@ html{scroll-behavior:smooth}
 .svc-btn { display:block; width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--card); font-size:14px; cursor:pointer; text-align:left; margin-bottom:8px; transition:all .2s; font-family:inherit; }
 .svc-btn:hover { border-color:var(--gold); background:var(--gold-bg); }
 .svc-btn.selected { border-color:var(--gold); background:var(--gold); color:#fff; }
+.svc-btn.disabled { opacity:.45; cursor:default; }
+.svc-btn.disabled:hover { border-color:var(--border); background:var(--card); }
 .error-text { color:#e74c3c; font-size:13px; }
 .booking-entry { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .booking-entry:last-child { border-bottom:none; }
@@ -3974,9 +3976,12 @@ function registerMasseur() {
 function dateStr(s) { try { var d=new Date(s); return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear(); } catch(e) { return s; } }
 function localDateStr(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
-function startBookingFlow() {
+async function startBookingFlow() {
   tg.HapticFeedback.impactOccurred('medium');
-  BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client'};
+  BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client',isNewClient:false};
+  var u = uid();
+  var st = await apiGet('/api/massage/client_status', {chat_id: u});
+  BK.isNewClient = !(st && st.has_profile);
   document.getElementById('bookingStepsSection').style.display = 'block';
   document.getElementById('myBookingsSection').scrollIntoView({behavior:'smooth'});
   showBkStep(1);
@@ -4069,12 +4074,15 @@ function selectBkSlot(time, dur) {
 }
 
 function renderServices() {
-  var services = ['Классический массаж','Антицеллюлитный массаж','Спортивный массаж','Массаж спины и шеи','Стоун-терапия','Медовый массаж','Тайский массаж','Массаж лица','Аромамассаж','Бамбуковый массаж','Лимфодренажный массаж','Экспресс-программа'];
+  var services = ['🔰 Первичный приём (с консультацией)','Классический массаж','Антицеллюлитный массаж','Спортивный массаж','Массаж спины и шеи','Стоун-терапия','Медовый массаж','Тайский массаж','Массаж лица','Аромамассаж','Бамбуковый массаж','Лимфодренажный массаж','Экспресс-программа'];
   var el = document.getElementById('bkServices');
   var h = '';
   services.forEach(function(svc, i) {
     var sel = BK.selectedService === svc;
-    h += '<button class="svc-btn'+(sel?' selected':'')+'" onclick="selectBkService('+i+',\''+svc+'\')">'+svc+'</button>';
+    var disabled = BK.isNewClient && i > 0;
+    var hint = disabled ? '<br><span style="font-size:11px;color:var(--hint)">✔️ Сначала — первичный приём</span>' : '';
+    var clickHandler = disabled ? '' : "selectBkService("+i+",'"+svc.replace(/'/g,"\\'")+"')";
+    h += '<button class="svc-btn'+(sel?' selected':'')+(disabled?' disabled':'')+'" onclick="'+(clickHandler||'')+'">'+svc+hint+'</button>';
   });
   el.innerHTML = h;
 }
@@ -4108,6 +4116,7 @@ function submitBookingFlow() {
     start_time: BK.selectedTime,
     duration_min: BK.selectedDur,
     service_name: BK.selectedService,
+    is_first_visit: !!BK.isNewClient,
     client_username: uname,
   }).then(function(r) {
     if (r && r.ok) {

@@ -751,6 +751,18 @@ async def api_generate_slots(req: dict):
     return {"ok": True, "count": len(slots), "message": f"Создано {len(slots)} слотов"}
 
 
+@app.get("/api/massage/client_status")
+async def api_client_status(chat_id: int = 0):
+    """Check if client has a profile/questionnaire (for первичный приём gate)."""
+    from core.client_profiles import get_profile
+    profile = get_profile(chat_id)
+    return {
+        "ok": True,
+        "has_profile": bool(profile),
+        "has_questionnaire": bool(profile and bool(profile.get("latest_questionnaire"))),
+    }
+
+
 @app.post("/api/massage/book")
 async def api_create_booking(req: dict):
     """Create a new booking."""
@@ -765,15 +777,18 @@ async def api_create_booking(req: dict):
     client_username = req.get("client_username", "")
     if not client_id or not masseur_id or not slot_date or not start_time:
         return {"ok": False, "error": "Missing required fields"}
-    # Questionnaire gate: must have a profile <30 days old
+    # Questionnaire gate: new clients can only book "Первичный приём"
     import time
     from core.client_profiles import get_profile
     profile = get_profile(client_id)
+    is_primary = "первичный" in (service or "").lower()
     if not profile:
-        return {"ok": False, "error": "Требуется заполнить медицинскую анкету перед записью"}
-    last = profile.get("last_visit", 0)
-    if last and (time.time() - last) / 86400 > 30:
-        return {"ok": False, "error": "Анкета устарела — пройдите чек-ап"}
+        if not is_primary:
+            return {"ok": False, "error": "Новым клиентам доступна только услуга «Первичный приём (с консультацией)»"}
+    else:
+        last = profile.get("last_visit", 0)
+        if last and (time.time() - last) / 86400 > 30:
+            return {"ok": False, "error": "Анкета устарела — пройдите чек-ап"}
     from core.booking_manager import create_booking
     booking = create_booking(client_id, masseur_id, slot_date, start_time,
                              duration, service, note, first_visit, client_username)

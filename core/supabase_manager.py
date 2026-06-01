@@ -331,6 +331,23 @@ def migrate_from_json():
         except Exception as e:
             logger.warning(f"Admin migration: {e}")
 
+    # 4. Masseurs → masseur_settings
+    masseurs_path = os.path.join(DATA_DIR, "masseurs.json")
+    if os.path.exists(masseurs_path):
+        try:
+            with open(masseurs_path, "r", encoding="utf-8") as f:
+                masseurs = json.load(f)
+            for cid_str, info in masseurs.items():
+                upsert("masseur_settings", {
+                    "chat_id": int(cid_str),
+                    "name": info.get("name", ""),
+                    "specialties": info.get("specialties", []),
+                    "created_at": info.get("created_at", 0),
+                })
+            logger.info(f"Migrated {len(masseurs)} masseurs")
+        except Exception as e:
+            logger.warning(f"Masseur migration: {e}")
+
 
 def restore_from_supabase():
     """Pull data FROM Supabase TO JSON files.
@@ -431,5 +448,45 @@ def restore_from_supabase():
         with open(admin_path, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False, indent=2)
         logger.info(f"Restored {len(admins)} admin users → admin_ids_extras.json")
+
+    # 4. Time slots → time_slots.json
+    slots = query("time_slots")
+    if slots:
+        slots_path = os.path.join(DATA_DIR, "time_slots.json")
+        with open(slots_path, "w", encoding="utf-8") as f:
+            json.dump(slots, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(slots)} time slots → time_slots.json")
+
+    # 5. Bookings → bookings.json
+    bookings = query("bookings")
+    if bookings:
+        bookings_path = os.path.join(DATA_DIR, "bookings.json")
+        with open(bookings_path, "w", encoding="utf-8") as f:
+            json.dump(bookings, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(bookings)} bookings → bookings.json")
+
+    # 6. Masseur settings → masseurs.json
+    masseurs = query("masseur_settings")
+    if masseurs:
+        out = {}
+        for m in masseurs:
+            out[str(m["chat_id"])] = {
+                "chat_id": m["chat_id"],
+                "name": m.get("name", ""),
+                "specialties": m.get("specialties", []),
+                "created_at": m.get("created_at", 0),
+            }
+        masseurs_path = os.path.join(DATA_DIR, "masseurs.json")
+        with open(masseurs_path, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(masseurs)} masseurs → masseurs.json")
+
+    # 7. Diary entries → masseur_diary.json
+    diary = query("diary_entries")
+    if diary:
+        diary_path = os.path.join(DATA_DIR, "masseur_diary.json")
+        with open(diary_path, "w", encoding="utf-8") as f:
+            json.dump(diary, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(diary)} diary entries → masseur_diary.json")
 
     logger.info("Supabase → JSON restore complete")
