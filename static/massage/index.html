@@ -4017,11 +4017,50 @@ function loadMasseurs() {
     el.innerHTML = '<div style="font-size:11px;color:var(--hint);margin-bottom:4px">Зарегистрированные массажисты:</div>'
       + d.masseurs.map(function(m) {
         return '<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px">'
-          + '<span>💆 <b>'+(m.name||'—')+'</b> <span style="color:var(--hint)">(ID '+m.chat_id+')</span></span>'
+          + '<span>💆 <b id="masseur-name-'+m.chat_id+'">'+(m.name||'—')+'</b> <span style="color:var(--hint)">(ID '+m.chat_id+')</span>'
+          + ' <span class="edit-masseur-btn" onclick="editMasseurName('+m.chat_id+')" style="cursor:pointer;font-size:11px;color:var(--gold)">✏️</span></span>'
           + '<span style="font-size:11px;color:var(--hint)">'+(m.specialties||[]).join(', ')+'</span>'
           + '</div>';
       }).join('');
   });
+}
+
+function editMasseurName(chatId) {
+  var nameEl = document.getElementById('masseur-name-'+chatId);
+  var curName = nameEl.textContent;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = curName === '—' ? '' : curName;
+  input.style.width = '140px';
+  input.style.padding = '2px 6px';
+  input.style.border = '1px solid var(--gold)';
+  input.style.borderRadius = '4px';
+  input.style.fontSize = '12px';
+  input.style.fontFamily = 'inherit';
+  input.style.background = 'var(--card)';
+  input.style.color = 'var(--text)';
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  input.addEventListener('blur', function() { saveMasseurName(chatId, input); });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveMasseurName(chatId, input); }
+    if (e.key === 'Escape') { loadMasseurs(); }
+  });
+}
+
+function saveMasseurName(chatId, input) {
+  var newName = input.value.trim();
+  if (!newName) { loadMasseurs(); return; }
+  var u = uid();
+  if (!u) return;
+  input.disabled = true;
+  api('/api/admin/masseur', {chat_id: chatId, name: newName, specialties: [], admin_chat: u, _init_data: getInitData()}).then(function(d) {
+    if (d && d.ok) {
+      tg.HapticFeedback.impactOccurred('light');
+    }
+    loadMasseurs();
+  }).catch(function() { loadMasseurs(); });
 }
 
 function registerMasseur() {

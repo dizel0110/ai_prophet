@@ -72,7 +72,7 @@ def get_available_masseurs() -> List[Dict[str, Any]]:
                     except: wh = {}
                 result.append({
                     "chat_id": m["chat_id"],
-                    "name": m.get("email", "").split("@")[0] or f"Массажист {m['chat_id']}",
+                    "name": m.get("name") or m.get("email", "").split("@")[0] or f"Массажист {m['chat_id']}",
                     "working_hours": wh,
                     "break_start": str(m.get("break_start", "13:00")),
                     "break_end": str(m.get("break_end", "13:30")),
