@@ -1123,6 +1123,16 @@ async def api_test_client_empty(req: dict):
     }
     profs[str(cid)] = profile
     _save_profiles(profs)
+    from core.supabase_manager import SUPABASE_ENABLED, upsert
+    if SUPABASE_ENABLED:
+        upsert("profiles", {
+            "chat_id": cid,
+            "first_name": profile["first_name"],
+            "phone": profile["phone"],
+            "has_questionnaire": False,
+            "is_test": True,
+            "questionnaire_data": "{}",
+        })
     return {"ok": True, "client": profile}
 
 

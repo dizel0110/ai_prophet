@@ -3,9 +3,11 @@ import time
 import logging
 import os
 import threading
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+from core.supabase_manager import SUPABASE_ENABLED, upsert, _sb_req
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,29 @@ def save_consultation(
         _save_profiles(profiles)
         _save_records(records)
         logger.info(f"Saved consultation {consult_id} for chat {chat_id}")
+    if SUPABASE_ENABLED:
+        profile_payload = {
+            "chat_id": chat_id,
+            "first_name": profile.get("first_name", ""),
+            "phone": profile.get("phone", ""),
+            "full_name": questionnaire.get("full_name", ""),
+            "has_questionnaire": True,
+            "is_test": profile.get("is_test", False),
+            "questionnaire_data": json.dumps(questionnaire, ensure_ascii=False),
+        }
+        upsert("profiles", profile_payload)
+        cons_payload = {
+            "chat_id": chat_id,
+            "consultation_date": datetime.fromtimestamp(now, tz=timezone.utc).isoformat(),
+            "recommended_technique": recommended_technique,
+            "music_genre": music_genre,
+            "complaints": questionnaire.get("complaints", ""),
+            "photo_count": photo_count,
+            "video_count": video_count,
+            "is_test": profile.get("is_test", False),
+            "questionnaire_snapshot": json.dumps(questionnaire, ensure_ascii=False),
+        }
+        _sb_req("POST", "consultations", cons_payload)
 
 
 def get_profile(chat_id: int) -> Optional[Dict[str, Any]]:
@@ -383,6 +408,29 @@ def create_test_patient() -> Optional[Dict[str, Any]]:
         _save_profiles(profiles)
         _save_records(records)
 
+    if SUPABASE_ENABLED:
+        upsert("profiles", {
+            "chat_id": chat_id,
+            "first_name": name,
+            "phone": phone,
+            "full_name": name,
+            "has_questionnaire": True,
+            "is_test": True,
+            "questionnaire_data": json.dumps(questionnaire, ensure_ascii=False),
+        })
+        for c in profile["consultations"]:
+            _sb_req("POST", "consultations", {
+                "chat_id": chat_id,
+                "consultation_date": datetime.fromtimestamp(c["date"], tz=timezone.utc).isoformat(),
+                "recommended_technique": c["recommended_technique"],
+                "music_genre": c["music_genre"],
+                "complaints": c["complaints"],
+                "photo_count": c["photo_count"],
+                "video_count": c["video_count"],
+                "is_test": True,
+                "questionnaire_snapshot": json.dumps(questionnaire, ensure_ascii=False),
+            })
+
     logger.info(f"Created test patient {chat_id}: {name}")
     return profile
 
@@ -403,5 +451,8 @@ def delete_test_patient(chat_id: int) -> bool:
         # Remove profile
         del profiles[chat_key]
         _save_profiles(profiles)
+    if SUPABASE_ENABLED:
+        _sb_req("DELETE", f"consultations?chat_id=eq.{chat_id}")
+        _sb_req("DELETE", f"profiles?chat_id=eq.{chat_id}")
     logger.info(f"Deleted test patient {chat_id}")
     return True

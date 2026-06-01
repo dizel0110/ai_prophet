@@ -634,6 +634,46 @@ massage.py (консультация) ──→ music_db.py (жанры/ссыл
 | `/api/admin/stats?chat_id=X` | GET | Дашборд: статистика салона |
 | `/api/admin/client/{chat_id}/timeline?chat_id=X` | GET | Хронология консультаций клиента |
 
+---
+
+## 💾 Supabase: Sync Button & Dual-Write
+
+### Кнопка «Синхронизировать в БД» — для чего
+
+| Сценарий | Нужна ли синхронизация? |
+|----------|------------------------|
+| Добавил массажиста | **Нет** — dual-write пишет сразу в JSON + Supabase |
+| Провёл консультацию (/massage) | **Нет** — dual-write на `save_consultation()` |
+| Создал тестового пациента | **Нет** — dual-write в `create_test_patient()` |
+| Удалил тестового | **Нет** — dual-delete в `delete_test_patient()` |
+| **Первичное подключение Supabase** к уже работающему боту | **Да** — переносит все старые JSON-данные в Supabase |
+| Supabase был недоступен, данные копились в JSON | **Да** — доливает пропущенное |
+| После рестарта HF Space | **Не нужна** — `restore_from_supabase()` загружает из Supabase автоматически |
+
+Кнопка **не нужна** в повседневной работе. Это инструмент миграции и аварийного восстановления.
+
+### Что покрыто dual-write
+
+| Данные | Функция | Supabase table | Статус |
+|--------|---------|---------------|--------|
+| Массажисты | `set_masseur()` / `remove_masseur()` | `masseur_settings` | ✅ Dual-write |
+| Профили клиентов | `save_consultation()` | `profiles` | ✅ Dual-write |
+| Консультации | `save_consultation()` | `consultations` | ✅ Dual-write |
+| Тестовые пациенты | `create_test_patient()` / `delete_test_patient()` | `profiles` + `consultations` | ✅ Dual-write |
+| Бронирования | `booking_manager.py` | `bookings` + `time_slots` | ✅ Dual-write (был первым) |
+
+### Как это работает
+
+1. **Dual-write**: операция пишет сначала в JSON (`data/`), потом в Supabase (если `SUPABASE_ENABLED`). Если Supabase недоступен — JSON остаётся, данные не теряются.
+2. **Startup**: `init_schema()` → `migrate_from_json()` → `restore_from_supabase()`. При первом запуске с пустой `data/` — наполняет JSON-файлы из Supabase.
+3. **Sync**: кнопка в админке вызывает `migrate_from_json()` — принудительный перенос всех JSON → Supabase.
+
+### Почему sync всё ещё существует
+
+- **Первичная настройка**: бот работал без Supabase → подключили → sync переносит историю
+- **Восстановление после сбоя**: Supabase был недоступен → данные в JSON → sync доливает
+- **Ручной контроль**: админ может в любой момент форсировать синхронизацию
+
 ### Приоритет
 1. 📋 Список клиентов + просмотр анкеты и результатов ✅
 2. 📊 Дашборд (статистика) ✅
