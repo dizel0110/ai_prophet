@@ -162,7 +162,7 @@ def save_consultation(
             "full_name": questionnaire.get("full_name", ""),
             "has_questionnaire": True,
             "is_test": profile.get("is_test", False),
-            "questionnaire_data": json.dumps(questionnaire, ensure_ascii=False),
+            "questionnaire_data": questionnaire,
         }
         upsert("profiles", profile_payload)
         cons_payload = {
@@ -174,7 +174,7 @@ def save_consultation(
             "photo_count": photo_count,
             "video_count": video_count,
             "is_test": profile.get("is_test", False),
-            "questionnaire_snapshot": json.dumps(questionnaire, ensure_ascii=False),
+            "questionnaire_snapshot": questionnaire,
         }
         _sb_req("POST", "consultations", cons_payload)
 
@@ -425,7 +425,7 @@ def create_test_patient() -> Optional[Dict[str, Any]]:
             "full_name": name,
             "has_questionnaire": True,
             "is_test": True,
-            "questionnaire_data": json.dumps(questionnaire, ensure_ascii=False),
+            "questionnaire_data": questionnaire,
         })
         for c in profile["consultations"]:
             _sb_req("POST", "consultations", {
@@ -437,7 +437,7 @@ def create_test_patient() -> Optional[Dict[str, Any]]:
                 "photo_count": c["photo_count"],
                 "video_count": c["video_count"],
                 "is_test": True,
-                "questionnaire_snapshot": json.dumps(questionnaire, ensure_ascii=False),
+                "questionnaire_snapshot": questionnaire,
             })
 
     logger.info(f"Created test patient {chat_id}: {name}")

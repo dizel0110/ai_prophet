@@ -293,7 +293,7 @@ def migrate_from_json():
                     "phone": q.get("phone", ""),
                     "full_name": q.get("full_name", ""),
                     "has_questionnaire": bool(q),
-                    "questionnaire_data": json.dumps(q, ensure_ascii=False),
+                    "questionnaire_data": q,
                 })
                 migrated_profiles += 1
         except Exception as e:
@@ -314,7 +314,7 @@ def migrate_from_json():
                     "full_name": q.get("full_name", ""),
                     "has_questionnaire": bool(q),
                     "is_test": profile.get("is_test", False),
-                    "questionnaire_data": json.dumps(q, ensure_ascii=False),
+                    "questionnaire_data": q,
                 })
                 migrated_profiles += 1
         except Exception as e:
@@ -344,11 +344,11 @@ def migrate_from_json():
                         "recommended_technique": cons.get("recommended_technique", ""),
                         "music_genre": cons.get("music_genre", ""),
                         "complaints": cons.get("complaints", ""),
-                        "contraindications": json.dumps(cons.get("contraindications", []), ensure_ascii=False),
+                        "contraindications": cons.get("contraindications", []),
                         "photo_count": cons.get("photo_count", 0),
                         "video_count": cons.get("video_count", 0),
                         "is_test": profile.get("is_test", False),
-                        "questionnaire_snapshot": json.dumps(cons.get("questionnaire_snapshot", {}), ensure_ascii=False),
+                        "questionnaire_snapshot": cons.get("questionnaire_snapshot", {}),
                     })
                     if result is not None:
                         migrated_cons += 1

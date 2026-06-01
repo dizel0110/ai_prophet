@@ -1134,12 +1134,25 @@ html{scroll-behavior:smooth}
         </div>
         <div id="db-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;font-size:11px"></div>
         <div id="db-table-viewer" style="display:none;margin-bottom:8px"></div>
+        <div id="db-schema-info" style="display:none;margin-bottom:8px;font-size:10px;color:var(--hint);line-height:1.5;padding:6px;background:var(--card);border-radius:6px">
+          <b style="color:var(--gold-dark)">📐 Схема таблиц:</b><br>
+          <b>profiles</b> (chat_id PK) ← <b>consultations</b> (chat_id FK)<br>
+          <b>profiles</b> ← <b>bookings</b> (client_chat_id FK)<br>
+          <b>time_slots</b> (id PK) ← <b>bookings</b> (slot_id FK)<br>
+          <b>profiles</b> ← <b>admin_users</b> (chat_id FK)<br>
+          <b>masseur_settings</b> (chat_id PK) — нет FK (DROP CONSTRAINT)<br>
+          <b>diary_entries</b> (masseur_chat_id, client_chat_id) — без FK<br>
+          <b>time_slots</b> (masseur_chat_id) — без FK
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadDbStatus()">🔄 Обновить</button>
-          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="syncDb()" title="Переносит JSON-файлы (data/) в Supabase. Нужно при первом подключении Supabase к уже работающему боту.">📤 Sync JSON → DB</button>
-          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="migrateSchema()" title="Добавляет недостающие колонки в таблицы Supabase (ALTER TABLE). Нужно после обновления кода, если таблицы были созданы старой версией.">🔄 Мигрировать схему БД</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="showDbSchema()">📐 Схема</button>
         </div>
-        <div id="db-sync-msg" style="margin-top:6px;font-size:11px;color:var(--hint)"></div>
+        <div style="margin-top:6px;font-size:10px;color:var(--hint);line-height:1.4">
+          💡 Миграции схемы и синхронизация JSON→DB выполняются автоматически при старте сервера.
+          Ручные кнопки удалены за ненадобностью.
+        </div>
+      </div>
       </div>
     </details>
 
@@ -2008,14 +2021,24 @@ async function loadTableData(tbl) {
     cols.forEach(function(c) {
       var v = row[c];
       if (v === null || v === undefined) v = '';
-      else if (typeof v === 'object') v = JSON.stringify(v).slice(0, 60);
-      else v = String(v).slice(0, 60);
+      else if (typeof v === 'object') v = JSON.stringify(v).slice(0, 80);
+      else {
+        v = String(v).slice(0, 80);
+        // Try to detect string-encoded JSON (double-encoding bug)
+        if (v.length > 4 && (v[0] === '{' || v[0] === '[')) {
+          try { v = JSON.stringify(JSON.parse(v)).slice(0, 80); } catch(e) {}
+        }
+      }
       html += '<td style="padding:2px 4px;border-bottom:1px solid rgba(255,255,255,0.05);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(v) + '</td>';
     });
     html += '</tr>';
   });
   html += '</tbody></table></div>';
-  dv.innerHTML = html;
+    dv.innerHTML = html;
+}
+function showDbSchema() {
+  var el = qs('db-schema-info');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

@@ -1694,7 +1694,19 @@ async def api_admin_db_data(table: str, chat_id: int = 0, _init_data: str = ""):
         rows = query(table)
         if not rows:
             return {"ok": True, "rows": [], "count": 0}
-        # Limit to 50 rows for display
+        # Fix double-encoded JSONB strings and truncate long text
+        jsonb_cols = {"questionnaire_data", "questionnaire_snapshot", "contraindications",
+                       "specialties", "working_hours"}
+        for row in rows:
+            for k, v in row.items():
+                if isinstance(v, str) and len(v) > 120:
+                    row[k] = v[:120] + "..."
+                if k in jsonb_cols and isinstance(v, str):
+                    try:
+                        parsed = json.loads(v)
+                        row[k] = parsed
+                    except (json.JSONDecodeError, TypeError):
+                        pass
         rows = rows[:50]
         return {"ok": True, "rows": rows, "count": len(rows)}
     except Exception as e:
