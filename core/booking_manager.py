@@ -183,6 +183,7 @@ def _save_slots(slots: list):
 
 def get_free_slots(masseur_chat_id: int, slot_date: str = None, tz_offset: int = None) -> List[Dict[str, Any]]:
     """Get free slots for a masseur on a given date."""
+    result = None
     sb_req, sb_query = _init_sb()
     if sb_req:
         params = {"masseur_chat_id": f"eq.{masseur_chat_id}", "status": "eq.free"}
@@ -190,12 +191,13 @@ def get_free_slots(masseur_chat_id: int, slot_date: str = None, tz_offset: int =
             params["slot_date"] = f"eq.{slot_date}"
         slots = sb_query("time_slots", params)
         if isinstance(slots, list):
-            return slots
-    slots = _load_json(SLOTS_PATH)
-    result = [s for s in slots
-              if s.get("masseur_chat_id") == masseur_chat_id
-              and s.get("status") == "free"
-              and (slot_date is None or s.get("slot_date") == slot_date)]
+            result = slots
+    if result is None:
+        slots = _load_json(SLOTS_PATH)
+        result = [s for s in slots
+                  if s.get("masseur_chat_id") == masseur_chat_id
+                  and s.get("status") == "free"
+                  and (slot_date is None or s.get("slot_date") == slot_date)]
     if not result:
         sd = slot_date or date.today().isoformat()
         generated = generate_slots(masseur_chat_id, sd, days=3, tz_offset=tz_offset)
@@ -204,6 +206,57 @@ def get_free_slots(masseur_chat_id: int, slot_date: str = None, tz_offset: int =
                   if s.get("status") == "free"
                   and (slot_date is None or s.get("slot_date") == slot_date)]
     return result
+
+
+def get_booked_slots_for_month(masseur_chat_id: int, year: int, month: int, tz_offset: int = None) -> dict:
+    """Get slot count per day for a month: {date: {total: N, free: N}}."""
+    from calendar import monthrange
+    _, days_in_month = monthrange(year, month)
+    prefix = f"{year:04d}-{month:02d}"
+    all_slots = _load_json(SLOTS_PATH)
+    # Filter slots for this masseur in this month
+    day_map = {}
+    for s in all_slots:
+        if s.get("masseur_chat_id") != masseur_chat_id:
+            continue
+        sd = s.get("slot_date", "")
+        if not sd.startswith(prefix):
+            continue
+        key = sd
+        if key not in day_map:
+            day_map[key] = {"total": 0, "free": 0}
+        day_map[key]["total"] += 1
+        if s.get("status") == "free":
+            day_map[key]["free"] += 1
+    # Also query Supabase for extra data
+    sb_req, sb_query = _init_sb()
+    if sb_req:
+        start_date = f"{prefix}-01"
+        end_date = f"{prefix}-{days_in_month:02d}"
+        sb_slots = sb_query("time_slots", {
+            "masseur_chat_id": f"eq.{masseur_chat_id}",
+            "slot_date": f"gte.{start_date}",
+            "slot_date": f"lte.{end_date}",
+        })
+        if isinstance(sb_slots, list):
+            for s in sb_slots:
+                sd = s.get("slot_date", "")
+                if sd not in day_map:
+                    day_map[sd] = {"total": 0, "free": 0}
+                day_map[sd]["total"] = max(day_map[sd]["total"], day_map[sd].get("_sb_total", 0) + 1)
+                day_map[sd]["_sb_total"] = day_map[sd].get("_sb_total", 0) + 1
+                if s.get("status") == "free":
+                    day_map[sd]["free"] += 1
+    # Fill missing days
+    for d in range(1, days_in_month + 1):
+        ds = f"{prefix}-{d:02d}"
+        if ds not in day_map:
+            day_map[ds] = {"total": 0, "free": 0}
+    # Cleanup internal keys
+    for v in day_map.values():
+        v.pop("_sb_total", None)
+    return day_map
+
 
 # ──────────────────── Bookings ────────────────────
 

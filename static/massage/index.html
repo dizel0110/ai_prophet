@@ -600,6 +600,10 @@ html{scroll-behavior:smooth}
 .cal-day.selected { background:var(--gold); color:#fff; font-weight:700; }
 .cal-day.past { color:var(--hint); opacity:0.4; cursor:default; pointer-events:none; }
 .cal-day.today { border:2px solid var(--gold-dark); }
+.cal-day.full { background:rgba(231,76,60,0.2); color:#e74c3c; }
+.cal-day.busy { background:rgba(230,126,34,0.15); color:#e67e22; }
+.cal-day.mid { background:rgba(241,196,15,0.12); color:#f1c40f; }
+.cal-day.free { background:rgba(46,204,113,0.12); color:#2ecc71; }
 .cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
 .cal-nav button { background:none; border:none; font-size:20px; cursor:pointer; padding:4px 12px; color:var(--gold-dark); }
 .cal-nav span { font-size:15px; font-weight:600; }
@@ -4048,6 +4052,13 @@ function showBkStep(n) {
 }
 
 function renderBookingCalendar() {
+  var mid = BK.selectedMasseurId;
+  if (!mid) return;
+  apiGet('/api/massage/slots/month', {masseur_id: mid, year: new Date().getFullYear(), month: new Date().getMonth()+1, tz_offset: -new Date().getTimezoneOffset()}).then(function(r) {
+    _renderCalendar(r.ok && r.days ? r.days : {});
+  });
+}
+function _renderCalendar(avail) {
   var today = new Date();
   var year = today.getFullYear();
   var month = today.getMonth();
@@ -4070,8 +4081,33 @@ function renderBookingCalendar() {
     if (isPast) cls += ' past';
     if (isToday) cls += ' today';
     if (BK.selectedDate === dStr) cls += ' selected';
-    h += '<div class="'+cls+'" onclick="selectBkDate(\''+dStr+'\')">'+d+'</div>';
+    // Color by availability
+    var dayAvail = avail[dStr];
+    if (dayAvail && dayAvail.total > 0 && !isPast) {
+      var ratio = dayAvail.free / dayAvail.total;
+      if (ratio === 0) cls += ' full';
+      else if (ratio <= 0.25) cls += ' busy';
+      else if (ratio <= 0.5) cls += ' mid';
+      else cls += ' free';
+    }
+    // Tooltip
+    var tip = '';
+    if (dayAvail && !isPast) {
+      var fr = dayAvail.free || 0;
+      var tt = dayAvail.total || 0;
+      if (tt > 0) tip = ' title="Свободно '+fr+' из '+tt+'"';
+    } else if (isPast) {
+      tip = ' title="Прошедшая дата"';
+    }
+    h += '<div class="'+cls+'"'+tip+' onclick="selectBkDate(\''+dStr+'\')">'+d+'</div>';
   }
+  h += '</div>';
+  // Legend
+  h += '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px;font-size:10px;color:var(--hint)">';
+  h += '<span style="color:#2ecc71">🟢</span> много';
+  h += '<span style="color:#f1c40f">🟡</span> средне';
+  h += '<span style="color:#e67e22">🟠</span> мало';
+  h += '<span style="color:#e74c3c">🔴</span> занято';
   h += '</div>';
   el.innerHTML = h;
 }
