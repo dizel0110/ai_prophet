@@ -4,6 +4,7 @@ import logging
 import threading
 from typing import Optional, Dict, Any, List
 from pathlib import Path
+from core.supabase_manager import SUPABASE_ENABLED, upsert, _sb_req
 
 logger = logging.getLogger(__name__)
 
@@ -87,28 +88,34 @@ def get_masseur(chat_id: int) -> Optional[Dict[str, Any]]:
 
 
 def set_masseur(chat_id: int, name: str, specialties: List[str] = None) -> bool:
-    """Register or update a masseur."""
+    """Register or update a masseur (dual-write: JSON + Supabase)."""
+    entry = {
+        "chat_id": chat_id,
+        "name": name,
+        "specialties": specialties or [],
+        "created_at": time.time(),
+    }
     with _lock:
         data = _load_json(MASSEURS_PATH)
-        data[str(chat_id)] = {
-            "chat_id": chat_id,
-            "name": name,
-            "specialties": specialties or [],
-            "created_at": time.time(),
-        }
+        data[str(chat_id)] = entry
         _save_json(MASSEURS_PATH, data)
-        return True
+    if SUPABASE_ENABLED:
+        upsert("masseur_settings", entry)
+    return True
 
 
 def remove_masseur(chat_id: int) -> bool:
-    """Remove a masseur."""
+    """Remove a masseur (dual-delete: JSON + Supabase)."""
     with _lock:
         data = _load_json(MASSEURS_PATH)
         if str(chat_id) in data:
             del data[str(chat_id)]
             _save_json(MASSEURS_PATH, data)
-            return True
-        return False
+        else:
+            return False
+    if SUPABASE_ENABLED:
+        _sb_req("DELETE", f"masseur_settings?chat_id=eq.{chat_id}")
+    return True
 
 
 def is_masseur(chat_id: int) -> bool:
