@@ -991,6 +991,23 @@ html{scroll-behavior:smooth}
       <div id="stats-demographics" style="display:flex;gap:12px;margin:6px 0;font-size:12px"></div>
     </div>
 
+    <!-- DB Status -->
+    <details id="admin-db-section" style="margin:12px 0">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;color:var(--gold-dark);padding:4px 0">🗄️ База данных</summary>
+      <div id="admin-db-status" style="font-size:12px;margin-top:6px;padding:8px;background:var(--bg);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="db-indicator" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:gray"></span>
+          <span id="db-status-text">Проверка...</span>
+        </div>
+        <div id="db-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;font-size:11px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="loadDbStatus()">🔄 Обновить</button>
+          <button class="btn" style="flex:1;font-size:12px;padding:6px" onclick="syncDb()">📤 Sync JSON → DB</button>
+        </div>
+        <div id="db-sync-msg" style="margin-top:6px;font-size:11px;color:var(--hint)"></div>
+      </div>
+    </details>
+
     <div class="sec-sub">👥 Клиенты</div>
     <div id="admin-client-list" style="margin-top:8px">
       <p style="font-size:13px;color:var(--hint);text-align:center;padding:12px">Загрузка...</p>
@@ -1786,6 +1803,44 @@ async function apiUpload(endpoint, formData) {
     const txt = await r.text();
     try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
+}
+
+// DB status helper (admin)
+async function loadDbStatus() {
+  var u = uid();
+  if (!u) return;
+  var indicator = qs('db-indicator');
+  var text = qs('db-status-text');
+  var tables = qs('db-tables');
+  text.textContent = 'Загрузка...';
+  indicator.style.background = 'gray';
+  var res = await apiGet('/api/admin/db_status', {chat_id: u});
+  if (!res.ok) { text.textContent = 'Ошибка'; return; }
+  if (!res.supabase_enabled || !res.connected) {
+    text.textContent = '⚠️ Supabase не подключен';
+    indicator.style.background = 'orange';
+    tables.innerHTML = '<p style="color:var(--hint)">Работаем с JSON-файлами</p>';
+    return;
+  }
+  indicator.style.background = '#4caf50';
+  text.textContent = '✅ Supabase подключен';
+  var html = '', total = 0;
+  Object.keys(res.tables).forEach(function(tbl) {
+    var cnt = res.tables[tbl] || 0;
+    total += cnt;
+    html += '<div style="padding:2px 4px;background:var(--card);border-radius:4px">' + tbl + ': <b>' + cnt + '</b></div>';
+  });
+  html += '<div style="padding:2px 4px;font-weight:600;color:var(--gold)">Всего: ' + total + ' записей</div>';
+  tables.innerHTML = html;
+}
+async function syncDb() {
+  var u = uid();
+  if (!u) return;
+  var msg = qs('db-sync-msg');
+  msg.textContent = 'Синхронизация...';
+  var res = await api('/api/admin/db_migrate', {chat_id: u});
+  msg.textContent = res.ok ? '✅ ' + (res.message || 'Готово') : '❌ ' + (res.message || 'Ошибка');
+  loadDbStatus();
 }
 
 const COUNTRY_CODES = [
@@ -2997,6 +3052,7 @@ function switchEduRole(role) {
 async function loadAdminClients() {
   const u = uid();
   if (!u) return;
+  loadDbStatus();
   const container = qs('admin-client-list');
   try {
     var [clientsRes, statsRes] = await Promise.all([

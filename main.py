@@ -1396,6 +1396,40 @@ async def api_admin_client_timeline(target_chat_id: int = 0, chat_id: int = 0):
     profile = get_profile(target_chat_id)
     return {"ok": True, "timeline": timeline, "profile": profile}
 
+
+# ──────────────────── DB Admin ────────────────────
+
+@app.get("/api/admin/db_status")
+async def api_admin_db_status(chat_id: int = 0):
+    """Supabase connection status + table row counts."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    from core.supabase_manager import SUPABASE_ENABLED, check_tables_exist, _sb_req
+    result = {"ok": True, "supabase_enabled": SUPABASE_ENABLED, "connected": False, "tables": {}}
+    if not SUPABASE_ENABLED:
+        return result
+    result["connected"] = check_tables_exist()
+    if result["connected"]:
+        for tbl in ("profiles", "consultations", "diary_entries", "time_slots",
+                     "bookings", "masseur_settings", "admin_users"):
+            rows = _sb_req("GET", f"{tbl}?limit=9999")
+            result["tables"][tbl] = len(rows) if isinstance(rows, list) else 0
+    return result
+
+
+@app.post("/api/admin/db_migrate")
+async def api_admin_db_migrate(chat_id: int = 0):
+    """Trigger JSON → Supabase migration (admin only)."""
+    if not chat_id or not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Access denied"}
+    from core.supabase_manager import migrate_from_json
+    try:
+        migrate_from_json()
+        return {"ok": True, "message": "Migration complete"}
+    except Exception as e:
+        return {"ok": False, "message": f"Migration failed: {e}"}
+
+
 # ──────────────────── Server ────────────────────
 
 def start_web():
@@ -1420,11 +1454,12 @@ async def start_bot_polling():
             logger.warning(f"⚠️ Не удалось полностью очистить temp: {e}")
     else: os.makedirs(cfg.TEMP_DIR)
 
-    # Supabase: auto-create tables + migrate data
+    # Supabase: auto-create tables + migrate + restore
     try:
-        from core.supabase_manager import init_schema, migrate_from_json
+        from core.supabase_manager import init_schema, migrate_from_json, restore_from_supabase
         if init_schema():
             migrate_from_json()
+            restore_from_supabase()
     except Exception as e:
         logger.warning(f"Supabase init skipped: {e}")
 

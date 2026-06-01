@@ -135,28 +135,31 @@ def _sb_req(method: str, path: str, data: dict = None):
 
 
 def check_tables_exist() -> bool:
-    """Check if profiles table exists via REST API HEAD request."""
-    resp = _sb_req("HEAD", "profiles?limit=1")
-    return resp is not None
+    """Check if profiles table exists via REST API."""
+    resp = _sb_req("GET", "profiles?limit=1")
+    return isinstance(resp, list)
 
 
-def init_schema():
-    """Auto-create tables on startup via direct Postgres connection."""
-    if not SUPABASE_ENABLED:
-        logger.info("Supabase not configured — skipping DB")
-        return False
+SQL_FILE_HINT = "internal/supabase_schema.sql"
 
-    if check_tables_exist():
-        logger.info("Supabase tables already exist")
-        return True
 
-    # Need DB URL for direct SQL (requires DB password)
-    db_url = os.getenv("SUPABASE_DB_URL", "")
-    if not db_url:
-        logger.warning("SUPABASE_DB_URL not set — tables must be created manually")
-        logger.warning("Run script from internal/supabase_schema.sql in Supabase SQL Editor")
-        return False
+def _log_manual_sql_instructions():
+    logger.warning("=" * 60)
+    logger.warning("Supabase: tables not found and auto-creation failed.")
+    logger.warning("")
+    logger.warning("To create tables manually:")
+    logger.warning(f"  1. Open: https://supabase.com/dashboard/project/{SUPABASE_URL.split('.')[0].split('//')[1]}/sql/new")
+    logger.warning(f"  2. Copy content from: {SQL_FILE_HINT}")
+    logger.warning("  3. Paste into SQL Editor → Run")
+    logger.warning("  4. Restart the bot")
+    logger.warning("")
+    logger.warning("Or enable Connection Pooler in Project Settings → Database")
+    logger.warning("and set SUPABASE_DB_URL to the Session pooler connection string.")
+    logger.warning("=" * 60)
 
+
+def _run_sql_via_db_url(db_url: str) -> bool:
+    """Try to execute schema SQL via a direct Postgres connection (psycopg2)."""
     try:
         import psycopg2
         conn = psycopg2.connect(db_url, connect_timeout=10)
@@ -165,17 +168,52 @@ def init_schema():
         cur.execute(SCHEMA_SQL)
         cur.close()
         conn.close()
-        logger.info("Supabase tables created")
+        logger.info("Supabase tables created via direct DB connection")
         return True
+    except ImportError:
+        logger.warning("psycopg2 not installed — can't auto-create tables")
+        return False
     except Exception as e:
-        logger.error(f"Failed to create Supabase tables: {e}")
+        logger.warning(f"DB connection failed: {e}")
         return False
 
 
+def init_schema():
+    """Auto-create tables on startup.
+    
+    Tries:
+      1. Check via REST API if tables already exist → done
+      2. Direct Postgres connection via SUPABASE_DB_URL
+      3. Logs manual instructions for Supabase SQL Editor
+    """
+    if not SUPABASE_ENABLED:
+        logger.info("Supabase not configured — using JSON file storage")
+        return False
+
+    if check_tables_exist():
+        logger.info("Supabase tables already exist")
+        return True
+
+    # Try direct/psycopg2 connection
+    db_url = os.getenv("SUPABASE_DB_URL", "")
+    if db_url:
+        if _run_sql_via_db_url(db_url):
+            return True
+    else:
+        logger.warning("SUPABASE_DB_URL not set")
+
+    _log_manual_sql_instructions()
+    return False
+
+
 def upsert(table: str, data: dict, conflict_col: str = "chat_id"):
-    """Upsert a row via REST API."""
+    """Upsert a row via REST API (requires unique constraint on conflict_col)."""
     path = f"{table}?on_conflict={conflict_col}"
-    return _sb_req("POST", path, data)
+    resp = _sb_req("POST", path, data)
+    if resp is None:
+        # Fallback: try plain POST (insert) without upsert
+        resp = _sb_req("POST", table, data)
+    return resp
 
 
 def query(table: str, params: dict = None) -> list:
@@ -198,7 +236,8 @@ def migrate_from_json():
         logger.warning("Tables don't exist, skipping migration")
         return
 
-    # 1. Profiles
+    # 1. Profiles (from user_settings or client_profiles)
+    migrated_profiles = 0
     settings_path = os.path.join(DATA_DIR, "user_settings.json")
     if os.path.exists(settings_path):
         try:
@@ -215,31 +254,65 @@ def migrate_from_json():
                     "has_questionnaire": bool(q),
                     "questionnaire_data": json.dumps(q, ensure_ascii=False),
                 })
-            logger.info(f"Migrated {len(users)} profiles")
+                migrated_profiles += 1
         except Exception as e:
-            logger.warning(f"Profile migration: {e}")
+            logger.warning(f"Profile migration (user_settings): {e}")
 
-    # 2. Consultations
+    # Also migrate from client_profiles.json (has is_test flag)
     prof_path = os.path.join(DATA_DIR, "client_profiles.json")
     if os.path.exists(prof_path):
         try:
             with open(prof_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             for cid_str, profile in data.items():
+                q = profile.get("latest_questionnaire") or {}
+                upsert("profiles", {
+                    "chat_id": int(cid_str),
+                    "first_name": profile.get("first_name", ""),
+                    "phone": q.get("phone", ""),
+                    "full_name": q.get("full_name", ""),
+                    "has_questionnaire": bool(q),
+                    "is_test": profile.get("is_test", False),
+                    "questionnaire_data": json.dumps(q, ensure_ascii=False),
+                })
+                migrated_profiles += 1
+        except Exception as e:
+            logger.warning(f"Profile migration (client_profiles): {e}")
+    if migrated_profiles:
+        logger.info(f"Migrated {migrated_profiles} profiles")
+
+    # 2. Consultations (plain POST — no unique constraint conflict to handle)
+    prof_path = os.path.join(DATA_DIR, "client_profiles.json")
+    migrated_cons = 0
+    if os.path.exists(prof_path):
+        try:
+            with open(prof_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for cid_str, profile in data.items():
                 for cons in profile.get("consultations", []):
-                    upsert("consultations", {
+                    raw_date = cons.get("date", "")
+                    # Convert Unix timestamp to ISO format
+                    if isinstance(raw_date, (int, float)) and raw_date > 1e9:
+                        from datetime import datetime, timezone
+                        raw_date = datetime.fromtimestamp(raw_date, tz=timezone.utc).isoformat()
+                    elif not raw_date:
+                        raw_date = None
+                    result = _sb_req("POST", "consultations", {
                         "chat_id": int(cid_str),
-                        "consultation_date": cons.get("date", ""),
+                        "consultation_date": raw_date,
                         "recommended_technique": cons.get("recommended_technique", ""),
                         "music_genre": cons.get("music_genre", ""),
                         "complaints": cons.get("complaints", ""),
-                        "contraindications": json.dumps(cons.get("contraindications", [])),
+                        "contraindications": json.dumps(cons.get("contraindications", []), ensure_ascii=False),
                         "photo_count": cons.get("photo_count", 0),
                         "video_count": cons.get("video_count", 0),
                         "is_test": profile.get("is_test", False),
                         "questionnaire_snapshot": json.dumps(cons.get("questionnaire_snapshot", {}), ensure_ascii=False),
                     })
-            logger.info("Migrated consultations")
+                    if result is not None:
+                        migrated_cons += 1
+            if migrated_cons:
+                logger.info(f"Migrated {migrated_cons} consultations")
         except Exception as e:
             logger.warning(f"Consultation migration: {e}")
 
@@ -257,3 +330,106 @@ def migrate_from_json():
             logger.info(f"Migrated {len(admins)} admin users")
         except Exception as e:
             logger.warning(f"Admin migration: {e}")
+
+
+def restore_from_supabase():
+    """Pull data FROM Supabase TO JSON files.
+    
+    Runs after migrate_from_json(). On HF Spaces rebuild (empty data/),
+    this repopulates JSON files from Supabase so the bot sees all data.
+    """
+    if not SUPABASE_ENABLED:
+        return
+    if not check_tables_exist():
+        logger.info("Supabase tables don't exist — nothing to restore")
+        return
+
+    from datetime import datetime, timezone
+
+    # 1. Profiles → user_settings.json
+    profiles = query("profiles")
+    if profiles:
+        out = {}
+        for p in profiles:
+            cid = str(p["chat_id"])
+            qdata = p.get("questionnaire_data")
+            if isinstance(qdata, str):
+                try:
+                    qdata = json.loads(qdata)
+                except Exception:
+                    qdata = {}
+            out[cid] = {
+                "first_name": p.get("first_name", ""),
+                "username": p.get("username", ""),
+                "massage_questionnaire": qdata if isinstance(qdata, dict) else {},
+            }
+        settings_path = os.path.join(DATA_DIR, "user_settings.json")
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(out)} profiles → user_settings.json")
+
+    # 2. Consultations → client_profiles.json
+    cons = query("consultations")
+    if cons:
+        # Group consultations by chat_id
+        grouped = {}
+        for c in cons:
+            cid = str(c["chat_id"])
+            if cid not in grouped:
+                # Fetch profile data for this user
+                pdata = query("profiles", {"chat_id": f"eq.{c['chat_id']}"})
+                profile_info = pdata[0] if pdata else {}
+                qdata = profile_info.get("questionnaire_data", {})
+                if isinstance(qdata, str):
+                    try:
+                        qdata = json.loads(qdata)
+                    except Exception:
+                        qdata = {}
+                grouped[cid] = {
+                    "chat_id": c["chat_id"],
+                    "first_name": profile_info.get("first_name", ""),
+                    "phone": profile_info.get("phone", ""),
+                    "full_name": profile_info.get("full_name", ""),
+                    "is_test": c.get("is_test", False),
+                    "first_visit": "",
+                    "last_visit": "",
+                    "total_consultations": 0,
+                    "consultations": [],
+                    "latest_questionnaire": qdata,
+                }
+            grouped[cid]["consultations"].append({
+                "date": c.get("consultation_date", ""),
+                "recommended_technique": c.get("recommended_technique", ""),
+                "music_genre": c.get("music_genre", ""),
+                "complaints": c.get("complaints", ""),
+                "contraindications": c.get("contraindications", []),
+                "photo_count": c.get("photo_count", 0),
+                "video_count": c.get("video_count", 0),
+                "questionnaire_snapshot": c.get("questionnaire_snapshot", {}),
+            })
+        for cid, g in grouped.items():
+            g["total_consultations"] = len(g["consultations"])
+            dates = [c["date"] for c in g["consultations"] if c["date"]]
+            if dates:
+                g["first_visit"] = min(dates)
+                g["last_visit"] = max(dates)
+        prof_path = os.path.join(DATA_DIR, "client_profiles.json")
+        with open(prof_path, "w", encoding="utf-8") as f:
+            json.dump(grouped, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(cons)} consultations → client_profiles.json")
+
+    # 3. Admin users → admin_ids_extras.json
+    admins = query("admin_users")
+    if admins:
+        out = {}
+        for a in admins:
+            out[str(a["chat_id"])] = {
+                "username": a.get("username", ""),
+                "added_by": a.get("added_by"),
+            }
+        admin_path = os.path.join(DATA_DIR, "admin_ids_extras.json")
+        with open(admin_path, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, indent=2)
+        logger.info(f"Restored {len(admins)} admin users → admin_ids_extras.json")
+
+    logger.info("Supabase → JSON restore complete")
