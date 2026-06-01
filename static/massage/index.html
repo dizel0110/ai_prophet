@@ -4014,7 +4014,7 @@ function registerMasseur() {
   var msg = document.getElementById('masseur-reg-msg');
   if (!chatId || !name) { msg.textContent = '❌ Введите ID и имя'; return; }
   api('/api/admin/masseur', {chat_id: chatId, name: name, specialties: [], admin_chat: u, _init_data: getInitData()}).then(function(d) {
-    msg.textContent = d.ok ? '✅ Массажист '+name+' добавлен' : '❌ '+(d.error||'Ошибка');
+    msg.textContent = d.message || (d.ok ? '✅ Массажист '+name+' добавлен' : '❌ '+(d.error||'Ошибка'));
     if (d.ok) { document.getElementById('masseur-reg-chat').value = ''; document.getElementById('masseur-reg-name').value = ''; loadMasseurs(); }
   });
 }

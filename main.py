@@ -1164,9 +1164,45 @@ async def api_masseur_set(req: dict):
     specialties = req.get("specialties", [])
     if not chat_id or not name:
         return {"ok": False, "error": "Missing chat_id or name"}
+
+    # 1. Verify user exists via Telegram API
+    import os, requests
+    from config import TOKEN as BOT_TOKEN
+    telegram_api_url = os.getenv("TELEGRAM_API_URL")
+    base_url = (telegram_api_url or "https://api.telegram.org").rstrip("/")
+    proxy_url = os.getenv("PROXY_URL")
+    proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
+    try:
+        r = requests.get(f"{base_url}/bot{BOT_TOKEN}/getChat?chat_id={chat_id}", timeout=10, proxies=proxies)
+        if r.status_code != 200:
+            return {"ok": False, "error": f"Telegram user {chat_id} не найден. Убедись, что пользователь написал боту хотя бы раз."}
+        user_data = r.json().get("result", {})
+        tg_name = user_data.get("first_name", "") + " " + user_data.get("last_name", "")
+        tg_username = user_data.get("username", "")
+    except Exception as e:
+        return {"ok": False, "error": f"Ошибка проверки Telegram: {e}"}
+
+    # 2. Save masseur (dual-write: JSON + Supabase)
     from core.masseur_diary import set_masseur
     set_masseur(chat_id, name, specialties)
-    return {"ok": True}
+
+    # 3. Verify in Supabase
+    sb_confirmed = False
+    from core.supabase_manager import SUPABASE_ENABLED, query
+    if SUPABASE_ENABLED:
+        try:
+            result = query("masseur_settings", {"chat_id": f"eq.{chat_id}"})
+            sb_confirmed = bool(result)
+        except Exception:
+            pass
+
+    msg = f"✅ {name} добавлен"
+    if sb_confirmed:
+        msg += " и сохранён в Supabase. После перезапуска Space всё восстановится автоматически."
+    else:
+        msg += " (только JSON, Supabase не доступен)"
+
+    return {"ok": True, "message": msg, "supabase_confirmed": sb_confirmed, "tg_name": tg_name.strip(), "tg_username": tg_username}
 
 
 # ──────────────────── Questionnaire API ────────────────────
