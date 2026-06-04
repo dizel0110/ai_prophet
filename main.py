@@ -1854,11 +1854,7 @@ async def start_bot_polling():
         BotCommand(command="specialists", description="Список специалистов"),
         BotCommand(command="dismiss", description="Удалить специалиста"),
         BotCommand(command="settings", description="Выбрать мозг бота (Gemini/HF)"),
-        BotCommand(command="dizel0110", description="Вход в VIP режим"),
-        BotCommand(command="vipmode", description="🔮 Переключить Prophet/Вертикаль"),
-        BotCommand(command="vip_grant", description="Добавить в VIP без пароля"),
-        BotCommand(command="vip_revoke", description="Убрать из VIP"),
-        BotCommand(command="vip_list", description="Список VIP-вайтлиста"),
+        BotCommand(command="dizel0110", description="⭐ VIP-режим: Gemini без лимитов"),
         BotCommand(command="stop", description="Остановить текущие действия")
     ]
     await bot.set_my_commands(commands)
