@@ -121,18 +121,18 @@ def cleanup_user_temp(chat_id):
         for f in glob.glob(os.path.join(TEMP_DIR, pat)):
             cleanup_file(f)
 
-def get_main_menu(vip_mode: bool = False, chat_id: str = None):
-    """Главное меню: обычное или VIP"""
+def get_main_menu(vip_mode: bool = False, user_mode: str = "vertical"):
+    """Главное меню: вертикаль (обычные) или Prophet (VIP)."""
     vertical = get_vertical_name()
-    # Для VIP: Mini App платформы Prophet; для обычных: массажная вертикаль
-    if vip_mode:
-        web_app_url = f"{get_base_url()}/static/prophet/index.html"
-    else:
-        web_app_url = f"{get_base_url()}/static/massage/index.html"
+    is_prophet = vip_mode and user_mode == "prophet"
+    base_url = get_base_url()
+    vertical_url = f"{base_url}/static/massage/index.html"
+    prophet_url = f"{base_url}/static/prophet/index.html"
     
-    if vip_mode:
+    if is_prophet:
         kb = [
-            [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
+            [KeyboardButton(text="🔮 Портал (AI Prophet)", web_app=WebAppInfo(url=prophet_url)),
+             KeyboardButton(text=f"🏪 {vertical}", web_app=WebAppInfo(url=vertical_url))],
             [KeyboardButton(text="🔮 VIP Предсказание"), KeyboardButton(text="🎙 VIP Голос")],
             [KeyboardButton(text="🖼 VIP Видение"), KeyboardButton(text="🌐 VIP Поиск")],
             [KeyboardButton(text="🎵 VIP Музыка"), KeyboardButton(text="📚 Библиотека")],
@@ -140,7 +140,7 @@ def get_main_menu(vip_mode: bool = False, chat_id: str = None):
         ]
     else:
         kb = [
-            [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
+            [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=vertical_url))],
             [KeyboardButton(text="🖐 Массаж"), KeyboardButton(text="🎙 Голос")],
             [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="⚙️ Настройки")],
             [KeyboardButton(text="📚 Библиотека"), KeyboardButton(text="📥 Импорт")],
@@ -297,6 +297,7 @@ async def cmd_start(message: types.Message):
     is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
 
     vertical = get_vertical_name()
+    user_mode = user_settings.get(chat_id, {}).get('user_mode', 'vertical')
     welcome_text = (
         f"{greeting}\n\n"
         f"👋 Добро пожаловать в «{vertical}»!\n\n"
@@ -316,7 +317,7 @@ async def cmd_start(message: types.Message):
 
     await message.answer(
         welcome_text,
-        reply_markup=get_main_menu(vip_mode=is_vip),
+        reply_markup=get_main_menu(vip_mode=is_vip, user_mode=user_mode),
         parse_mode="Markdown"
     )
 
@@ -509,10 +510,7 @@ async def cmd_help(message: types.Message):
         )
         await message.answer(base + prophet, parse_mode="Markdown")
     else:
-        await message.answer(
-            base + "\n\n⭐ *VIP:* `/dizel0110 <пароль>` — Gemini AI, без лимитов",
-            parse_mode="Markdown"
-        )
+        await message.answer(base, parse_mode="Markdown")
 
 @router.message(Command("specialist"))
 async def cmd_specialist(message: types.Message):
@@ -1136,13 +1134,15 @@ async def handle_text(message: types.Message, bot: Bot):
         save_settings(user_settings) # Сохраняем при изменении
         chat_id = str(message.chat.id)
         is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
-        await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(vip_mode=is_vip), parse_mode="Markdown")
+        user_mode = user_settings.get(chat_id, {}).get('user_mode', 'vertical')
+        await message.answer("✅ *Источник изменен.*", reply_markup=get_main_menu(vip_mode=is_vip, user_mode=user_mode), parse_mode="Markdown")
         return
 
     if text == "⬅️ Назад":
         chat_id = str(message.chat.id)
         is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
-        await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu(vip_mode=is_vip))
+        user_mode = user_settings.get(chat_id, {}).get('user_mode', 'vertical')
+        await message.answer("Возвращаемся в главный чертог.", reply_markup=get_main_menu(vip_mode=is_vip, user_mode=user_mode))
         return
 
     # --- ЛОГИКА ШАГОВ ПЛЕЙЛИСТА ---
@@ -1504,11 +1504,12 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         final_text = "😔 Сегодня звезды не отвечают мне... Попробуй позже."
         chat_id = str(message.chat.id)
         is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
+        user_mode = user_settings.get(chat_id, {}).get('user_mode', 'vertical')
         if status_msg:
             await status_msg.edit_text(final_text)
-            await message.answer("Вернись, когда эфир очистится.", reply_markup=get_main_menu(vip_mode=is_vip))
+            await message.answer("Вернись, когда эфир очистится.", reply_markup=get_main_menu(vip_mode=is_vip, user_mode=user_mode))
         else:
-            await message.answer(final_text, reply_markup=get_main_menu(vip_mode=is_vip))
+            await message.answer(final_text, reply_markup=get_main_menu(vip_mode=is_vip, user_mode=user_mode))
 
 @router.callback_query(F.data.startswith("dl_track:"))
 async def handle_track_callback(callback: types.CallbackQuery, bot: Bot):

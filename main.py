@@ -1106,11 +1106,23 @@ async def api_session_media(
 
 
 @app.get("/api/education")
-async def api_education(chat_id: int = 0, role: str = "client"):
+async def api_education(chat_id: int = 0, role: str = "client", user_mode: str = "vertical"):
     """Get education markdown content for a role.
     Returns allowed_roles based on actual user permission.
+    Renders {{VERTICAL_NAME}} template based on user_mode.
     """
-    import os
+    import os, json
+    from config import get_vertical_name, TEMP_DIR
+    # Detect user_mode from server-side settings if chat_id provided
+    _user_mode = user_mode
+    if chat_id:
+        _settings_path = os.path.join(TEMP_DIR, "user_settings.json")
+        try:
+            with open(_settings_path, "r", encoding="utf-8") as _f:
+                _all = json.load(_f)
+            _user_mode = _all.get(str(chat_id), {}).get("user_mode", user_mode)
+        except Exception:
+            pass
     role_map = {"client": "education_client.md", "masseur": "education_masseur.md", "admin": "education_admin.md"}
     # Determine allowed roles based on user's actual role
     allowed = ["client"]
@@ -1140,6 +1152,9 @@ async def api_education(chat_id: int = 0, role: str = "client"):
         return {"ok": False, "error": "Education file not found", "allowed_roles": allowed}
     with open(fpath, "r", encoding="utf-8") as f:
         content = f.read()
+    # Render template: {{VERTICAL_NAME}}
+    name = "AI Prophet" if _user_mode == "prophet" else get_vertical_name()
+    content = content.replace("{{VERTICAL_NAME}}", name)
     return {"ok": True, "role": role, "content": content, "allowed_roles": allowed}
 
 
@@ -1854,7 +1869,7 @@ async def start_bot_polling():
         BotCommand(command="specialists", description="Список специалистов"),
         BotCommand(command="dismiss", description="Удалить специалиста"),
         BotCommand(command="settings", description="Выбрать мозг бота (Gemini/HF)"),
-        BotCommand(command="dizel0110", description="⭐ VIP-режим: Gemini без лимитов"),
+
         BotCommand(command="stop", description="Остановить текущие действия")
     ]
     await bot.set_my_commands(commands)

@@ -387,7 +387,7 @@ async def exit_vip(message: types.Message):
             "Теперь вы используете обычный режим (Hugging Face).\n\n"
             "Для возврата используйте `/dizel0110 <пароль>`",
             parse_mode="Markdown",
-            reply_markup=get_main_menu(vip_mode=False)
+            reply_markup=get_main_menu(vip_mode=False, user_mode="vertical")
         )
     else:
         await message.answer("ℹ️ Вы не в VIP режиме.")
@@ -414,11 +414,13 @@ async def toggle_vip_mode(message: types.Message):
     reset_chat(chat_id, user_mode=new_mode)
     
     mode_name = "🔮 AI Prophet (полная платформа)" if new_mode == "prophet" else "🖐 Массажный салон (текущая вертикаль)"
+    from handlers.messages import get_main_menu
     await message.answer(
         f"✅ *Режим изменён*\n\n"
         f"Текущий режим: {mode_name}\n\n"
         f"/vipmode — переключить обратно",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=get_main_menu(vip_mode=True, user_mode=new_mode)
     )
 
 
