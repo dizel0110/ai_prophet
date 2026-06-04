@@ -5,11 +5,43 @@ from config import OWNER_USERNAME, VIP_PASSWORD, VIP_RESET_PASSWORD, get_base_ur
 import json
 import os
 import time
+import logging
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 SETTINGS_FILE = os.path.join(DATA_DIR, "user_settings.json")
 ADMIN_PENDING_FILE = os.path.join(DATA_DIR, "admin_pending.json")
+VIP_ALLOWED_FILE = os.path.join(DATA_DIR, "vip_allowed.json")
+
+
+# ─── VIP whitelist ───────────────────────────────────────────
+def _load_vip_allowed() -> set:
+    if os.path.exists(VIP_ALLOWED_FILE):
+        try:
+            with open(VIP_ALLOWED_FILE, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except Exception:
+            pass
+    return set()
+
+
+def _save_vip_allowed(data: set):
+    try:
+        with open(VIP_ALLOWED_FILE, "w", encoding="utf-8") as f:
+            json.dump(sorted(data), f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save vip_allowed: {e}")
+
+
+VIP_ALLOWED = _load_vip_allowed()
+
+
+def _is_vip_allowed(chat_id: int, username: str) -> bool:
+    """Owner всегда имеет доступ. Остальные по вайтлисту."""
+    if username.lower() == OWNER_USERNAME.lower():
+        return True
+    return chat_id in VIP_ALLOWED
 
 
 def _load_admin_pending() -> dict:
@@ -150,15 +182,21 @@ def reset_failed_attempts(chat_id: str):
 
 @router.message(Command("dizel0110"))
 async def admin_cmd(message: types.Message):
-    """Вход в VIP режим по паролю"""
+    """Вход в VIP режим"""
     chat_id = str(message.chat.id)
+    chat_id_int = message.chat.id
     username = message.from_user.username or ""
-    
+
+    # Если пользователь в вайтлисте — сразу пускаем без пароля
+    if _is_vip_allowed(chat_id_int, username):
+        reset_failed_attempts(str(chat_id_int))
+        await _enter_vip(message, chat_id, chat_id_int)
+        return
+
     # Проверяем, не заблокирован ли пользователь
     is_locked, remaining = check_lockout(chat_id)
     
-    # Владелец не блокируется
-    if is_locked and username != OWNER_USERNAME:
+    if is_locked:
         hours = remaining // 3600
         minutes = (remaining % 3600) // 60
         await message.answer(
@@ -170,10 +208,8 @@ async def admin_cmd(message: types.Message):
         )
         return
     
-    # Проверяем пароль (первое сообщение после команды)
     args = message.text.split()
 
-    # Если пароль не передан, просим ввести
     if len(args) < 2:
         await message.answer(
             "🔐 *Вход в VIP режим*\n\n"
@@ -181,20 +217,17 @@ async def admin_cmd(message: types.Message):
             "_Пароль известен только создателю._",
             parse_mode="Markdown"
         )
-        # Устанавливаем флаг ожидания пароля
         user_settings.setdefault(chat_id, {})['waiting_vip_password'] = True
         save_settings(user_settings)
         return
 
     password = args[1]
     
-    # Проверка пароля сброса (для владельца)
     if password == VIP_RESET_PASSWORD and username == OWNER_USERNAME:
         reset_failed_attempts(chat_id)
         await message.answer("✅ *Блокировка снята*\n\nТеперь вы можете войти в VIP режим.")
         return
     
-    # Проверяем основной пароль
     if password != VIP_PASSWORD:
         record_failed_attempt(chat_id)
         attempts_left = MAX_FAILED_ATTEMPTS - user_settings.get(chat_id, {}).get('vip_failed_attempts', 0)
@@ -219,18 +252,18 @@ async def admin_cmd(message: types.Message):
         save_settings(user_settings)
         return
 
-    # Успешный вход - сбрасываем попытки
     reset_failed_attempts(chat_id)
-    
-    # VIP Mini App URL с параметром admin=true
+    await _enter_vip(message, chat_id, chat_id_int)
+
+
+async def _enter_vip(message: types.Message, chat_id: str, chat_id_int: int):
+    """Установить VIP режим + отправить приветствие."""
     vip_web_app_url = f"{get_base_url()}/static/prophet/index.html?admin=true"
     kb = get_vip_menu()
-
-    # Устанавливаем VIP режим
     user_settings.setdefault(chat_id, {})['vip_mode'] = True
+    user_settings[chat_id]['user_mode'] = 'prophet'
     user_settings.get(chat_id, {}).pop('waiting_vip_password', None)
     save_settings(user_settings)
-
     await message.answer(
         "✅ *VIP режим активирован!*\n\n"
         "🌟 *Доступны расширенные функции:*\n"
@@ -276,7 +309,9 @@ async def show_id(message: types.Message):
         f"📋 *Твой ID:* `{message.chat.id}`\n"
         f"👤 *Username:* @{message.from_user.username or '—'}\n\n"
         "Этот ID нужен для доступа к админ-панели Mini App.\n"
-        "Можешь добавить его в `.env` владельца или попросить `/give_access`.",
+        "Владелец может добавить тебя:\n"
+        "• В админы Mini App: `/give_access @username`\n"
+        "• В VIP без пароля: `/vip_grant @username`",
         parse_mode="Markdown"
     )
 
@@ -342,6 +377,7 @@ async def exit_vip(message: types.Message):
     
     if user_settings.get(chat_id, {}).get('vip_mode'):
         user_settings[chat_id]['vip_mode'] = False
+        user_settings[chat_id]['user_mode'] = 'vertical'
         save_settings(user_settings)
         
         from handlers.messages import get_main_menu
@@ -355,6 +391,105 @@ async def exit_vip(message: types.Message):
         )
     else:
         await message.answer("ℹ️ Вы не в VIP режиме.")
+
+
+@router.message(Command("vipmode"))
+async def toggle_vip_mode(message: types.Message):
+    """Переключение между vertical и prophet режимом для VIP."""
+    chat_id = str(message.chat.id)
+    
+    if not user_settings.get(chat_id, {}).get('vip_mode'):
+        await message.answer("ℹ️ Команда доступна только в VIP-режиме. Войдите через `/dizel0110 <пароль>`.")
+        return
+    
+    current_mode = user_settings.get(chat_id, {}).get('user_mode', 'vertical')
+    new_mode = 'prophet' if current_mode == 'vertical' else 'vertical'
+    
+    user_settings[chat_id]['user_mode'] = new_mode
+    save_settings(user_settings)
+    
+    # Сброс AI-сессии при смене режима
+    from core.ai_engine import reset_chat
+    reset_chat(chat_id, user_mode=current_mode)
+    reset_chat(chat_id, user_mode=new_mode)
+    
+    mode_name = "🔮 AI Prophet (полная платформа)" if new_mode == "prophet" else "🖐 Массажный салон (текущая вертикаль)"
+    await message.answer(
+        f"✅ *Режим изменён*\n\n"
+        f"Текущий режим: {mode_name}\n\n"
+        f"/vipmode — переключить обратно",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("vip_grant"))
+async def vip_grant(message: types.Message):
+    """Добавить пользователя в VIP-вайтлист (без пароля)."""
+    username = (message.from_user.username or "").lower()
+    if username != OWNER_USERNAME.lower():
+        await message.answer("🔐 Только создатель.")
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "📋 *VIP Whitelist*\n\n"
+            "Использование: `/vip_grant @username`\n"
+            "Пользователь сможет входить в VIP без пароля.",
+            parse_mode="Markdown"
+        )
+        return
+    target = args[1].lstrip("@").lower()
+    existing_id = _resolve_username_to_chat_id(target)
+    if existing_id is None:
+        await message.answer(f"❌ @{target} ещё не писал(а) боту. Не могу определить chat_id.")
+        return
+    if existing_id in VIP_ALLOWED:
+        await message.answer(f"ℹ️ @{target} уже в VIP-вайтлисте.")
+        return
+    VIP_ALLOWED.add(existing_id)
+    _save_vip_allowed(VIP_ALLOWED)
+    await message.answer(f"✅ @{target} (`{existing_id}`) добавлен(а) в VIP-вайтлист. Может входить без пароля.")
+
+
+@router.message(Command("vip_revoke"))
+async def vip_revoke(message: types.Message):
+    """Убрать пользователя из VIP-вайтлиста."""
+    username = (message.from_user.username or "").lower()
+    if username != OWNER_USERNAME.lower():
+        await message.answer("🔐 Только создатель.")
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer(
+            "📋 *VIP Whitelist*\n\n"
+            "Использование: `/vip_revoke @username`",
+            parse_mode="Markdown"
+        )
+        return
+    target = args[1].lstrip("@").lower()
+    existing_id = _resolve_username_to_chat_id(target)
+    if existing_id is None or existing_id not in VIP_ALLOWED:
+        await message.answer(f"ℹ️ @{target} не найден в VIP-вайтлисте.")
+        return
+    VIP_ALLOWED.discard(existing_id)
+    _save_vip_allowed(VIP_ALLOWED)
+    await message.answer(f"✅ @{target} (`{existing_id}`) удалён(а) из VIP-вайтлиста.")
+
+
+@router.message(Command("vip_list"))
+async def vip_list(message: types.Message):
+    """Показать список VIP-вайтлиста."""
+    username = (message.from_user.username or "").lower()
+    if username != OWNER_USERNAME.lower():
+        await message.answer("🔐 Только создатель.")
+        return
+    if not VIP_ALLOWED:
+        await message.answer("📋 VIP-вайтлист пуст. Добавь: `/vip_grant @username`")
+        return
+    lines = ["📋 *VIP Whitelist:*\n"]
+    for cid in sorted(VIP_ALLOWED):
+        lines.append(f"• `{cid}`")
+    await message.answer("\n".join(lines), parse_mode="Markdown")
 
 
 def _is_owner_or_admin(message: types.Message) -> bool:

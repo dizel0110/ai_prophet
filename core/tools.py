@@ -5,6 +5,7 @@ import time
 import random
 import asyncio
 from duckduckgo_search import DDGS
+from config import get_vertical_name
 
 logger = logging.getLogger(__name__)
 
@@ -579,7 +580,7 @@ async def send_playlist(
                     chat_id=chat_id,
                     audio=audio_file,
                     title=title or track['title'],
-                    performer="AI Prophet",
+                    performer=get_vertical_name(),
                     caption=f"🎧 {track['title']}"
                 )
                 

@@ -5,7 +5,7 @@ import requests
 import threading
 from google import genai
 from google.genai import types as genai_types
-from config import GEMINI_KEY, HF_TOKEN, SYSTEM_PROMPT, HF_SYSTEM_PROMPT, FALLBACK_MODELS, HF_TASKS
+from config import GEMINI_KEY, HF_TOKEN, get_system_prompt, get_hf_system_prompt, FALLBACK_MODELS, HF_TASKS
 
 logger = logging.getLogger(__name__)
 
@@ -16,20 +16,20 @@ CLEAN_HF_TOKEN = HF_TOKEN.strip() if HF_TOKEN else None
 gemini_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 _chats = {}
 
-def get_ai_chat(chat_id, model_name=None):
+def get_ai_chat(chat_id, model_name=None, user_mode="vertical"):
     if not gemini_client: return None
     if not model_name: model_name = FALLBACK_MODELS[0]
-    session_key = f"{chat_id}_{model_name}"
+    system_prompt = get_system_prompt(user_mode)
+    session_key = f"{chat_id}_{model_name}_{user_mode}"
     
     if session_key not in _chats:
         try:
             from core.tools import get_prophet_tools_spec
             
-            # ВКЛЮЧАЕМ ИНСТРУМЕНТЫ
             _chats[session_key] = gemini_client.chats.create(
                 model=model_name,
                 config=genai_types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
+                    system_instruction=system_prompt,
                     tools=get_prophet_tools_spec(),
                     temperature=0.7
                 )
@@ -96,7 +96,7 @@ def transcribe_local(audio_path, model_name="openai/whisper-base"):
         return None
 
 
-def get_hf_response(text=None, image_path=None, task="text"):
+def get_hf_response(text=None, image_path=None, task="text", user_mode="vertical"):
     if not CLEAN_HF_TOKEN: return "Ошибка: HF_TOKEN не настроен."
 
     model_id = HF_TASKS.get(task, HF_TASKS["text"])
@@ -166,9 +166,10 @@ def get_hf_response(text=None, image_path=None, task="text"):
             api_url = "https://router.huggingface.co/v1/chat/completions"
             headers["Content-Type"] = "application/json"
 
+            hf_sys_prompt = get_hf_system_prompt(user_mode)
             payload = {
                 "model": model_id,
-                "messages": [{"role": "user", "content": f"{HF_SYSTEM_PROMPT}\n\n{text}"}],
+                "messages": [{"role": "user", "content": f"{hf_sys_prompt}\n\n{text}"}],
                 "max_tokens": 4096
             }
             response = requests.post(api_url, headers=headers, json=payload, timeout=60)
@@ -278,8 +279,13 @@ def transcribe_with_gemini(file_path, timeout_sec=60):
         logger.warning("⚠️ Gemini вернул пустой ответ")
         return None
 
-def reset_chat(chat_id, model_name=None):
-    if model_name: _chats.pop(f"{chat_id}_{model_name}", None)
+def reset_chat(chat_id, model_name=None, user_mode=None):
+    if model_name:
+        if user_mode:
+            _chats.pop(f"{chat_id}_{model_name}_{user_mode}", None)
+        else:
+            keys = [k for k in _chats if k.startswith(f"{chat_id}_{model_name}_")]
+            for k in keys: _chats.pop(k, None)
     else:
         keys = [k for k in _chats if k.startswith(f"{chat_id}_")]
         for k in keys: _chats.pop(k, None)

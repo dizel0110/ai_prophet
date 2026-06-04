@@ -14,6 +14,18 @@
 - **Resilience**: Реализован «мост» к Hugging Face. Если Google молчит, отвечают `Qwen` или `Llama`.
 - **Infrastructure**: Настроен продвинутый CI/CD. Любая ветка синхронизируется с HF Spaces.
 
+### 🔹 Веха 10.1: White-Label / Multi-Vertical (Июнь 2026) 🏷️
+- **White-label архитектура**: добавлен режим `user_mode` ("vertical"/"prophet").
+- **Dynamic branding**: `config.py` — `VERTICAL_NAME`, `get_vertical_name()`, `get_system_prompt(user_mode)`, `get_hf_system_prompt(user_mode)`.
+- **`core/ai_engine.py`**: `get_ai_chat()` и `get_hf_response()` принимают `user_mode`. Session key включает `user_mode` — при переключении создаётся новая сессия.
+- **UI texts**: все упоминания "AI Prophet" в `/start`, `/help`, `/massage`, меню заменены на `get_vertical_name()`.
+- **Performer metadata**: `"AI Prophet"` → `get_vertical_name()` в аудио-отправках.
+- **Agent prompts**: `AgentBase`, `registry.py`, `agent_factory.py` — `user_mode` параметр, динамические промпты.
+- **VIP toggle**: `/vipmode` переключает между vertical/prophet режимами. Вход в VIP → `user_mode=prophet`.
+- **Static**: `static/prophet/index.html` (с "AI Prophet") — только для VIP. `static/massage/index.html` — для обычных.
+- **Tests**: 143/143 passed.
+- Файлы: `config.py`, `core/ai_engine.py`, `core/agents/agent_base.py`, `core/agents/agent_factory.py`, `core/agents/registry.py`, `core/agents/orchestrator.py`, `core/tools.py`, `handlers/vip.py`, `handlers/messages.py`, `handlers/massage.py`, `main.py`, `static/massage/index.html`, `AGENTS.md`
+
 ### 🔹 Веха 3: Стабилизация и Унификация (Февраль 2026) 🧿
 - **Победа над Конфликтами**: Решена проблема `TelegramConflictError` при деплое. Внедрена стратегия очистки эфира (`drop_pending_updates=True`).
 - **Gemini 3 Flash**: Подтверждена стабильная работа `gemini-3-flash-preview`.

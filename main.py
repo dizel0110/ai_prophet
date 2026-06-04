@@ -21,7 +21,7 @@ from aiogram.types import FSInputFile
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from config import TOKEN, PORT, PLATFORM, DATA_DIR
+from config import TOKEN, PORT, PLATFORM, DATA_DIR, get_vertical_name
 from core.tg_auth import verify_init_data
 from core.network import apply_dns_patch
 from handlers import messages, vip, limits, massage, booking
@@ -103,7 +103,7 @@ if IS_HF_SPACE:
 async def root():
     mode_map = {"hf": "HF Spaces", "render": "Render.com", "local": "Polling (Local)"}
     mode = mode_map.get(PLATFORM, PLATFORM)
-    return {"status": f"AI Prophet ({mode})", "platform": PLATFORM}
+    return {"status": f"{get_vertical_name()} ({mode})", "platform": PLATFORM}
 
 @app.post("/api/specialist/chat")
 async def api_specialist_chat(req: dict):
@@ -1855,6 +1855,10 @@ async def start_bot_polling():
         BotCommand(command="dismiss", description="Удалить специалиста"),
         BotCommand(command="settings", description="Выбрать мозг бота (Gemini/HF)"),
         BotCommand(command="dizel0110", description="Вход в VIP режим"),
+        BotCommand(command="vipmode", description="🔮 Переключить Prophet/Вертикаль"),
+        BotCommand(command="vip_grant", description="Добавить в VIP без пароля"),
+        BotCommand(command="vip_revoke", description="Убрать из VIP"),
+        BotCommand(command="vip_list", description="Список VIP-вайтлиста"),
         BotCommand(command="stop", description="Остановить текущие действия")
     ]
     await bot.set_my_commands(commands)
@@ -1862,7 +1866,7 @@ async def start_bot_polling():
     if not HF_TOKEN: logger.warning("⚠️ HF_TOKEN is not set! Voice and WebSearch fallback will fail.")
     else: logger.info(f"✅ HF_TOKEN is loaded (prefix: {HF_TOKEN[:5]}...)")
 
-    logger.info(f"🚀 AI Prophet Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
+    logger.info(f"🚀 {get_vertical_name()} Modular System Started at {datetime.now().strftime('%H:%M:%S')}")
 
     # На HF Spaces не удаляем webhook (блокируется исходящие)
     if not IS_HF_SPACE:

@@ -18,10 +18,11 @@ class MassageConsultationOrchestrator:
       4. Техники      — рекомендации техник (текст)
       5. Финальный    — синтез всех данных (текст)
     """
-    def __init__(self):
-        self.specialists = get_all_agents()
+    def __init__(self, user_mode: str = "vertical"):
+        self.user_mode = user_mode
+        self.specialists = get_all_agents(user_mode=user_mode)
         defn = get_agent_def("final_expert")
-        self.final = AgentBase(defn["id"], defn["name"], defn["role"], defn.get("model_type", "text"))
+        self.final = AgentBase(defn["id"], defn["name"], defn["role"], defn.get("model_type", "text"), user_mode=user_mode)
 
     async def run_consultation(
         self,

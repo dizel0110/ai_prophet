@@ -13,7 +13,7 @@ from aiogram.types import WebAppInfo, ReplyKeyboardMarkup, KeyboardButton, Inlin
 from core.ai_engine import get_ai_chat, get_client, reset_chat, get_hf_response, transcribe_with_gemini, transcribe_local
 from core.tools import web_search, search_media_content, download_audio, AVAILABLE_FUNCTIONS
 from core.agents.agent_factory import SpecialistFactory, get_specialists, get_specialist, remove_specialist, DynamicSpecialist
-from config import FALLBACK_MODELS, TEMP_DIR, DATA_DIR, ADMIN_IDS, get_base_url
+from config import FALLBACK_MODELS, TEMP_DIR, DATA_DIR, ADMIN_IDS, get_base_url, get_vertical_name, get_system_prompt, get_hf_system_prompt
 from google.genai import types as genai_types
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,11 @@ def save_settings(settings):
 user_settings = load_settings()
 _chats = {} 
 active_cancellations = set()
+
+
+def _get_user_mode(chat_id: str) -> str:
+    """Вернуть user_mode из настроек пользователя."""
+    return user_settings.get(chat_id, {}).get('user_mode', 'vertical')
 
 # Глобальные примеры плейлистов для обучения
 GLOBAL_EXAMPLES = [
@@ -116,12 +121,16 @@ def cleanup_user_temp(chat_id):
         for f in glob.glob(os.path.join(TEMP_DIR, pat)):
             cleanup_file(f)
 
-def get_main_menu(vip_mode: bool = False):
+def get_main_menu(vip_mode: bool = False, chat_id: str = None):
     """Главное меню: обычное или VIP"""
-    web_app_url = f"{get_base_url()}/static/prophet/index.html"
+    vertical = get_vertical_name()
+    # Для VIP: Mini App платформы Prophet; для обычных: массажная вертикаль
+    if vip_mode:
+        web_app_url = f"{get_base_url()}/static/prophet/index.html"
+    else:
+        web_app_url = f"{get_base_url()}/static/massage/index.html"
     
     if vip_mode:
-        # VIP меню
         kb = [
             [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
             [KeyboardButton(text="🔮 VIP Предсказание"), KeyboardButton(text="🎙 VIP Голос")],
@@ -130,11 +139,10 @@ def get_main_menu(vip_mode: bool = False):
             [KeyboardButton(text="🎛 Лимиты"), KeyboardButton(text="🔓 Выйти из VIP")]
         ]
     else:
-        # Обычное HF меню
         kb = [
             [KeyboardButton(text="📱 Открыть Mini App", web_app=WebAppInfo(url=web_app_url))],
-            [KeyboardButton(text="🔮 Предсказание"), KeyboardButton(text="🎙 Голос Судьбы")],
-            [KeyboardButton(text="🖼 Видение"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="🖐 Массаж"), KeyboardButton(text="🎙 Голос")],
+            [KeyboardButton(text="🖼 Фото"), KeyboardButton(text="⚙️ Настройки")],
             [KeyboardButton(text="📚 Библиотека"), KeyboardButton(text="📥 Импорт")],
             [KeyboardButton(text="ℹ️ Помощь")]
         ]
@@ -288,9 +296,10 @@ async def cmd_start(message: types.Message):
     cleanup_user_temp(chat_id)
     is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
 
+    vertical = get_vertical_name()
     welcome_text = (
         f"{greeting}\n\n"
-        f"Я AI Prophet — твой ИИ-проводник в мир массажа и здоровья.\n\n"
+        f"👋 Добро пожаловать в «{vertical}»!\n\n"
         f"🎯 *Что я умею:*\n"
         f"• 🖐 Массажный салон — услуги, AI-диагностика, запись\n"
         f"• 🧑‍⚕️ ИИ-специалисты — чат с 5 агентами + свои\n"
@@ -456,30 +465,54 @@ async def cmd_webhook_status(message: types.Message):
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
-    """
-    Команда /help — руководство пользователя.
-    """
-    help_text = (
-        "🔮 *AI Prophet — Руководство*\n\n"
+    """Команда /help — руководство пользователя (разное для vertical / prophet)."""
+    chat_id = str(message.chat.id)
+    is_vip = user_settings.get(chat_id, {}).get('vip_mode', False)
+    user_mode = user_settings.get(chat_id, {}).get('user_mode', 'vertical')
+    vertical = get_vertical_name()
+
+    base = (
+        f"👋 *«{vertical}» — Руководство*\n\n"
         "🖐 *Массажный салон*\n"
         "• `/massage` — AI-консультация (5 агентов: анкета → фото → видео → анализ → заключение)\n"
         "• Mini App — услуги, цены, запись через WhatsApp\n\n"
         "🧑‍⚕️ *ИИ-специалисты*\n"
         "• 5 встроенных агентов (Диагност, Движения, Анкетолог, Техники, Финальный)\n"
-        "• 🌟 Мастер-консультант — главный гид по платформе\n"
+        "• 🌟 Мастер-консультант — главный гид\n"
         "• `/specialist <роль>` — создать своего специалиста\n"
-        "• `/specialists` — список, `/dismiss` — удалить (с кнопками)\n"
+        "• `/specialists` — список, `/dismiss` — удалить\n"
         "• `/exit_specialist` — выйти из чата со специалистом\n\n"
-        "🎵 *Музыка*\n"
+        "🎵 *Музыка для массажа*\n"
         "• 8 жанров: Ambient, Классика, Природа, Jazz, Спа, Тайский, Акустика, Бины\n"
         "• Напиши «музыка» или открой Mini App\n\n"
         "🎙 *Голос* — отправь голосовое, ИИ поймёт (рус/англ)\n"
-        "🖼 *Фото/видео* — пришли для диагностики\n\n"
-        "⭐ *VIP-режим:* `/vip` — Gemini AI, без лимитов\n"
-        "⚙️ *Настройки:* переключение Gemini / HF\n"
+        "🖼 *Фото/видео* — пришли для диагностики\n"
         "🛑 `/stop` — отменить текущий процесс"
     )
-    await message.answer(help_text, parse_mode="Markdown")
+
+    if is_vip and user_mode == "prophet":
+        prophet = (
+            f"\n\n{'─' * 20}\n"
+            "🔮 *AI Prophet — расширенные возможности:*\n"
+            "• 💎 Gemini 3.5 Flash — флагманская модель\n"
+            "• 🎵 Приоритетная обработка\n"
+            "• 🖼 VIP Видение / 🎙 VIP Голос / 🌐 VIP Поиск\n"
+            "• 🔄 `/vipmode` — переключить Prophet / Вертикаль\n\n"
+            "⭐ *Команды создателя:*\n"
+            "• `/vip_grant @user` — добавить в VIP без пароля\n"
+            "• `/vip_revoke @user` — убрать из VIP\n"
+            "• `/vip_list` — список VIP\n"
+            "• `/give_access @user` — дать админ-доступ\n"
+            "• `/admin_ids` — список админов\n\n"
+            "🔓 `/exitvip` — выйти из VIP\n"
+            "⚙️ `/settings` — переключить Gemini / HF"
+        )
+        await message.answer(base + prophet, parse_mode="Markdown")
+    else:
+        await message.answer(
+            base + "\n\n⭐ *VIP:* `/dizel0110 <пароль>` — Gemini AI, без лимитов",
+            parse_mode="Markdown"
+        )
 
 @router.message(Command("specialist"))
 async def cmd_specialist(message: types.Message):
@@ -549,7 +582,8 @@ async def on_dsp_del_confirm(callback: types.CallbackQuery):
 
 async def _create_and_show_specialist(message: types.Message, chat_id: int, role: str):
     status = await message.answer(f"🧑‍⚕️ Создаю специалиста: _{role}_…")
-    specialist = await asyncio.to_thread(SpecialistFactory.create, chat_id=int(chat_id), role_description=role)
+    user_mode = _get_user_mode(str(chat_id))
+    specialist = await asyncio.to_thread(SpecialistFactory.create, chat_id=int(chat_id), role_description=role, user_mode=user_mode)
     if not specialist:
         await status.edit_text("❌ Не удалось создать специалиста. Попробуй позже.")
         return
@@ -569,7 +603,8 @@ async def _create_and_show_specialist(message: types.Message, chat_id: int, role
 async def _handle_create_specialist_auto(chat_id: int, role_description: str, message: types.Message):
     """Вызывается из function calling loop при запросе create_specialist."""
     await message.answer(f"🧑‍⚕️ Создаю специалиста: _{role_description}_…")
-    specialist = await asyncio.to_thread(SpecialistFactory.create, chat_id=chat_id, role_description=role_description)
+    user_mode = _get_user_mode(str(chat_id))
+    specialist = await asyncio.to_thread(SpecialistFactory.create, chat_id=chat_id, role_description=role_description, user_mode=user_mode)
     if not specialist:
         await message.answer("❌ Не удалось создать специалиста. Попробуй позже.")
         return None
@@ -616,11 +651,13 @@ async def handle_photo(message: types.Message, bot: Bot):
         logger.info(f"🔮 VIP/User {chat_id} uses Gemini for vision.")
         for model_name in FALLBACK_MODELS:
             try:
-                chat = get_ai_chat(chat_id, model_name)
+                user_mode = _get_user_mode(chat_id)
+                chat = get_ai_chat(chat_id, model_name, user_mode=user_mode)
                 if not chat: continue
 
                 with open(file_path, 'rb') as f: bytes_data = f.read()
-                prompt = "Ты — AI Prophet. Кратко опиши фото и предложи 3 варианта: текст, детали, предсказание."
+                vertical = get_vertical_name()
+                prompt = f"Ты — консультант «{vertical}». Кратко опиши фото и предложи 3 варианта действий."
                 response = chat.send_message(
                     message=[prompt, genai_types.Part.from_bytes(data=bytes_data, mime_type='image/jpeg')]
                 )
@@ -643,13 +680,15 @@ async def handle_photo(message: types.Message, bot: Bot):
     
     # HF режим (обычный пользователь)
     logger.info(f"🧿 User {chat_id} uses HF for vision.")
+    user_mode = _get_user_mode(chat_id)
     
     # HF FALLBACK: Ритуал интерпретации туманных образов
-    hf_caption = get_hf_response(image_path=file_path, task="vision")
+    hf_caption = get_hf_response(image_path=file_path, task="vision", user_mode=user_mode)
     if hf_caption:
         # Просим Mistral интерпретировать сухой технический результат от Vision-модели
-        interpretation_prompt = f"Как AI Prophet, протрактуй это видение: {hf_caption}. Будь мистичен и краток. В конце предложи следующий шаг."
-        interpretation = get_hf_response(text=interpretation_prompt, task="text")
+        vertical = get_vertical_name()
+        interpretation_prompt = f"Ты — консультант «{vertical}». Протрактуй это описание: {hf_caption}. Будь краток. В конце предложи следующий шаг."
+        interpretation = get_hf_response(text=interpretation_prompt, task="text", user_mode=user_mode)
         
         raw_text = interpretation or f"Вижу это: {hf_caption}. Эфир плотен для деталей."
         clean_text, kb = parse_steps_and_create_kb(raw_text, chat_id)
@@ -672,8 +711,9 @@ async def handle_vision_action(message, bot, chat_id, user_text):
     if engine != "hf":
         for model in FALLBACK_MODELS:
             try:
-                chat = get_ai_chat(chat_id, model)
-                full_prompt = f"Как AI Prophet, выполни волю: {user_text}. В конце предложи следующий шаг."
+                user_mode = _get_user_mode(chat_id)
+                chat = get_ai_chat(chat_id, model, user_mode=user_mode)
+                full_prompt = f"{get_system_prompt(user_mode)}\n\nЗапрос: {user_text}. В конце предложи следующий шаг."
                 
                 if path and os.path.exists(path):
                     with open(path, 'rb') as f: bytes_data = f.read()
@@ -697,7 +737,8 @@ async def handle_vision_action(message, bot, chat_id, user_text):
     if not success:
         # Безопасная проверка: файл мог быть удален или задача чисто текстовая
         can_do_vision = path and os.path.exists(path)
-        hf_res = get_hf_response(text=user_text, image_path=path if can_do_vision else None, task="vision" if can_do_vision else "text")
+        user_mode = _get_user_mode(chat_id)
+        hf_res = get_hf_response(text=user_text, image_path=path if can_do_vision else None, task="vision" if can_do_vision else "text", user_mode=user_mode)
         if hf_res:
             if status_msg: await status_msg.edit_text("🧿 *Прозрение свершилось через резервный канал:*")
             clean_text, kb = parse_steps_and_create_kb(hf_res, chat_id)
@@ -767,6 +808,7 @@ async def handle_audio(message: types.Message, bot: Bot):
         logger.warning(f"⚠️ ffmpeg не доступен, используем OGG: {e}")
         transcribe_path = file_path
 
+    user_mode = _get_user_mode(chat_id)
     if use_gemini:
         logger.info("🔄 Запуск Gemini транскрибации...")
         text = transcribe_with_gemini(transcribe_path)
@@ -774,11 +816,11 @@ async def handle_audio(message: types.Message, bot: Bot):
         # Если Gemini не справился, пробуем HF как бэкап
         if not text:
             logger.info("♻️ Gemini Transcription failed, falling back to HF Whisper.")
-            text = get_hf_response(text=None, image_path=transcribe_path, task="audio")
+            text = get_hf_response(text=None, image_path=transcribe_path, task="audio", user_mode=user_mode)
             logger.info(f"📥 HF Whisper результат (fallback): {text[:50] if text else 'None'}...")
     else:
         logger.info("🔄 Запуск HF Whisper через Router...")
-        text = get_hf_response(text=None, image_path=transcribe_path, task="audio")
+        text = get_hf_response(text=None, image_path=transcribe_path, task="audio", user_mode=user_mode)
         logger.info(f"📥 HF Whisper результат: {text[:50] if text else 'None'}...")
 
     cleanup_file(file_path)
@@ -1242,9 +1284,10 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         if status_msg: await status_msg.edit_text("💎 *Подключение к Gemini 3.5 Flash...*")
         else: status_msg = await message.answer("💎 *Подключение к Gemini 3.5 Flash...*")
 
+        user_mode = _get_user_mode(chat_id)
         for model_name in FALLBACK_MODELS:
             try:
-                chat = get_ai_chat(chat_id, model_name)
+                chat = get_ai_chat(chat_id, model_name, user_mode=user_mode)
                 if not chat: continue
 
                 response = chat.send_message(input_text)
@@ -1261,10 +1304,11 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
                 continue
 
     # HF режим (обычный пользователь)
+    user_mode = _get_user_mode(chat_id)
     if status_msg: await status_msg.edit_text("🧿 *Прямое подключение к каналу Hugging Face...*")
     else: status_msg = await message.answer("🧿 *Прямое подключение к каналу Hugging Face...*")
 
-    hf_res = get_hf_response(text=input_text, task="text")
+    hf_res = get_hf_response(text=input_text, task="text", user_mode=user_mode)
     if hf_res:
         logger.info(f"✅ HF Response received for user {chat_id}")
 
@@ -1365,9 +1409,10 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         )
         await status_msg.edit_text("🧘 *Медитирую над потоком данных...*")
         
+        user_mode = _get_user_mode(chat_id)
         for model in FALLBACK_MODELS:
             try:
-                chat = get_ai_chat(chat_id, model)
+                chat = get_ai_chat(chat_id, model, user_mode=user_mode)
                 response = chat.send_message(message=full_prompt)
                 clean_text, kb = parse_steps_and_create_kb(response.text, chat_id)
                 await status_msg.edit_text(clean_text)
@@ -1382,10 +1427,11 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
                 continue
 
     gemini_exhausted = False
+    user_mode = _get_user_mode(chat_id)
     for model in FALLBACK_MODELS:
         if gemini_exhausted: break
         try:
-            chat = get_ai_chat(chat_id, model)
+            chat = get_ai_chat(chat_id, model, user_mode=user_mode)
             response = chat.send_message(message=input_text)
             
             # --- ЛОГИКА ОБРАБОТКИ ИНСТРУМЕНТОВ ---
@@ -1437,7 +1483,8 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
     
     if status_msg: await status_msg.edit_text("🌀 *Эфир Google зашумлен, открываю канал Hugging Face...*")
     
-    hf_res = get_hf_response(text=input_text, task="text")
+    user_mode = _get_user_mode(chat_id)
+    hf_res = get_hf_response(text=input_text, task="text", user_mode=user_mode)
     if hf_res:
         # Парсим и выполняем инструменты
         clean_text, tool_result = parse_and_execute_tools(hf_res)
@@ -1559,7 +1606,7 @@ async def handle_track_callback(callback: types.CallbackQuery, bot: Bot):
                 callback.message.chat.id,
                 audio_file,
                 title=real_title or title,
-                performer="AI Prophet",
+                performer=get_vertical_name(),
                 caption=f"🎧 *{real_title or title}*{duration_text}\n📦 `{size_text}` | 🔗 [Источник]({url})"
             )
             await status_msg.delete()
@@ -1599,7 +1646,7 @@ async def handle_download_callback(callback: types.CallbackQuery, bot: Bot):
                 callback.message.chat.id,
                 audio_file,
                 title=title,
-                performer="AI Prophet Media",
+                performer=get_vertical_name(),
                 caption=f"🎧 *{title}*{duration_text}\n📦 `{size_text}` | 🔗 [Источник]({url})"
             )
             await status_msg.delete()

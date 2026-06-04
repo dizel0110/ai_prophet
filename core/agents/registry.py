@@ -1,5 +1,5 @@
 """
-Реестр ИИ-агентов AI Prophet.
+Реестр ИИ-агентов.
 
 Группы агентов (можно добавлять/удалять/изменять):
   - diagnosticians  — визуальный осмотр (фото/видео)
@@ -142,7 +142,7 @@ AGENT_GROUPS = {
                 "id": "final_expert",
                 "name": "Финальный Эксперт",
                 "role": (
-                    "Ты — главный эксперт массажного салона AI Prophet. "
+                    "Ты — главный эксперт массажного салона. "
                     "Ты получаешь результаты всех специалистов: анкетолога, визуального диагноста, "
                     "специалиста по движениям, эксперта по техникам. "
                     "Твоя задача — принять итоговое решение по клиенту. "
@@ -185,14 +185,14 @@ AGENT_GROUPS = {
 # Helper functions
 # ────────────────────────────────────────────────────────
 
-def get_all_agents() -> list:
+def get_all_agents(user_mode: str = "vertical") -> list:
     """Создать экземпляры AgentBase для всех агентов, кроме final_expert (он отдельно)."""
     agents = []
     for group_key, group in AGENT_GROUPS.items():
         for a in group["agents"]:
             if a["id"] == "final_expert":
                 continue
-            agents.append(AgentBase(a["id"], a["name"], a["role"], a.get("model_type", "text")))
+            agents.append(AgentBase(a["id"], a["name"], a["role"], a.get("model_type", "text"), user_mode=user_mode))
     return agents
 
 
@@ -214,7 +214,7 @@ def get_group_by_agent(agent_id: str) -> str:
     return ""
 
 
-def get_final_expert_def() -> dict:
+def get_final_expert_def(user_mode: str = "vertical") -> dict:
     """Получить определение финального эксперта."""
     return get_agent_def("final_expert")
 

@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types as genai_types
 import requests
 
-from config import GEMINI_KEY, HF_TOKEN, HF_TASKS, HF_SYSTEM_PROMPT, FALLBACK_MODELS, IS_HF_SPACE
+from config import GEMINI_KEY, HF_TOKEN, HF_TASKS, get_hf_system_prompt, get_vertical_name, FALLBACK_MODELS, IS_HF_SPACE
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +33,19 @@ class AgentBase:
       1. HF Router (free, мультимодальный: Qwen7B / Llama Vision / Whisper)
       2. Gemini (если HF не ответил)
     """
-    def __init__(self, agent_id: str, name: str, role_prompt: str, model_type: str = "text"):
+    def __init__(self, agent_id: str, name: str, role_prompt: str, model_type: str = "text", user_mode: str = "vertical"):
         self.agent_id = agent_id
         self.name = name
         self.role_prompt = role_prompt
-        self.model_type = model_type  # "text" | "vision" | "audio"
+        self.model_type = model_type
+        self.user_mode = user_mode
         self.hf_token = HF_TOKEN.strip() if HF_TOKEN else None
         self.gemini_client = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
 
     def _system_prompt(self) -> str:
+        platform = get_vertical_name() if self.user_mode == "vertical" else "AI Prophet"
         return (
-            f"Ты — {self.name} в системе AI Prophet.\n\n"
+            f"Ты — {self.name} в системе «{platform}».\n\n"
             f"Твоя роль: {self.role_prompt}\n\n"
             f"Отвечай строго по своей роли. Будь конкретным и профессиональным. "
             f"Твои ответы будут использованы финальным экспертом.\n"
@@ -61,7 +63,7 @@ class AgentBase:
                 headers={"Authorization": f"Bearer {self.hf_token}", "Content-Type": "application/json"},
                 json={
                     "model": HF_TASKS.get("text", "Qwen/Qwen2.5-7B-Instruct"),
-                    "messages": [{"role": "user", "content": f"{HF_SYSTEM_PROMPT}\n\nЗапрос для {self.name}.\n\n{prompt}"}],
+                    "messages": [{"role": "user", "content": f"{get_hf_system_prompt(self.user_mode)}\n\nЗапрос для {self.name}.\n\n{prompt}"}],
                     "max_tokens": 4096,
                 },
                 timeout=60,

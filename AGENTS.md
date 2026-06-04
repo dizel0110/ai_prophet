@@ -535,6 +535,50 @@ PNG-файлы сертификатов хранятся в `static/massage/cert
 2. Добавить новый PNG и HTML-блок + запись в `certs.json`
 3. Коммит + пуш
 
+## 🏷️ White-Label / Multi-Vertical Architecture
+
+### Goal
+End users see only the current vertical (massage salon «Мастерская Массажа») without "AI Prophet" branding. Admin via `/dizel0110` password gets full platform access and can toggle between vertical/prophet mode.
+
+### Modes
+| Mode | `user_mode` | What users see | Who |
+|------|-------------|----------------|-----|
+| **Vertical** | `vertical` (default) | Massage salon only, no "AI Prophet" anywhere | All users |
+| **Prophet** | `prophet` | Full AI Prophet platform | VIP (after `/dizel0110`) |
+
+### Toggle
+- **`/vipmode`** — switches between vertical/prophet modes (VIP only)
+- State persisted in `user_settings.json` → `user_mode` field
+- Entering VIP (`/dizel0110`) automatically sets `user_mode=prophet`
+- Exiting VIP (`/exitvip`) resets to `user_mode=vertical`
+
+### Implementation
+1. **`config.py`** — `VERTICAL_NAME`, `get_vertical_name()`, `get_system_prompt(user_mode)`, `get_hf_system_prompt(user_mode)`. Constants `SYSTEM_PROMPT` / `HF_SYSTEM_PROMT` kept as backward-compat vertical versions.
+2. **`core/ai_engine.py`** — `get_ai_chat(chat_id, model, user_mode)` / `get_hf_response(..., user_mode)` pass mode through to prompt selection. Session key includes `user_mode` so switching mode = new session.
+3. **`handlers/messages.py`** — `_get_user_mode(chat_id)` helper. All `/start`, `/help`, menu, AI calls dynamic based on user_mode.
+4. **`handlers/vip.py`** — `/vipmode` toggle command. VIP entry sets `user_mode=prophet`.
+5. **Core agents** — `agent_base.py`, `agent_factory.py`, `registry.py`, `orchestrator.py` all accept `user_mode` parameter.
+6. **Mini App** — VIP → `static/prophet/index.html` (shows "AI Prophet"). Regular users → `static/massage/index.html` (no Prophet branding).
+
+### Key principle
+- `user_mode` stored in `user_settings.json`, read via `_get_user_mode(chat_id)`.
+- `get_system_prompt(user_mode)` and `get_hf_system_prompt(user_mode)` select the right prompt.
+- AI sessions are keyed by `{chat_id}_{model}_{user_mode}` — switching mode creates a fresh session.
+- Default `user_mode="vertical"` is safe — every function that accepts it defaults to vertical.
+
+### VIP Whitelist (без пароля)
+`data/vip_allowed.json` — список chat_id, которые могут входить в VIP без `/dizel0110 <пароль>`.
+
+| Команда | Кто может | Что делает |
+|---------|-----------|------------|
+| `/vip_grant @username` | owner | Добавляет в вайтлист (без пароля) |
+| `/vip_revoke @username` | owner | Убирает из вайтлиста |
+| `/vip_list` | owner | Показывает весь вайтлист |
+
+- Owner (`OWNER_USERNAME`) всегда имеет доступ вне зависимости от вайтлиста.
+- Вайтлист-пользователи пропускают проверку пароля и блокировку.
+- Остальные — через `/dizel0110 <пароль>` (как было).
+
 ## Gotchas & Known Issues
 
 - **HF Spaces blocks outgoing Telegram API** — polling requires `PROXY_URL` secret on HF. Without it, bot crashes with `ClientConnectorError`.

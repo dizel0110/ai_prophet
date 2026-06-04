@@ -6,7 +6,7 @@ from datetime import datetime
 from aiogram import types, Router, F
 from aiogram.filters import Command, BaseFilter
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from config import get_base_url, GEM_BOT_URL, TEMP_DIR, DATA_DIR
+from config import get_base_url, get_vertical_name, GEM_BOT_URL, TEMP_DIR, DATA_DIR
 
 from core.agents import (
     MassageConsultationOrchestrator, format_consultation_results,
@@ -81,9 +81,10 @@ def get_massage_menu():
 @router.message(Command("massage"))
 async def cmd_massage(message: types.Message):
     url = _massage_url()
+    vertical = get_vertical_name()
     text = (
-        "🖐 *Мастерская Массажа*\n\n"
-        "AI Prophet поможет расслабить тело.\n"
+        f"🖐 *{vertical}*\n\n"
+        "Поможем расслабить тело и душу.\n"
         "Мы — супружеская команда профессиональных мастеров массажа.\n"
         "Классика, антицеллюлитный, спортивный, стоун-терапия и другие техники.\n\n"
         "👇 Открой салон и выбери услугу"
@@ -244,9 +245,10 @@ async def on_mc_music(callback: types.CallbackQuery):
 async def on_mc_back(callback: types.CallbackQuery):
     await callback.answer()
     url = _massage_url()
+    vertical = get_vertical_name()
     text = (
-        "🖐 *Мастерская Массажа*\n\n"
-        "AI Prophet поможет расслабить тело.\n"
+        f"🖐 *{vertical}*\n\n"
+        "Поможем расслабить тело и душу.\n"
         "Мы — супружеская команда профессиональных мастеров массажа.\n"
         "Классика, антицеллюлитный, спортивный, стоун-терапия и другие техники.\n\n"
         "👇 Открой салон и выбери услугу"
@@ -917,7 +919,8 @@ async def on_mc_analyze(callback: types.CallbackQuery):
     videos = data.get("massage_videos", [])
 
     try:
-        orchestrator = MassageConsultationOrchestrator()
+        user_mode = user_settings.get(str(chat_id), {}).get('user_mode', 'vertical')
+        orchestrator = MassageConsultationOrchestrator(user_mode=user_mode)
         results = await orchestrator.run_consultation(
             questionnaire_text=q.to_text(),
             photo_paths=photos if photos else None,
@@ -992,7 +995,7 @@ async def on_mc_analyze(callback: types.CallbackQuery):
             + music_line +
             "1. 📅 Запишись на сеанс — открой салон ниже\n"
             "2. 🎵 Открой плейлист в Mini App — музыка уже подобрана\n"
-            "3. 💬 Спроси у AI Prophet в общем чате\n\n"
+            "3. 💬 Спроси у меня в чате\n\n"
             "Или начни новую консультацию: /massage"
         )
         buttons = [
