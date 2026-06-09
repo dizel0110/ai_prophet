@@ -212,11 +212,18 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             chat_id_int = int(masseur_chat_id)
             from aiogram import Bot
             from aiogram.client.session.aiohttp import AiohttpSession
+            from aiogram.client.telegram import TelegramAPIServer
             from config import TOKEN
+            _telegram_api_url = os.environ.get("TELEGRAM_API_URL")
             _proxy_url = os.environ.get("PROXY_URL")
-            if _proxy_url:
-                session = AiohttpSession(proxy=_proxy_url)
-                tg_bot = Bot(token=TOKEN, session=session)
+            if _telegram_api_url:
+                _server = TelegramAPIServer.from_base(_telegram_api_url)
+                _session = AiohttpSession()
+                _session.api = _server
+                tg_bot = Bot(token=TOKEN, session=_session)
+            elif _proxy_url:
+                _session = AiohttpSession(proxy=_proxy_url)
+                tg_bot = Bot(token=TOKEN, session=_session)
             else:
                 tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
