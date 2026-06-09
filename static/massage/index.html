@@ -2746,14 +2746,14 @@ function _spStartSegment() {
   var mr = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp8,opus' });
   _spRecState.recorder = mr;
   mr.ondataavailable = function(e) { if (e.data.size > 0) _spRecState.segmentChunks.push(e.data); };
-  mr.onstop = function() { _spHandleSegmentEnd(); };
+  mr.onstop = async function() { await _spHandleSegmentEnd(); };
   mr.start(1000);
   _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
   var seg = _spRecState.segmentIndex + 1;
   qs('sp-rec-status').textContent = '🔴 Сегмент ' + seg + '...';
 }
 
-function _spHandleSegmentEnd() {
+async function _spHandleSegmentEnd() {
   var chunks = _spRecState.segmentChunks;
   _spRecState.segmentChunks = [];
   var wasStopping = _spRecState._stopping;
@@ -2761,7 +2761,7 @@ function _spHandleSegmentEnd() {
     _spStartSegment();
     _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
   }
-  if (chunks.length > 0) _spUploadSegment(chunks, wasStopping);
+  if (chunks.length > 0) await _spUploadSegment(chunks, wasStopping);
   if (wasStopping) _spFinalizeSession();
 }
 
@@ -2974,7 +2974,7 @@ var _origSpUploadSegment = _spUploadSegment;
 _spUploadSegment = async function(chunks, isLast) {
   if (_spRecState.sessionMode) {
     var blob = new Blob(chunks, { type: 'video/webm' });
-    if (blob.size < 1024) return;
+    if (blob.size < 1024) { tg.showAlert('⚠ Видео слишком короткое (' + Math.round(blob.size/1024) + ' КБ)'); return; }
     var u = uid(); if(!u) return;
     var idx = _spRecState.segmentIndex++;
     var fd = new FormData();
@@ -2985,8 +2985,16 @@ _spUploadSegment = async function(chunks, isLast) {
     try {
       var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
       var d = await r.json();
-      if (d.ok) _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
-    } catch(e) {}
+      if (d.ok) {
+        _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+      } else {
+        tg.showAlert('❌ Ошибка сервера: ' + (d.error || 'неизвестная'));
+        return;
+      }
+    } catch(e) {
+      tg.showAlert('❌ Ошибка сети: видео не отправлено');
+      return;
+    }
     return;
   }
   return _origSpUploadSegment(chunks, isLast);
