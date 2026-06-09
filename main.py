@@ -1502,6 +1502,19 @@ async def api_admin_identify(chat_id: int = 0, username: str = ""):
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
     from config import OWNER_USERNAME
+    # Fallback: if username not provided (Telegram Web), look it up from stored mapping
+    if not username:
+        try:
+            _map_path = os.path.join(DATA_DIR, "username_chat_map.json")
+            if os.path.exists(_map_path):
+                with open(_map_path, "r", encoding="utf-8") as _f:
+                    _m = json.load(_f)
+                for _uname, _cid in _m.items():
+                    if _cid == chat_id:
+                        username = _uname
+                        break
+        except Exception:
+            pass
     is_admin = _is_chat_id_admin(chat_id) or (username and username.lower() == OWNER_USERNAME.lower())
     # If identified as admin via username, persist chat_id so other endpoints work
     if is_admin and username and username.lower() == OWNER_USERNAME.lower() and not _is_chat_id_admin(chat_id):

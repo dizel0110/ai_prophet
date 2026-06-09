@@ -1007,7 +1007,7 @@ html{scroll-behavior:smooth}
 </div>
 
 <!-- SESSION ITEM MODAL -->
-<div class="modal-overlay" id="sessionModal" style="display:none">
+<div class="modal-overlay" id="sessionItemModal" style="display:none">
   <div class="modal" style="max-height:70vh">
     <button class="modal-close" onclick="closeSessionModal()">✕</button>
     <div id="session-modal-content">
@@ -4278,9 +4278,9 @@ function showSessionItem(key) {
   qs('session-modal-title').textContent = item.title;
   qs('session-modal-subtitle').textContent = item.sub;
   qs('session-modal-desc').textContent = item.desc;
-  qs('sessionModal').style.display = 'flex';
+  qs('sessionItemModal').style.display = 'flex';
 }
-function closeSessionModal() { qs('sessionModal').style.display = 'none'; }
+function closeSessionModal() { qs('sessionItemModal').style.display = 'none'; }
 // Certificates
 function showCert(src) { _hf('medium'); qs('certModalImg').src = src; qs('certModal').style.display = 'flex'; }
 function closeCertModal() { qs('certModal').style.display = 'none'; }
