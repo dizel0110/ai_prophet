@@ -2812,10 +2812,12 @@ function _spFinalizeSession() {
   var n = _spRecState.sessionFiles.length;
   if (n > 1) {
     var listText = _spRecState.sessionFiles.map(function(f, i) {
-      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.webm';
+      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.mp4';
       return "file '" + fname + "'";
     }).join('\n');
-    var blob = new Blob([listText], { type: 'text/plain' });
+    var ffmpegCmd = '# Склейка: ffmpeg -f concat -safe 0 -i session_files.txt -c copy output.mp4';
+    var fullText = ffmpegCmd + '\n' + listText;
+    var blob = new Blob([fullText], { type: 'text/plain' });
     var url = URL.createObjectURL(blob);
     tg.showAlert('✅ Запись завершена. ' + n + ' сегментов отправлено в Telegram.\n📋 Файл для склейки готов к скачиванию.');
     setTimeout(function() {
@@ -3030,10 +3032,12 @@ _spFinalizeSession = function() {
   var n = _spRecState.sessionFiles.length;
   if (n > 1) {
     var listText = _spRecState.sessionFiles.map(function(f, i) {
-      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.webm';
+      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.mp4';
       return "file '" + fname + "'";
     }).join('\n');
-    var blob = new Blob([listText], { type: 'text/plain' });
+    var ffmpegCmd = '# Склейка: ffmpeg -f concat -safe 0 -i session_files.txt -c copy output.mp4';
+    var fullText = ffmpegCmd + '\n' + listText;
+    var blob = new Blob([fullText], { type: 'text/plain' });
     var url = URL.createObjectURL(blob);
     tg.showAlert('✅ Запись сеанса завершена. ' + n + ' сегментов в Telegram.\n📋 Файл для склейки готов к скачиванию.');
     setTimeout(function() {
