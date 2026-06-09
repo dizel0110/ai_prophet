@@ -209,19 +209,35 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
         import shutil
         if shutil.which("ffmpeg"):
             mp4_path = path.replace(".webm", ".mp4")
+            conv_ok = False
             try:
                 import subprocess
-                subprocess.run(
+                result = subprocess.run(
                     ["ffmpeg", "-i", path, "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                      "-c:a", "aac", "-b:a", "128k", mp4_path, "-y"],
                     capture_output=True, timeout=120
                 )
-                if os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1000:
-                    send_path = mp4_path
-                    ext = ".mp4"
-                    logger.info(f"Converted webm → mp4: {os.path.getsize(mp4_path)} bytes")
+                if result.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > file_size * 0.1:
+                    # Validate output with ffprobe
+                    probe = subprocess.run(
+                        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4_path],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    if probe.returncode == 0 and probe.stdout.strip():
+                        duration = float(probe.stdout.strip())
+                        if duration > 0.5:
+                            send_path = mp4_path
+                            ext = ".mp4"
+                            conv_ok = True
+                            logger.info(f"webm → mp4 OK ({os.path.getsize(mp4_path)} bytes, {duration:.1f}s)")
             except Exception as conv_e:
                 logger.warning(f"ffmpeg conversion failed: {conv_e}")
+            if not conv_ok:
+                try:
+                    if os.path.exists(mp4_path):
+                        os.remove(mp4_path)
+                except Exception:
+                    pass
     # Send to masseur's Telegram if requested (segment recording)
     telegram_sent = False
     send_error = None
