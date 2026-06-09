@@ -2887,12 +2887,14 @@ function toggleSpPause() {
   if (_spRecState.paused) {
     _spRecState.recorder.resume();
     _spRecState.paused = false;
+    _spRecState.startTime += Date.now() - _spRecState._pauseAt;
     _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
     qs('sp-rec-status').textContent = '🔴 Сегмент ' + (_spRecState.segmentIndex + 1) + '...';
     qs('btn-sp-rec-pause').textContent = '⏸';
   } else {
     if (_spRecState.recorder.state === 'recording') _spRecState.recorder.pause();
     _spRecState.paused = true;
+    _spRecState._pauseAt = Date.now();
     qs('sp-rec-status').textContent = '⏸ Пауза';
     qs('btn-sp-rec-pause').textContent = '▶';
   }

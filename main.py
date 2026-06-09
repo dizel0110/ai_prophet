@@ -213,8 +213,11 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             try:
                 import subprocess
                 result = subprocess.run(
-                    ["ffmpeg", "-i", path, "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                     "-c:a", "aac", "-b:a", "128k", mp4_path, "-y"],
+                    ["ffmpeg", "-i", path,
+                     "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                     "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                     "-c:a", "aac", "-b:a", "128k",
+                     mp4_path, "-y"],
                     capture_output=True, timeout=120
                 )
                 if result.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > file_size * 0.1:
