@@ -2769,17 +2769,22 @@ async function _spUploadSegment(chunks, isLast) {
   var blob = new Blob(chunks, { type: 'video/webm' });
   if (blob.size < 1024) return;
   var u = uid(); if(!u || !currentSP) return;
+  if (typeof u !== 'number') { tg.showAlert('❌ Не удалось определить Telegram ID. Откройте через мобильное приложение.'); return; }
   var idx = _spRecState.segmentIndex++;
   var fd = new FormData();
   fd.append('chat_id', u);
   fd.append('file', blob, 'sp_rec_' + u + '_s' + idx + '.webm');
   fd.append('masseur_chat_id', u);
   fd.append('segment_index', idx);
+  fd.append('markers', JSON.stringify(_spRecState.markers));
   try {
     var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
     var d = await r.json();
     if (d.ok) {
       _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+      if (!d.telegram_sent) {
+        tg.showAlert('⚠ Видео сохранено, но не доставлено в Telegram. Напишите боту любое сообщение.');
+      }
       if (isLast) {
         var segMarkers = _spRecState.markers;
         var msg = '📹 Сеанс завершён (' + _spRecState.sessionFiles.length + ' сегментов)';
@@ -2978,15 +2983,24 @@ _spUploadSegment = async function(chunks, isLast) {
     var u = uid(); if(!u) return;
     var idx = _spRecState.segmentIndex++;
     var fd = new FormData();
+    if (typeof u !== 'number') {
+      tg.showAlert('❌ Не удалось определить ваш Telegram ID. Откройте Mini App через мобильное приложение Telegram.');
+      _spRecState.sessionFiles.push({ path: null, index: idx, size: blob.size });
+      return;
+    }
     fd.append('chat_id', _spRecState.sessionChatId || u);
     fd.append('file', blob, 'sp_rec_' + u + '_s' + idx + '.webm');
     fd.append('masseur_chat_id', u);
     fd.append('segment_index', idx);
+    fd.append('markers', JSON.stringify(_spRecState.markers));
     try {
       var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
       var d = await r.json();
       if (d.ok) {
         _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+        if (!d.telegram_sent) {
+          tg.showAlert('⚠ Видео сохранено, но не доставлено в Telegram. Напишите боту любое сообщение и запишите снова.');
+        }
       } else {
         tg.showAlert('❌ Ошибка сервера: ' + (d.error || 'неизвестная'));
         return;

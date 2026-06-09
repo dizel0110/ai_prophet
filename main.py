@@ -150,7 +150,7 @@ async def api_specialist_chat(req: dict):
 
 
 @app.post("/api/specialist/upload")
-async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = File(...), masseur_chat_id: str = Form(None), segment_index: int = Form(None)):
+async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = File(...), masseur_chat_id: str = Form(None), segment_index: int = Form(None), markers: str = Form("")):
     if not chat_id or not file:
         return {"ok": False, "error": "Missing chat_id or file"}
     if not file.filename:
@@ -177,19 +177,46 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             f.write(content)
     except Exception as e:
         return {"ok": False, "error": f"Ошибка сохранения: {str(e)}"}
+    # Build caption for Telegram
+    caption = ""
+    if segment_index is not None:
+        caption = f"📹 Сегмент {segment_index}"
+    else:
+        caption = "📹 Видеозапись"
+    if markers:
+        try:
+            import json
+            parsed = json.loads(markers)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                marker_lines = []
+                for m in parsed:
+                    ts = m.get("ts", "")
+                    note = m.get("note", "")
+                    marker_lines.append(f"📍 [{ts}]" + (f" {note}" if note else ""))
+                if marker_lines:
+                    caption += "\n\n" + "\n".join(marker_lines)
+        except Exception:
+            pass
     # Send to masseur's Telegram if requested (segment recording)
+    telegram_sent = False
     if ext in allowed_video and masseur_chat_id and file.size and file.size > 1024:
         try:
+            chat_id_int = int(masseur_chat_id)
             from aiogram import Bot
-            from config import TOKEN
-            tg_bot = Bot(token=TOKEN)
-            caption_parts = [f"📹 Сегмент {segment_index}" if segment_index is not None else "📹 Видеозапись"]
+            from config import TOKEN, PROXY_URL
+            tg_bot_kwargs = {"token": TOKEN}
+            if PROXY_URL:
+                tg_bot_kwargs["proxy"] = PROXY_URL
+            tg_bot = Bot(**tg_bot_kwargs)
             from aiogram.types.input_file import FSInputFile
-            await tg_bot.send_video(chat_id=int(masseur_chat_id), video=FSInputFile(path), caption=" ".join(caption_parts), supports_streaming=True)
+            await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(path), caption=caption, supports_streaming=True)
             await tg_bot.session.close()
+            telegram_sent = True
+        except ValueError:
+            logger.warning(f"Invalid masseur_chat_id (not a number): {masseur_chat_id}")
         except Exception as e:
             logger.warning(f"Failed to send video to masseur {masseur_chat_id}: {e}")
-    return {"ok": True, "file_path": path}
+    return {"ok": True, "file_path": path, "telegram_sent": telegram_sent, "caption": caption}
 
 
 @app.post("/api/specialist/list")
