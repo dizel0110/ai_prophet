@@ -212,9 +212,10 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             chat_id_int = int(masseur_chat_id)
             from aiogram import Bot
             from aiogram.client.session.aiohttp import AiohttpSession
-            from config import TOKEN, PROXY_URL
-            if PROXY_URL:
-                session = AiohttpSession(proxy=PROXY_URL)
+            from config import TOKEN
+            _proxy_url = os.environ.get("PROXY_URL")
+            if _proxy_url:
+                session = AiohttpSession(proxy=_proxy_url)
                 tg_bot = Bot(token=TOKEN, session=session)
             else:
                 tg_bot = Bot(token=TOKEN)
