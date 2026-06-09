@@ -277,7 +277,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             os.remove(send_path)
         except Exception:
             pass
-    return {"ok": True, "file_path": path, "telegram_sent": telegram_sent, "send_error": send_error}
+    return {"ok": True, "file_path": path, "file_ext": ext, "telegram_sent": telegram_sent, "send_error": send_error}
 
 
 @app.post("/api/specialist/list")

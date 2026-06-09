@@ -2781,7 +2781,8 @@ async function _spUploadSegment(chunks, isLast) {
     var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
     var d = await r.json();
       if (d.ok) {
-        _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+        var actualExt = d.file_ext || '.webm';
+        _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size, ext: actualExt });
         if (!d.telegram_sent) {
           var errMsg = d.send_error || 'неизвестная ошибка';
           tg.showAlert('⚠ Видео сохранено, но не отправлено в Telegram.\nОшибка: ' + errMsg + '\n\nНапишите боту любое сообщение.');
@@ -2812,7 +2813,8 @@ function _spFinalizeSession() {
   var n = _spRecState.sessionFiles.length;
   if (n > 1) {
     var listText = _spRecState.sessionFiles.map(function(f, i) {
-      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.mp4';
+      var fext = f.ext || '.mp4';
+      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + fext;
       return "file '" + fname + "'";
     }).join('\n');
     var ffmpegCmd = '# Склейка: ffmpeg -f concat -safe 0 -i session_files.txt -c copy output.mp4';
@@ -3000,7 +3002,8 @@ _spUploadSegment = async function(chunks, isLast) {
       var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
       var d = await r.json();
       if (d.ok) {
-        _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+        var actualExt = d.file_ext || '.webm';
+        _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size, ext: actualExt });
         if (!d.telegram_sent) {
           var errMsg = d.send_error || 'неизвестная ошибка';
           tg.showAlert('⚠ Видео сохранено, но не отправлено в Telegram.\nОшибка: ' + errMsg + '\n\nНапишите боту любое сообщение и запишите снова.');
@@ -3032,7 +3035,8 @@ _spFinalizeSession = function() {
   var n = _spRecState.sessionFiles.length;
   if (n > 1) {
     var listText = _spRecState.sessionFiles.map(function(f, i) {
-      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.mp4';
+      var fext = f.ext || '.mp4';
+      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + fext;
       return "file '" + fname + "'";
     }).join('\n');
     var ffmpegCmd = '# Склейка: ffmpeg -f concat -safe 0 -i session_files.txt -c copy output.mp4';
