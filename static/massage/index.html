@@ -2747,7 +2747,7 @@ function _spStartSegment() {
   _spRecState.recorder = mr;
   mr.ondataavailable = function(e) { if (e.data.size > 0) _spRecState.segmentChunks.push(e.data); };
   mr.onstop = async function() { await _spHandleSegmentEnd(); };
-  mr.start(1000);
+  mr.start();
   _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
   var seg = _spRecState.segmentIndex + 1;
   qs('sp-rec-status').textContent = '🔴 Сегмент ' + seg + '...';
@@ -4052,7 +4052,7 @@ function startMediaRecording() {
         preview.style.display = 'none';
         uploadSessionRecording();
       };
-      mr.start(1000);
+      mr.start();
       qs('session-rec-status').textContent = '🔴 Запись видео...';
       _beginTimer();
     }).catch(function(err) {
