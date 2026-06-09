@@ -1289,7 +1289,9 @@ html{scroll-behavior:smooth}
     <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
       <button class="btn btn-primary" id="btn-session-start" onclick="toggleSessionTimer()" style="flex:1;min-width:0">▶ Начать</button>
       <button class="btn btn-secondary" id="btn-session-stop" onclick="stopSession()" style="flex:1;min-width:0;display:none">⏹ Завершить</button>
+      <button class="btn btn-secondary" onclick="startSessionRecording()" style="white-space:nowrap;min-width:auto;padding:10px 12px;border-radius:20px;font-size:16px;display:none" id="btn-session-record" title="Запись видео с AI-анализом">📹</button>
     </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--hint)" id="session-rec-hint">⏱ Простой таймер без видео</div>
   </div>
 </div>
 
@@ -1410,6 +1412,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 tg.ready();
 tg.setHeaderColor('#2c1810');
+function _hf(t) { try { _hf(t); } catch(e) {} }
 tg.MainButton.setText("Закрыть").show().onClick(() => tg.close());
 tg.MainButton.setParams({ color: '#c49a6c', text_color: '#ffffff' });
 
@@ -1423,7 +1426,7 @@ function navigate(page) {
   setTimeout(() => target.classList.remove('page-enter'), 500);
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.tab[data-page="' + page + '"]').classList.add('active');
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
   window.scrollTo(0, 0);
   if (page === 'ai') { loadMassageResults(); checkQuestionnaireStatus(); checkQuestionnaireProgress(); }
   if (page === 'booking') { loadMyBookings(); }
@@ -1432,17 +1435,17 @@ function navigate(page) {
 const BOT_USERNAME = 'ai_prophet_io_bot';
 
 function openLink(url) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   tg.openLink(url);
 }
 
 function goMusicGenre(genre) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   navigate('music');
   setTimeout(function() { loadGenreTracks(genre); }, 200);
 }
 function musicPlaylist(query) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const text = '/playlist ' + encodeURIComponent(query) + ' 5';
   const url = 'https://t.me/' + BOT_USERNAME + '?text=' + text;
   try { tg.openTelegramLink(url); } catch(e) { window.open(url, '_blank'); }
@@ -1452,7 +1455,7 @@ function hideBookingForm() {
   document.getElementById('bookingModal').classList.remove('show');
 }
 function showGallery(id) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   document.getElementById('galleryModal').classList.add('show');
   document.getElementById('galleryContent').textContent = ['🛋️','🌿','💆','🕯️'][parseInt(id)-1];
 }
@@ -1499,7 +1502,7 @@ async function checkBookingEligibility() {
 function showBookingForm() {
   var u = uid();
   if (!u) { qs('bookingModal').classList.add('show'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   apiGet('/api/massage/booking_check/' + u).then(function(d) {
     if (!d.ok || d.can_book) {
       qs('bookingModal').classList.add('show');
@@ -1533,7 +1536,7 @@ function submitQuickBooking() {
   });
   var u = uid();
   if (!u) { tg.showAlert('Открой Mini App в Telegram'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   api('/api/questionnaire/minimal', {
     chat_id: u,
     data: {
@@ -1560,7 +1563,7 @@ function submitQuickBooking() {
 }
 
 function startConsultation() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const text = '/massage';
   tg.openTelegramLink('https://t.me/' + BOT_USERNAME + '?text=' + text);
   tg.showAlert('🧑‍⚕️ Открой чат с ботом и нажми /massage для AI-консультации');
@@ -1574,7 +1577,7 @@ let consultAutoSaveTimer = null;
 let consultMCSelected = [];
 
 function openConsultForm() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   consultStepIndex = 0;
   consultFormAnswers = {};
   consultShowingOptional = false;
@@ -1865,7 +1868,7 @@ function resumeConsultForm(savedData) {
   consultFormAnswers = savedData.answers || {};
   consultStepIndex = savedData.step_index || 0;
   consultShowingOptional = savedData.showing_optional || false;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   document.getElementById('consultModal').classList.add('show');
   loadConsultSteps();
 }
@@ -2228,14 +2231,14 @@ function renderChatList() {
 // ===== CRUD =====
 let _creatingSp = false;
 
-function showCreateSpecialist() { tg.HapticFeedback.impactOccurred('medium'); const m = qs('createSpecialistModal'); if(m) m.style.display='flex'; }
+function showCreateSpecialist() { _hf('medium'); const m = qs('createSpecialistModal'); if(m) m.style.display='flex'; }
 function closeCreateModal() { const m = qs('createSpecialistModal'); if(m) m.style.display='none'; }
 
 async function createAndOpen(name, role) {
   if (_creatingSp) return;
   const u = uid(); if (!u) return;
   _creatingSp = true;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: role || name});
   _creatingSp = false;
   if (d.ok) { tg.showAlert('✅ Создан: ' + d.name); loadChatList(); openSpecialistChat(d.name); }
@@ -2249,7 +2252,7 @@ async function createSpecialist() {
   if (!name && !role) { tg.showAlert('Заполни имя или роль'); return; }
   const u = uid(); if (!u) return;
   _creatingSp = true;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: role || name});
   _creatingSp = false;
   if (d.ok) {
@@ -2267,7 +2270,7 @@ async function generateFromName() {
   if (!name) { tg.showAlert('Сначала напиши имя'); return; }
   const u = uid(); if (!u) return;
   _creatingSp = true;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: name, role: ''});
   _creatingSp = false;
   if (d.ok) { closeCreateModal(); tg.showAlert('✅ ' + d.name + ' — ' + d.role); loadSpecialists(); loadChatList(); openSpecialistChat(d.name); }
@@ -2281,7 +2284,7 @@ async function createRandomSpecialist() {
   const i = Math.floor(Math.random()*names.length);
   const u = uid(); if (!u) return;
   _creatingSp = true;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const d = await api('/api/specialist/create', {chat_id: u, name: names[i], role: roles[i]});
   _creatingSp = false;
   if (d.ok) { closeCreateModal(); tg.showAlert('🎲 ' + d.name); loadSpecialists(); loadChatList(); openSpecialistChat(d.name); }
@@ -2290,7 +2293,7 @@ async function createRandomSpecialist() {
 
 async function deleteSpecialist(name) {
   const u = uid(); if (!u) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   tg.showAlert(`🗑️ Удалить ${name}?`);
   // Telegram showAlert не имеет подтверждения, используем confirm через showPopup
   try { tg.showPopup({title:'Удалить специалиста', message:`Удалить ${name}?`, buttons:[{type:'destructive',text:'🗑️ Удалить',id:'delete'},{type:'cancel',text:'Отмена'}]}, async (btnId) => {
@@ -2309,7 +2312,7 @@ async function deleteSpecialist(name) {
 // ===== Chat modal =====
 function showEditSpecialist() {
   if (!currentSP) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   qs('esName').value = currentSP;
   qs('esRole').value = '';
   const u = uid();
@@ -2327,7 +2330,7 @@ async function saveEdit() {
   const newRole = qsv('esRole');
   if (!newName && !newRole) { tg.showAlert('Заполни имя или роль'); return; }
   const u = uid(); if (!u) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const d = await api('/api/specialist/edit', {chat_id: u, old_name: currentSP, new_name: newName || currentSP, new_role: newRole});
   if (d.ok) {
     closeEditModal();
@@ -2434,7 +2437,7 @@ async function submitSpForm() {
   collect('required');
   collect('optional');
   if (missing) { tg.showAlert('Заполни все обязательные поля'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   closeSpFormModal();
   if (!spFormCache[u]) spFormCache[u] = {};
   spFormCache[u][name] = result;
@@ -2574,7 +2577,7 @@ async function sendSpecialistFile(input) {
     tg.showAlert('❌ Файл слишком большой ('+(file.size/1024/1024).toFixed(1)+' МБ).\nМаксимум '+(file.type.startsWith('video/')?'50':'10')+' МБ.');
     input.value=''; return;
   }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   if(!spMessages[u]) spMessages[u]={};
   if(!spMessages[u][currentSP]) spMessages[u][currentSP]=[];
   const isVideo = file.type.startsWith('video/');
@@ -2711,9 +2714,9 @@ function voiceBtnDown(e) {
     btn.innerHTML = '🎤➤<span class="voice-hint">отправка</span>';
     btn.className = 'btn btn-secondary voice-auto';
     voiceTimer = null;
-    tg.HapticFeedback.impactOccurred('medium');
+    _hf('medium');
   }, 350);
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   e.preventDefault();
 }
 
@@ -2845,7 +2848,7 @@ function startSpRecording() {
           if (_spRecState.recorder && _spRecState.recorder.state === 'recording') _spRecState.recorder.stop();
         }
       }, 1000);
-      tg.HapticFeedback.impactOccurred('medium');
+      _hf('medium');
     })
     .catch(function(err) {
       navigator.mediaDevices.getUserMedia({ audio: true })
@@ -2898,7 +2901,7 @@ function addSpMarker() {
   item.textContent = '📍 ' + ts + (note ? ' — ' + note : '');
   list.appendChild(item);
   list.scrollTop = list.scrollHeight;
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
 }
 
 function stopSpRecording() {
@@ -2910,21 +2913,123 @@ function stopSpRecording() {
     _spFinalizeSession();
   }
 }
-    if (resp.ok) {
-      spMessages[u][currentSP].push({ role: 'ai', text: resp.response });
-      addMsg('ai', resp.response, resp.name || currentSP);
-      var acts = parseActions(resp.response);
-      acts.forEach(function(a) {
-        setTimeout(function() {
-          if (a.type==='open_specialist' && a.param) { closeSpecialistChat(); setTimeout(function() { openSpecialistChat(a.param); }, 200); }
-          else if (a.type==='play_music' && a.param) { closeSpecialistChat(); navigate('music'); setTimeout(function() { loadGenreTracks(a.param); }, 300); }
-          else if (a.type==='start_consultation') { closeSpecialistChat(); openConsultForm(); }
-          else if (a.type==='go_booking') { closeSpecialistChat(); navigate('booking'); }
-        }, 600);
-      });
-    } else { addMsg('ai', '❌ ' + (resp.error || 'Не удалось получить ответ')); }
-  } catch(e) { hideTyping(); addMsg('ai', '❌ Ошибка сети'); }
+
+// ─── Session Recording (from session modal, no specialist needed) ───
+
+function startSessionRecording() {
+  var u = uid(); if(!u) return;
+  var chatId = _sessionState.chatId;
+  if (!chatId) { tg.showAlert('❌ Нет клиента'); return; }
+  _spRecState.sessionMode = true;
+  _spRecState.sessionChatId = chatId;
+  _spRecState.markers = []; _spRecState.sessionFiles = []; _spRecState.segmentIndex = 0; _spRecState.startTime = null; _spRecState._stopping = false;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tg.showAlert('❌ Камера не поддерживается'); return; }
+  navigator.mediaDevices.getUserMedia({ video: { width: { max: 640 }, height: { max: 480 } }, audio: true })
+    .then(function(s) {
+      _spRecState.stream = s;
+      var preview = qs('sp-rec-preview');
+      preview.srcObject = s; preview.play();
+      qs('spRecModal').style.display = 'flex';
+      qs('sp-rec-status').textContent = '🔴 Сеанс: запись...';
+      qs('sp-rec-timer').textContent = '00:00';
+      qs('sp-rec-markers').innerHTML = '';
+      _spRecState.startTime = Date.now();
+      _spStartSegment();
+      _spRecState.running = true; _spRecState.paused = false;
+      _spRecState.timer = setInterval(function() {
+        if (!_spRecState.startTime) return;
+        var elapsed = Math.floor((Date.now() - _spRecState.startTime) / 1000);
+        var m = Math.floor(elapsed / 60); var sec = elapsed % 60;
+        qs('sp-rec-timer').textContent = (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+        if (_spRecState.running && !_spRecState.paused && _spRecState.segmentEndTime && Date.now() >= _spRecState.segmentEndTime) {
+          if (_spRecState.recorder && _spRecState.recorder.state === 'recording') _spRecState.recorder.stop();
+        }
+      }, 1000);
+      _hf('medium');
+    })
+    .catch(function(err) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(s) {
+          _spRecState.stream = s;
+          _spRecState.startTime = Date.now();
+          _spStartSegment();
+          _spRecState.running = true;
+          qs('spRecModal').style.display = 'flex';
+          qs('sp-rec-status').textContent = '🎤 Сеанс: аудио (камера недоступна)';
+          _spRecState.timer = setInterval(function() {
+            var elapsed = Math.floor((Date.now() - _spRecState.startTime) / 1000);
+            var m = Math.floor(elapsed / 60); var sec = elapsed % 60;
+            qs('sp-rec-timer').textContent = (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+            if (_spRecState.running && !_spRecState.paused && _spRecState.segmentEndTime && Date.now() >= _spRecState.segmentEndTime) {
+              if (_spRecState.recorder && _spRecState.recorder.state === 'recording') _spRecState.recorder.stop();
+            }
+          }, 1000);
+        })
+        .catch(function(err2) { tg.showAlert('❌ Нет доступа к камере/микрофону'); });
+    });
 }
+
+// Patch _spUploadSegment for session mode (no specialist chat)
+var _origSpUploadSegment = _spUploadSegment;
+_spUploadSegment = async function(chunks, isLast) {
+  if (_spRecState.sessionMode) {
+    var blob = new Blob(chunks, { type: 'video/webm' });
+    if (blob.size < 1024) return;
+    var u = uid(); if(!u) return;
+    var idx = _spRecState.segmentIndex++;
+    var fd = new FormData();
+    fd.append('chat_id', _spRecState.sessionChatId || u);
+    fd.append('file', blob, 'sp_rec_' + u + '_s' + idx + '.webm');
+    fd.append('masseur_chat_id', u);
+    fd.append('segment_index', idx);
+    try {
+      var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
+      var d = await r.json();
+      if (d.ok) _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+    } catch(e) {}
+    return;
+  }
+  return _origSpUploadSegment(chunks, isLast);
+};
+
+var _origSpFinalizeSession = _spFinalizeSession;
+_spFinalizeSession = function() {
+  var wasSession = _spRecState.sessionMode;
+  _spRecState.sessionMode = false;
+  _spRecState.sessionChatId = null;
+  if (_spRecState.timer) { clearInterval(_spRecState.timer); _spRecState.timer = null; }
+  if (_spRecState.stream) { _spRecState.stream.getTracks().forEach(function(t) { t.stop(); }); }
+  var preview = qs('sp-rec-preview');
+  if (preview) { preview.srcObject = null; }
+  qs('spRecModal').style.display = 'none';
+  hideTyping();
+  var n = _spRecState.sessionFiles.length;
+  if (n > 1) {
+    var listText = _spRecState.sessionFiles.map(function(f, i) {
+      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.webm';
+      return "file '" + fname + "'";
+    }).join('\n');
+    var blob = new Blob([listText], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    tg.showAlert('✅ Запись сеанса завершена. ' + n + ' сегментов в Telegram.\n📋 Файл для склейки готов к скачиванию.');
+    setTimeout(function() {
+      var a = document.createElement('a'); a.href = url; a.download = 'session_files.txt';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+    }, 500);
+  } else {
+    tg.showAlert('✅ Запись сеанса завершена.');
+  }
+  // Stop session timer too
+  if (window._sessionState) {
+    if (_sessionState.timer) { clearInterval(_sessionState.timer); _sessionState.timer = null; }
+    _sessionState.running = false;
+    _sessionState.startedAt = null;
+    var preview2 = qs('session-preview');
+    if (preview2) { preview2.srcObject = null; preview2.style.display = 'none'; }
+    qs('sessionModal').style.display = 'none';
+  }
+};
 
 loadSpecialists();
 
@@ -2969,7 +3074,7 @@ async function searchMusic() {
   const inp = qs('music-search-input');
   const q = inp.value.trim();
   if (!q) { tg.showAlert('Введи запрос (например: Rock Legends)'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   currentSearchQuery = q;
   qs('music-track-title').textContent = '🔍 ' + q;
   qs('music-track-count').innerHTML = 'Поиск <span class="loading-dots"><span></span><span></span><span></span></span>';
@@ -2995,7 +3100,7 @@ async function searchMusic() {
 }
 
 async function loadGenreTracks(genre) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   currentGenre = genre;
   currentSearchQuery = '';
   const genres = {ambient:'🌿Ambient', classic:'🎹Классика', nature:'🌊Природа', jazz:'🎷Jazz', spa:'💆Спа', thai:'🧘Тайский', acoustic:'🎸Акустика', binaural:'🧘Бины'};
@@ -3096,14 +3201,14 @@ function toggleShuffle() {
   qs('player-shuffle-btn').style.opacity = shuffleOn ? '1' : '.4';
   qs('player-shuffle-btn').classList.toggle('active', shuffleOn);
   if (shuffleOn) shuffleHistory = [currentTrackIndex];
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
 }
 
 function toggleRepeat() {
   repeatOn = !repeatOn;
   qs('player-repeat-btn').style.opacity = repeatOn ? '1' : '.4';
   qs('player-repeat-btn').classList.toggle('active', repeatOn);
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
 }
 
 function togglePlay() {
@@ -3173,7 +3278,7 @@ async function saveCurrentPlaylist() {
   if (musicTracks.length === 0) { tg.showAlert('Нет треков для сохранения'); return; }
   const u = uid();
   if (!u) { tg.showAlert('💾 Открой Mini App в Telegram, чтобы сохранять плейлисты в облако'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const name = prompt('Название плейлиста:', 'Мой плейлист');
   if (!name) return;
   const d = await api('/api/music/save_playlist', {chat_id: u, name: name, tracks: musicTracks});
@@ -3186,7 +3291,7 @@ async function uploadUserAudio(input) {
   if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); input.value = ''; return; }
   const file = input.files[0];
   if (!file) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   qs('music-track-count').textContent = '📤 Загрузка...';
   const fd = new FormData();
   fd.append('chat_id', u);
@@ -3227,7 +3332,7 @@ async function uploadMassageMedia(input, type) {
     tg.showAlert(`❌ Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)} МБ).\nМаксимум ${limit} МБ для ${type === 'video' ? 'видео' : 'фото'}.`);
     input.value = ''; return;
   }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const status = qs('massage-upload-status');
   status.textContent = '📤 Загрузка...';
   status.style.color = 'var(--hint)';
@@ -3270,7 +3375,7 @@ async function startMassageAnalysis() {
   const btn = qs('btn-analyze'); btn.style.display = 'none';
   const loading = qs('massage-analyze-loading'); loading.style.display = 'block';
   const resultsDiv = qs('massage-results'); resultsDiv.style.display = 'none';
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   try {
     const d = await api('/api/massage/analyze', {chat_id: u});
     loading.style.display = 'none';
@@ -3339,13 +3444,13 @@ async function checkQuestionnaireStatus() {
 }
 
 function closeResultsModal() { qs('resultsModal').style.display = 'none'; }
-function openConsentModal() { qs('consentModal').style.display = 'flex'; tg.HapticFeedback.impactOccurred('medium'); }
+function openConsentModal() { qs('consentModal').style.display = 'flex'; _hf('medium'); }
 function closeConsentModal() { qs('consentModal').style.display = 'none'; }
 
 async function exportConsultation() {
   const u = uid();
   if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   try {
     const r = await fetch('/api/massage/export/' + u, { method: 'GET' });
     if (!r.ok) { const d = await r.json().catch(() => {}); tg.showAlert('❌ ' + (d?.error || 'Ошибка экспорта')); return; }
@@ -3414,7 +3519,7 @@ async function cycleRole() {
 // ─── Admin: test patients ───
 
 async function createTestPatient() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   var res = await api('/api/admin/test_client', {chat_id: u, _init_data: getInitData()});
   if (res && res.ok && res.client) {
     tg.showAlert('🧪 Тестовый пациент создан: ' + (res.client.first_name || 'Без имени'));
@@ -3425,7 +3530,7 @@ async function createTestPatient() {
 }
 
 async function createEmptyTestPatient() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   var res = await api('/api/admin/test_client/empty', {chat_id: u, _init_data: getInitData()});
   if (res && res.ok && res.client) {
     tg.showAlert('🧪 Пустой тестовый создан: ' + (res.client.first_name || 'Без имени'));
@@ -3436,7 +3541,7 @@ async function createEmptyTestPatient() {
 }
 
 async function deleteTestPatient(chatId) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   var res = await api('/api/admin/test_client/delete', {chat_id: chatId, admin_chat: u, _init_data: getInitData()});
   if (res && res.ok) {
     loadAdminClients();
@@ -3592,7 +3697,7 @@ async function loadAdminClients() {
 async function openAdminClient(chatId) {
   const u = uid();
   if (!u) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   try {
   var [clientRes, timelineRes, diaryRes, pathRes] = await Promise.all([
     apiGet('/api/admin/client/' + chatId, {chat_id: u, _init_data: getInitData()}),
@@ -3776,7 +3881,7 @@ function submitDiary() {
     rating: parseInt(qs('diaryRating').value) || 0,
   };
   if (!entry.technique) { tg.showAlert('Укажите технику массажа'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   entry.masseur_chat_id = u;
   api('/api/massage/diary/' + chatId, entry).then(function(r) {
     if (r && r.ok) {
@@ -3826,8 +3931,9 @@ function startSession(chatId, hasQuestionnaire) {
   qs('btn-session-start').textContent = '▶ Начать';
   qs('btn-session-start').style.display = '';
   qs('btn-session-stop').style.display = 'none';
+  qs('btn-session-record').style.display = '';
   qs('sessionModal').style.display = 'flex';
-  try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
+  try { _hf('medium'); } catch(e) {}
 }
 
 function setSessionDuration(min) {
@@ -3855,7 +3961,7 @@ function toggleSessionTimer() {
       _sessionState.mediaRecorder.pause();
     }
     qs('session-rec-status').textContent = '⏸ Пауза';
-    tg.HapticFeedback.impactOccurred('medium');
+    _hf('medium');
   } else {
     // Start/Resume
     if (!_sessionState.startedAt) {
@@ -3874,7 +3980,7 @@ function _beginTimer() {
   _sessionState.timer = setInterval(tickSession, 1000);
   qs('btn-session-start').textContent = '⏸ Пауза';
   qs('btn-session-stop').style.display = '';
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
 }
 
 function tickSession() {
@@ -3882,7 +3988,7 @@ function tickSession() {
   qs('session-timer').textContent = fmtTime(_sessionState.remaining);
   if (_sessionState.remaining <= 0) {
     stopSession();
-    tg.HapticFeedback.impactOccurred('heavy');
+    _hf('heavy');
     tg.showAlert('⏱ Сеанс завершён!');
   }
 }
@@ -3996,7 +4102,7 @@ setTimeout(identifyAdmin, 500);
 async function goMusicFromResults() {
   const u = uid();
   if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   try {
     const d = await apiGet('/api/music/recommendation/' + u);
     if (d.ok && d.recommendation && d.recommendation.genre) {
@@ -4014,7 +4120,7 @@ async function goMusicFromResults() {
 }
 
 function openAiMusicModal() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   qs('aim-mood').value = '';
   qs('aim-genre').value = '';
   qs('aim-tempo').value = '';
@@ -4065,7 +4171,7 @@ async function runAiMusicSearch() {
 }
 
 async function showSavedPlaylists() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const u = uid();
   const d = await api('/api/music/playlists', {chat_id: u});
   if (!d.ok || !d.playlists) { tg.showAlert('Нет сохранённых плейлистов'); return; }
@@ -4085,7 +4191,7 @@ async function showSavedPlaylists() {
 function closeMusicPlaylists() { qs('musicPlaylistsModal').style.display = 'none'; }
 
 function loadPlaylistTracks(index) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const u = uid();
   api('/api/music/playlists', {chat_id: u}).then(d => {
     if (d.ok && d.playlists[index]) {
@@ -4111,7 +4217,7 @@ function loadPlaylistTracks(index) {
 
 async function deletePlaylist(index) {
   const u = uid();
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   const d = await api('/api/music/delete_playlist', {chat_id: u, index: index});
   if (d.ok) { showSavedPlaylists(); tg.showAlert('✅ Плейлист удалён'); }
   else tg.showAlert('❌ ' + (d.error || 'Ошибка'));
@@ -4146,7 +4252,7 @@ async function importPlaylists(input) {
     if (!data.playlists || !Array.isArray(data.playlists) || !data.playlists.length) {
       tg.showAlert('❌ Файл не содержит плейлистов'); return;
     }
-    tg.HapticFeedback.impactOccurred('medium');
+    _hf('medium');
     const r = await api('/api/music/import_playlists', {chat_id: u, playlists: data.playlists});
     if (r.ok) { tg.showAlert(`✅ Импортировано ${r.count || data.playlists.length} плейлистов`); showSavedPlaylists(); }
     else tg.showAlert('❌ ' + (r.error || 'Ошибка импорта'));
@@ -4167,7 +4273,7 @@ const SESSION_ITEMS = {
 function showSessionItem(key) {
   const item = SESSION_ITEMS[key];
   if(!item) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   qs('session-modal-icon').textContent = item.icon;
   qs('session-modal-title').textContent = item.title;
   qs('session-modal-subtitle').textContent = item.sub;
@@ -4176,7 +4282,7 @@ function showSessionItem(key) {
 }
 function closeSessionModal() { qs('sessionModal').style.display = 'none'; }
 // Certificates
-function showCert(src) { tg.HapticFeedback.impactOccurred('medium'); qs('certModalImg').src = src; qs('certModal').style.display = 'flex'; }
+function showCert(src) { _hf('medium'); qs('certModalImg').src = src; qs('certModal').style.display = 'flex'; }
 function closeCertModal() { qs('certModal').style.display = 'none'; }
 // Initial page entry animation for home
 
@@ -4205,7 +4311,7 @@ function loadMasseurList() {
 function selectBkMasseur(id, name) {
   BK.selectedMasseurId = id;
   BK.selectedMasseur = name;
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
   loadMasseurList();
   renderBookingCalendar();
   showBkStep(2);
@@ -4216,7 +4322,7 @@ function switchBkRole(role) {
   document.querySelectorAll('.bk-toggle').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-role') === role);
   });
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
   var grid = document.getElementById('masseurSlotGrid');
   if (role === 'masseur') {
     grid.style.display = 'block';
@@ -4331,7 +4437,7 @@ function renderMasseurGrid() {
 }
 
 function masseurConfirmBooking(id) {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   api('/api/massage/book/'+id+'/confirm', {}).then(function(r) {
     tg.showAlert(r && r.ok ? '✅ Запись подтверждена' : '❌ '+(r&&r.message||'Ошибка'));
     loadMyBookings();
@@ -4340,7 +4446,7 @@ function masseurConfirmBooking(id) {
 
 function masseurCancelBooking(id) {
   if (!confirm('Отменить эту запись?')) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   api('/api/massage/book/'+id+'/cancel', {cancelled_by:'masseur'}).then(function(r) {
     tg.showAlert(r && r.ok ? '❌ Запись отменена' : '❌ '+(r&&r.message||'Ошибка'));
     loadMyBookings();
@@ -4349,7 +4455,7 @@ function masseurCancelBooking(id) {
 
 function clientCancelBooking(id) {
   if (!confirm('❌ Отменить запись?')) return;
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   api('/api/massage/book/'+id+'/cancel', {cancelled_by:'client'}).then(function(r) {
     tg.showAlert(r && r.ok ? '❌ Запись отменена' : '❌ '+(r&&r.message||'Ошибка'));
     loadMyBookings();
@@ -4409,7 +4515,7 @@ function saveMasseurName(chatId, input) {
   input.disabled = true;
   api('/api/admin/masseur', {chat_id: chatId, name: newName, specialties: [], admin_chat: u, _init_data: getInitData()}).then(function(d) {
     if (d && d.ok) {
-      tg.HapticFeedback.impactOccurred('light');
+      _hf('light');
     }
     loadMasseurs();
   }).catch(function() { loadMasseurs(); });
@@ -4431,7 +4537,7 @@ function dateStr(s) { try { var d=new Date(s); return d.getDate()+'.'+(d.getMont
 function localDateStr(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 async function startBookingFlow() {
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   BK = {selectedMasseur:'',selectedMasseurId:0,selectedDate:'',selectedTime:'',selectedDur:60,selectedService:'',step:0,role:'client',isNewClient:false};
   var u = uid();
   var st = await apiGet('/api/massage/client_status', {chat_id: u});
@@ -4518,7 +4624,7 @@ function _renderCalendar(avail) {
 
 function selectBkDate(dateStr) {
   BK.selectedDate = dateStr;
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
   renderBookingCalendar();
   document.getElementById('bkDateLabel').textContent = 'Дата: '+dateStr;
   loadTimeSlots(dateStr);
@@ -4566,7 +4672,7 @@ function loadTimeSlots(dateStr) {
 function selectBkSlot(time, dur) {
   BK.selectedTime = time;
   BK.selectedDur = dur;
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
   loadTimeSlots(BK.selectedDate);
   renderServices();
   showBkStep(4);
@@ -4590,7 +4696,7 @@ function renderServices() {
 
 function selectBkService(idx, name) {
   BK.selectedService = name;
-  tg.HapticFeedback.impactOccurred('light');
+  _hf('light');
   renderServices();
   showConfirmStep();
 }
@@ -4606,7 +4712,7 @@ function submitBookingFlow() {
   if (!u) { tg.showAlert('❌ Открой Mini App в Telegram'); return; }
   var uname = '';
   try { uname = tg.initDataUnsafe?.user?.username || ''; } catch(e) {}
-  tg.HapticFeedback.impactOccurred('medium');
+  _hf('medium');
   var btn = document.querySelector('#bkStep5 .btn-primary');
   btn.disabled = true;
   btn.textContent = '⏳ Отправка...';
