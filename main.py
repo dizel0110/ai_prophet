@@ -262,7 +262,10 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             else:
                 tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
-            await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
+            if ext == ".mp4":
+                await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
+            else:
+                await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
