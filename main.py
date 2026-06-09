@@ -203,12 +203,10 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                     caption += "\n\n" + "\n".join(marker_lines)
         except Exception:
             pass
-    # Convert webm to mp4 for Telegram compatibility
-    send_path = path
+    # Log input file info for debugging
     if ext == ".webm" and file_size > 1024:
-        import shutil, subprocess
-        # Log input file info
         try:
+            import subprocess
             probe = subprocess.run(
                 ["ffprobe", "-v", "quiet", "-print_format", "json",
                  "-show_streams", "-show_format", path],
@@ -216,44 +214,8 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             )
             if probe.returncode == 0:
                 logger.info(f"webm input probe: {probe.stdout[:500]}")
-            else:
-                logger.warning(f"ffprobe failed: {probe.stderr[:200]}")
-        except Exception as probe_e:
-            logger.warning(f"ffprobe error: {probe_e}")
-        if shutil.which("ffmpeg"):
-            mp4_path = path.replace(".webm", ".mp4")
-            conv_ok = False
-            try:
-                import subprocess
-                result = subprocess.run(
-                    ["ffmpeg", "-i", path,
-                     "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                     "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                     "-c:a", "aac", "-b:a", "128k",
-                     mp4_path, "-y"],
-                    capture_output=True, timeout=120
-                )
-                if result.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > file_size * 0.1:
-                    # Validate output with ffprobe
-                    probe = subprocess.run(
-                        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", mp4_path],
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if probe.returncode == 0 and probe.stdout.strip():
-                        duration = float(probe.stdout.strip())
-                        if duration > 0.5:
-                            send_path = mp4_path
-                            ext = ".mp4"
-                            conv_ok = True
-                            logger.info(f"webm → mp4 OK ({os.path.getsize(mp4_path)} bytes, {duration:.1f}s)")
-            except Exception as conv_e:
-                logger.warning(f"ffmpeg conversion failed: {conv_e}")
-            if not conv_ok:
-                try:
-                    if os.path.exists(mp4_path):
-                        os.remove(mp4_path)
-                except Exception:
-                    pass
+        except Exception:
+            pass
     # Send to masseur's Telegram if requested (segment recording)
     telegram_sent = False
     send_error = None
@@ -278,10 +240,8 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             else:
                 tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
-            if ext == ".mp4":
-                await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
-            else:
-                await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
+            # Send webm as document (Telegram's send_video re-encoding breaks it)
+            await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(path), caption=caption)
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
@@ -290,13 +250,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
         except Exception as e:
             send_error = str(e)
             logger.warning(f"Failed to send video to masseur {masseur_chat_id}: {e}")
-    # Cleanup converted mp4
-    if send_path != path:
-        try:
-            os.remove(send_path)
-        except Exception:
-            pass
-    return {"ok": True, "file_path": path, "file_ext": ext, "telegram_sent": telegram_sent, "send_error": send_error}
+    return {"ok": True, "file_path": path, "file_ext": ".webm", "telegram_sent": telegram_sent, "send_error": send_error}
 
 
 @app.post("/api/specialist/list")
