@@ -2780,11 +2780,12 @@ async function _spUploadSegment(chunks, isLast) {
   try {
     var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
     var d = await r.json();
-    if (d.ok) {
-      _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
-      if (!d.telegram_sent) {
-        tg.showAlert('⚠ Видео сохранено, но не доставлено в Telegram. Напишите боту любое сообщение.');
-      }
+      if (d.ok) {
+        _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+        if (!d.telegram_sent) {
+          var errMsg = d.send_error || 'неизвестная ошибка';
+          tg.showAlert('⚠ Видео сохранено, но не отправлено в Telegram.\nОшибка: ' + errMsg + '\n\nНапишите боту любое сообщение.');
+        }
       if (isLast) {
         var segMarkers = _spRecState.markers;
         var msg = '📹 Сеанс завершён (' + _spRecState.sessionFiles.length + ' сегментов)';
@@ -2999,7 +3000,8 @@ _spUploadSegment = async function(chunks, isLast) {
       if (d.ok) {
         _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
         if (!d.telegram_sent) {
-          tg.showAlert('⚠ Видео сохранено, но не доставлено в Telegram. Напишите боту любое сообщение и запишите снова.');
+          var errMsg = d.send_error || 'неизвестная ошибка';
+          tg.showAlert('⚠ Видео сохранено, но не отправлено в Telegram.\nОшибка: ' + errMsg + '\n\nНапишите боту любое сообщение и запишите снова.');
         }
       } else {
         tg.showAlert('❌ Ошибка сервера: ' + (d.error || 'неизвестная'));

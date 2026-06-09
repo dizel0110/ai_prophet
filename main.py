@@ -199,24 +199,29 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             pass
     # Send to masseur's Telegram if requested (segment recording)
     telegram_sent = False
+    send_error = None
     if ext in allowed_video and masseur_chat_id and file.size and file.size > 1024:
         try:
             chat_id_int = int(masseur_chat_id)
             from aiogram import Bot
+            from aiogram.client.session.aiohttp import AiohttpSession
             from config import TOKEN, PROXY_URL
-            tg_bot_kwargs = {"token": TOKEN}
             if PROXY_URL:
-                tg_bot_kwargs["proxy"] = PROXY_URL
-            tg_bot = Bot(**tg_bot_kwargs)
+                session = AiohttpSession(proxy=PROXY_URL)
+                tg_bot = Bot(token=TOKEN, session=session)
+            else:
+                tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
             await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(path), caption=caption, supports_streaming=True)
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
+            send_error = "Неверный Telegram ID"
             logger.warning(f"Invalid masseur_chat_id (not a number): {masseur_chat_id}")
         except Exception as e:
+            send_error = str(e)
             logger.warning(f"Failed to send video to masseur {masseur_chat_id}: {e}")
-    return {"ok": True, "file_path": path, "telegram_sent": telegram_sent, "caption": caption}
+    return {"ok": True, "file_path": path, "telegram_sent": telegram_sent, "send_error": send_error}
 
 
 @app.post("/api/specialist/list")
