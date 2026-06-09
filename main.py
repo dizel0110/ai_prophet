@@ -160,19 +160,25 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
     allowed_video = (".mp4", ".mov", ".webm")
     if ext not in allowed_image and ext not in allowed_video:
         return {"ok": False, "error": f"Неподдерживаемый формат «{ext}». Допустимо: JPG/PNG/WebP (фото), MP4/MOV/WebM (видео)"}
-    max_size = 50 * 1024 * 1024 if ext in allowed_video else 10 * 1024 * 1024
-    if file.size and file.size > max_size:
-        limit_mb = max_size // (1024 * 1024)
-        actual_mb = file.size / (1024 * 1024)
-        return {"ok": False, "error": f"Файл слишком большой ({actual_mb:.1f} МБ). Максимум {limit_mb} МБ"}
     from config import TEMP_DIR
     os.makedirs(TEMP_DIR, exist_ok=True)
+    try:
+        content = await file.read()
+    except Exception as e:
+        return {"ok": False, "error": f"Ошибка чтения: {str(e)}"}
+    file_size = len(content)
+    max_size = 50 * 1024 * 1024 if ext in allowed_video else 10 * 1024 * 1024
+    if ext not in allowed_image and ext not in allowed_video:
+        return {"ok": False, "error": f"Неподдерживаемый формат «{ext}»"}
+    if file_size > max_size:
+        limit_mb = max_size // (1024 * 1024)
+        actual_mb = file_size / (1024 * 1024)
+        return {"ok": False, "error": f"Файл слишком большой ({actual_mb:.1f} МБ). Максимум {limit_mb} МБ"}
     file_id = str(uuid.uuid4())[:8]
     prefix = "sp_photo" if ext in allowed_image else "sp_video"
     safe_name = f"{prefix}_{chat_id}_{file_id}{ext}"
     path = os.path.join(TEMP_DIR, safe_name)
     try:
-        content = await file.read()
         with open(path, "wb") as f:
             f.write(content)
     except Exception as e:
@@ -200,7 +206,8 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
     # Send to masseur's Telegram if requested (segment recording)
     telegram_sent = False
     send_error = None
-    if ext in allowed_video and masseur_chat_id and file.size and file.size > 1024:
+    if ext in allowed_video and masseur_chat_id and file_size > 1024:
+        logger.info(f"Sending video segment {segment_index} to Telegram user {masseur_chat_id}, size={file_size}")
         try:
             chat_id_int = int(masseur_chat_id)
             from aiogram import Bot
