@@ -875,6 +875,7 @@ html{scroll-behavior:smooth}
     <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;align-items:center">
       <input type="file" id="sp-file-input" accept="image/*,video/*" style="display:none" onchange="sendSpecialistFile(this)">
       <button class="btn btn-secondary" onclick="document.getElementById('sp-file-input').click()" style="white-space:nowrap;padding:10px 12px;min-width:auto;border-radius:20px;font-size:16px" title="Прикрепить фото/видео">📎</button>
+      <button class="btn btn-secondary" onclick="startSpRecording()" style="white-space:nowrap;padding:10px 12px;min-width:auto;border-radius:20px;font-size:16px" title="Записать видео с камеры">📹</button>
       <input type="text" id="chat-input" placeholder="Напиши сообщение..." style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:20px;font-size:14px;outline:none;background:var(--bg);color:var(--text)">
       <button class="btn btn-secondary" id="voice-btn" onmousedown="voiceBtnDown(event)" onmouseup="voiceBtnUp(event)" onmouseleave="voiceBtnUp(event)" ontouchstart="voiceBtnDown(event)" ontouchend="voiceBtnUp(event)" style="white-space:nowrap;padding:10px 12px;min-width:auto;border-radius:20px;font-size:16px" title="🖱 Нажать — текст в поле / Задержать — авто-отправка">🎤<span class="voice-hint"></span></button>
       <button class="btn btn-primary" onclick="sendSpecialistMessage()" style="white-space:nowrap;padding:10px 16px;min-width:auto;border-radius:20px">➤</button>
@@ -1288,6 +1289,23 @@ html{scroll-behavior:smooth}
     <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
       <button class="btn btn-primary" id="btn-session-start" onclick="toggleSessionTimer()" style="flex:1;min-width:0">▶ Начать</button>
       <button class="btn btn-secondary" id="btn-session-stop" onclick="stopSession()" style="flex:1;min-width:0;display:none">⏹ Завершить</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPECIALIST VIDEO RECORDING MODAL -->
+<div class="modal-overlay" id="spRecModal" style="display:none">
+  <div class="modal" style="text-align:center">
+    <button class="modal-close" onclick="stopSpRecording()">✕</button>
+    <h3>🎥 Запись видео</h3>
+    <div style="font-size:36px;font-weight:700;color:var(--gold);margin:12px 0" id="sp-rec-timer">00:00</div>
+    <video id="sp-rec-preview" autoplay playsinline muted style="width:100%;max-height:180px;border-radius:8px;background:#000;display:block;margin-bottom:8px;object-fit:cover"></video>
+    <div style="margin:8px 0;font-size:13px;color:var(--hint)" id="sp-rec-status">🔴 Запись...</div>
+    <div id="sp-rec-markers" style="margin:8px 0;font-size:12px;color:var(--text);text-align:left;max-height:80px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="addSpMarker()" style="flex:0;min-width:auto;padding:10px 14px;font-size:14px" title="Отметить момент">📍 Отметка</button>
+      <button class="btn btn-secondary" id="btn-sp-rec-pause" onclick="toggleSpPause()" style="flex:0;min-width:auto;padding:10px 14px;font-size:14px">⏸</button>
+      <button class="btn btn-primary" onclick="stopSpRecording()" style="flex:0;min-width:auto;padding:10px 20px;font-size:14px">⏹ Завершить</button>
     </div>
   </div>
 </div>
@@ -2713,6 +2731,200 @@ function voiceBtnUp(e) {
 document.addEventListener('keydown', function(e) {
   if(e.key==='Enter'){ const m=qs('specialistChatModal'); if(m&&m.style.display==='flex') sendSpecialistMessage(); }
 });
+
+// ─── Specialist Chat Video Recording (segment-based) ───
+var SEGMENT_DURATION = 300; // 5 min per segment
+var _spRecState = { stream: null, recorder: null, running: false, paused: false, markers: [], startTime: null, timer: null, sessionFiles: [], segmentIndex: 0, segmentChunks: [], segmentEndTime: null, _stopping: false };
+
+function _spStartSegment() {
+  if (!_spRecState.stream) return;
+  _spRecState.segmentChunks = [];
+  var s = _spRecState.stream;
+  var mr = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp8,opus' });
+  _spRecState.recorder = mr;
+  mr.ondataavailable = function(e) { if (e.data.size > 0) _spRecState.segmentChunks.push(e.data); };
+  mr.onstop = function() { _spHandleSegmentEnd(); };
+  mr.start(1000);
+  _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
+  var seg = _spRecState.segmentIndex + 1;
+  qs('sp-rec-status').textContent = '🔴 Сегмент ' + seg + '...';
+}
+
+function _spHandleSegmentEnd() {
+  var chunks = _spRecState.segmentChunks;
+  _spRecState.segmentChunks = [];
+  var wasStopping = _spRecState._stopping;
+  if (!wasStopping && _spRecState.running && !_spRecState.paused) {
+    _spStartSegment();
+    _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
+  }
+  if (chunks.length > 0) _spUploadSegment(chunks, wasStopping);
+  if (wasStopping) _spFinalizeSession();
+}
+
+async function _spUploadSegment(chunks, isLast) {
+  var blob = new Blob(chunks, { type: 'video/webm' });
+  if (blob.size < 1024) return;
+  var u = uid(); if(!u || !currentSP) return;
+  var idx = _spRecState.segmentIndex++;
+  var fd = new FormData();
+  fd.append('chat_id', u);
+  fd.append('file', blob, 'sp_rec_' + u + '_s' + idx + '.webm');
+  fd.append('masseur_chat_id', u);
+  fd.append('segment_index', idx);
+  try {
+    var r = await fetch('/api/specialist/upload', { method: 'POST', body: fd });
+    var d = await r.json();
+    if (d.ok) {
+      _spRecState.sessionFiles.push({ path: d.file_path, index: idx, size: blob.size });
+      if (isLast) {
+        var segMarkers = _spRecState.markers;
+        var msg = '📹 Сеанс завершён (' + _spRecState.sessionFiles.length + ' сегментов)';
+        if (segMarkers.length > 0) {
+          msg += '\n📍 Отметки:\n' + segMarkers.map(function(m) { return '[' + m.ts + ']' + (m.note ? ' ' + m.note : ''); }).join('\n');
+        }
+        var resp = await api('/api/specialist/chat', { chat_id: u, name: currentSP, message: msg });
+        if (resp && resp.ok) {
+          spMessages[u][currentSP].push({ role: 'ai', text: resp.response });
+          addMsg('ai', resp.response, resp.name || currentSP);
+        }
+      }
+    }
+  } catch(e) {}
+}
+
+function _spFinalizeSession() {
+  if (_spRecState.timer) { clearInterval(_spRecState.timer); _spRecState.timer = null; }
+  if (_spRecState.stream) { _spRecState.stream.getTracks().forEach(function(t) { t.stop(); }); }
+  var preview = qs('sp-rec-preview');
+  if (preview) { preview.srcObject = null; }
+  qs('spRecModal').style.display = 'none';
+  hideTyping();
+  var n = _spRecState.sessionFiles.length;
+  if (n > 1) {
+    var listText = _spRecState.sessionFiles.map(function(f, i) {
+      var fname = 'chunk_' + ('' + f.index).padStart(2, '0') + '.webm';
+      return "file '" + fname + "'";
+    }).join('\n');
+    var blob = new Blob([listText], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    tg.showAlert('✅ Запись завершена. ' + n + ' сегментов отправлено в Telegram.\n📋 Файл для склейки готов к скачиванию.');
+    setTimeout(function() {
+      var a = document.createElement('a'); a.href = url; a.download = 'session_files.txt';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+    }, 500);
+  } else {
+    tg.showAlert('✅ Запись завершена.');
+  }
+}
+
+function startSpRecording() {
+  var u = uid(); if(!u) return;
+  if(!currentSP) { tg.showAlert('❌ Сначала выбери специалиста'); return; }
+  _spRecState.markers = []; _spRecState.sessionFiles = []; _spRecState.segmentIndex = 0; _spRecState.startTime = null; _spRecState._stopping = false;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { tg.showAlert('❌ Камера не поддерживается'); return; }
+  navigator.mediaDevices.getUserMedia({ video: { width: { max: 640 }, height: { max: 480 } }, audio: true })
+    .then(function(s) {
+      _spRecState.stream = s;
+      var preview = qs('sp-rec-preview');
+      preview.srcObject = s; preview.play();
+      qs('spRecModal').style.display = 'flex';
+      qs('sp-rec-status').textContent = '🔴 Запись...';
+      qs('sp-rec-timer').textContent = '00:00';
+      qs('sp-rec-markers').innerHTML = '';
+      _spRecState.startTime = Date.now();
+      _spStartSegment();
+      _spRecState.running = true; _spRecState.paused = false;
+      _spRecState.timer = setInterval(function() {
+        if (!_spRecState.startTime) return;
+        var elapsed = Math.floor((Date.now() - _spRecState.startTime) / 1000);
+        var m = Math.floor(elapsed / 60); var sec = elapsed % 60;
+        qs('sp-rec-timer').textContent = (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+        if (_spRecState.running && !_spRecState.paused && _spRecState.segmentEndTime && Date.now() >= _spRecState.segmentEndTime) {
+          if (_spRecState.recorder && _spRecState.recorder.state === 'recording') _spRecState.recorder.stop();
+        }
+      }, 1000);
+      tg.HapticFeedback.impactOccurred('medium');
+    })
+    .catch(function(err) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(s) {
+          _spRecState.stream = s;
+          _spRecState.startTime = Date.now();
+          _spStartSegment();
+          _spRecState.running = true;
+          qs('spRecModal').style.display = 'flex';
+          qs('sp-rec-status').textContent = '🎤 Запись аудио (камера недоступна)';
+          _spRecState.timer = setInterval(function() {
+            var elapsed = Math.floor((Date.now() - _spRecState.startTime) / 1000);
+            var m = Math.floor(elapsed / 60); var sec = elapsed % 60;
+            qs('sp-rec-timer').textContent = (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+            if (_spRecState.running && !_spRecState.paused && _spRecState.segmentEndTime && Date.now() >= _spRecState.segmentEndTime) {
+              if (_spRecState.recorder && _spRecState.recorder.state === 'recording') _spRecState.recorder.stop();
+            }
+          }, 1000);
+        })
+        .catch(function(err2) { tg.showAlert('❌ Нет доступа к камере/микрофону'); });
+    });
+}
+
+function toggleSpPause() {
+  if (!_spRecState.recorder) return;
+  if (_spRecState.paused) {
+    _spRecState.recorder.resume();
+    _spRecState.paused = false;
+    _spRecState.segmentEndTime = Date.now() + (SEGMENT_DURATION * 1000);
+    qs('sp-rec-status').textContent = '🔴 Сегмент ' + (_spRecState.segmentIndex + 1) + '...';
+    qs('btn-sp-rec-pause').textContent = '⏸';
+  } else {
+    if (_spRecState.recorder.state === 'recording') _spRecState.recorder.pause();
+    _spRecState.paused = true;
+    qs('sp-rec-status').textContent = '⏸ Пауза';
+    qs('btn-sp-rec-pause').textContent = '▶';
+  }
+}
+
+function addSpMarker() {
+  if (!_spRecState.running || !_spRecState.startTime || _spRecState.paused) return;
+  var elapsed = Math.floor((Date.now() - _spRecState.startTime) / 1000);
+  var m = Math.floor(elapsed / 60); var s = elapsed % 60;
+  var ts = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  var note = prompt('📍 Отметка на ' + ts + '\nЧто произошло? (необязательно)');
+  if (note === null) return;
+  _spRecState.markers.push({ ts: ts, note: note || '' });
+  var list = qs('sp-rec-markers');
+  var item = document.createElement('div'); item.style = 'padding:2px 0;font-size:12px;color:var(--gold)';
+  item.textContent = '📍 ' + ts + (note ? ' — ' + note : '');
+  list.appendChild(item);
+  list.scrollTop = list.scrollHeight;
+  tg.HapticFeedback.impactOccurred('light');
+}
+
+function stopSpRecording() {
+  _spRecState._stopping = true;
+  _spRecState.running = false;
+  if (_spRecState.recorder && _spRecState.recorder.state !== 'inactive') {
+    _spRecState.recorder.stop(); // triggers _spHandleSegmentEnd → _spUploadSegment → _spFinalizeSession
+  } else {
+    _spFinalizeSession();
+  }
+}
+    if (resp.ok) {
+      spMessages[u][currentSP].push({ role: 'ai', text: resp.response });
+      addMsg('ai', resp.response, resp.name || currentSP);
+      var acts = parseActions(resp.response);
+      acts.forEach(function(a) {
+        setTimeout(function() {
+          if (a.type==='open_specialist' && a.param) { closeSpecialistChat(); setTimeout(function() { openSpecialistChat(a.param); }, 200); }
+          else if (a.type==='play_music' && a.param) { closeSpecialistChat(); navigate('music'); setTimeout(function() { loadGenreTracks(a.param); }, 300); }
+          else if (a.type==='start_consultation') { closeSpecialistChat(); openConsultForm(); }
+          else if (a.type==='go_booking') { closeSpecialistChat(); navigate('booking'); }
+        }, 600);
+      });
+    } else { addMsg('ai', '❌ ' + (resp.error || 'Не удалось получить ответ')); }
+  } catch(e) { hideTyping(); addMsg('ai', '❌ Ошибка сети'); }
+}
 
 loadSpecialists();
 

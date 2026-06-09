@@ -150,7 +150,7 @@ async def api_specialist_chat(req: dict):
 
 
 @app.post("/api/specialist/upload")
-async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = File(...)):
+async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = File(...), masseur_chat_id: str = Form(None), segment_index: int = Form(None)):
     if not chat_id or not file:
         return {"ok": False, "error": "Missing chat_id or file"}
     if not file.filename:
@@ -177,6 +177,18 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             f.write(content)
     except Exception as e:
         return {"ok": False, "error": f"Ошибка сохранения: {str(e)}"}
+    # Send to masseur's Telegram if requested (segment recording)
+    if ext in allowed_video and masseur_chat_id and file.size and file.size > 1024:
+        try:
+            from aiogram import Bot
+            from config import TOKEN
+            tg_bot = Bot(token=TOKEN)
+            caption_parts = [f"📹 Сегмент {segment_index}" if segment_index is not None else "📹 Видеозапись"]
+            from aiogram.types.input_file import FSInputFile
+            await tg_bot.send_video(chat_id=int(masseur_chat_id), video=FSInputFile(path), caption=" ".join(caption_parts), supports_streaming=True)
+            await tg_bot.session.close()
+        except Exception as e:
+            logger.warning(f"Failed to send video to masseur {masseur_chat_id}: {e}")
     return {"ok": True, "file_path": path}
 
 

@@ -58,7 +58,8 @@ def _get_universal_consultant_prompt(user_mode: str = "vertical") -> str:
         "• AI-консультация — команда из 5 агентов: Анкетолог, Визуальный Диагност, Специалист по движениям, Эксперт по техникам, Финальный Эксперт\n"
         "• Создание новых ИИ-специалистов под любую задачу\n"
         "• Музыка для массажа — 8 жанров: Ambient, Классика, Природа, Jazz, Спа, Тайский, Акустика, Бины\n"
-        "• Запись на сеанс через форму в Mini App или WhatsApp — только после мед. анкеты\n\n"
+        "• Запись на сеанс через форму в Mini App или WhatsApp — только после мед. анкеты\n"
+        "• Запись видео сеанса прямо из чата: массажист может снять видео массажа, отметить ключевые моменты, и отправить Видеоаналитику для оценки техники\n\n"
         "ВАЖНО: Запись на сеанс возможна только после прохождения медицинской анкеты (AI-консультации). Анкета нужна для безопасности: противопоказания, хронические заболевания, текущее самочувствие. Если клиент хочет записаться, но не проходил анкету — объясни, почему это важно, и предложи начать AI-консультацию через кнопку [ACTION: start_consultation].\n\n"
         "Что ты делаешь:\n"
         "1. Отвечаешь на вопросы об услугах, ценах, специалистах\n"
@@ -126,6 +127,14 @@ BUILT_IN_AGENTS = [
         "role": "Итоговое заключение и рекомендации",
         "system_prompt": "Ты — Финальный Эксперт массажного салона. Ты получаешь всю информацию о клиенте и даёшь ОКОНЧАТЕЛЬНОЕ ЗАКЛЮЧЕНИЕ в формате: 1) СТАТУС КЛИЕНТА: Допущен / С ограничениями / Не допущен, 2) ПРИЧИНА, 3) РЕКОМЕНДОВАННЫЕ ТЕХНИКИ, 4) ЗОНЫ ВНИМАНИЯ, 5) ПРОТИВОПОКАЗАНИЯ, 6) СЕАНСЫ — рекомендуемая длительность сеанса (напр. 30, 60, 90 мин) 7) МУЗЫКА — рекомендуемый жанр из списка (ambient, classic, nature, jazz, spa, thai, acoustic, binaural) и примерное количество треков (исходя из средней длины трека 4-5 мин и длительности сеанса). Если данных мало — задавай вопросы, чтобы сформировать полную картину. Будь максимально конкретным и профессиональным. Отвечай на языке пользователя. По умолчанию — русский. НЕ используй китайские иероглифы.",
         "skills": "синтез данных, финальное заключение, рекомендации, план лечения",
+        "built_in": True,
+        "badge": "🤖",
+    },
+    {
+        "name": "Видеоаналитик",
+        "role": "Анализ видео сеансов массажа",
+        "system_prompt": "Ты — Видеоаналитик массажного салона. Ты смотришь видео сеансов массажа и анализируешь: технику выполнения приёмов, положение рук мастера, реакцию клиента, симметричность проработки, темп и ритм движений. Клиент может прислать видео сеанса для оценки. Если видео нет — задавай вопросы: какая техника выполнялась, какие приёмы использовались, была ли реакция клиента. Обращай внимание на отметки во времени — они указывают на ключевые моменты сеанса. НЕ выходи за рамки анализа техники массажа. НЕ ставь медицинских диагнозов. Отвечай на языке пользователя. По умолчанию — русский. НЕ используй китайские иероглифы.",
+        "skills": "анализ техники массажа, видеоанализ, оценка приёмов, рекомендации по улучшению",
         "built_in": True,
         "badge": "🤖",
     },
@@ -385,20 +394,31 @@ class SpecialistFactory:
         for h in history[-10:]:
             conv_context += f"{h['role']}: {h['content']}\n"
 
-        # Если прикреплён файл — vision-анализ с контекстом беседы
+        # Если прикреплён файл — анализ изображения или видео
         if file_path and os.path.exists(file_path) and os.path.isfile(file_path):
             try:
                 context_prompt = specialist.system_prompt + memory_block
                 if conv_context:
                     context_prompt += f"\n[История диалога:\n{conv_context}]\n\n"
-                context_prompt += f"user: {user_message if user_message else 'Проанализируй это изображение'}"
-                vision_agent = AgentBase(
-                    agent_id=f"sp_{chat_id}",
-                    name=specialist.name,
-                    role_prompt=specialist.system_prompt,
-                    model_type="vision"
-                )
-                result = vision_agent.process_vision(context_prompt, file_path)
+                context_prompt += f"user: {user_message if user_message else 'Проанализируй этот файл'}"
+                ext = os.path.splitext(file_path)[1].lower()
+                is_video = ext in ('.mp4', '.mov', '.webm', '.avi', '.mkv')
+                if is_video:
+                    video_agent = AgentBase(
+                        agent_id=f"sp_{chat_id}",
+                        name=specialist.name,
+                        role_prompt=specialist.system_prompt,
+                        model_type="video"
+                    )
+                    result = video_agent.process_video_frames(context_prompt, file_path)
+                else:
+                    vision_agent = AgentBase(
+                        agent_id=f"sp_{chat_id}",
+                        name=specialist.name,
+                        role_prompt=specialist.system_prompt,
+                        model_type="vision"
+                    )
+                    result = vision_agent.process_vision(context_prompt, file_path)
                 if result.is_success():
                     specialist.message_count += 1
                     specialist.client_memory = cls._merge_memory(specialist.client_memory, cls._extract_memory(user_message))
@@ -409,9 +429,9 @@ class SpecialistFactory:
                     except Exception:
                         pass
                     return result
-                logger.warning(f"Specialist vision failed, falling back to text chat")
+                logger.warning(f"Specialist {('video' if is_video else 'vision')} failed, falling back to text chat")
             except Exception as e:
-                logger.warning(f"Specialist vision error: {e}")
+                logger.warning(f"Specialist vision/video error: {e}")
 
         # Gemini first — лучше следует system prompt
         if cls._gemini_client:
