@@ -206,7 +206,20 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
     # Convert webm to mp4 for Telegram compatibility
     send_path = path
     if ext == ".webm" and file_size > 1024:
-        import shutil
+        import shutil, subprocess
+        # Log input file info
+        try:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-print_format", "json",
+                 "-show_streams", "-show_format", path],
+                capture_output=True, text=True, timeout=10
+            )
+            if probe.returncode == 0:
+                logger.info(f"webm input probe: {probe.stdout[:500]}")
+            else:
+                logger.warning(f"ffprobe failed: {probe.stderr[:200]}")
+        except Exception as probe_e:
+            logger.warning(f"ffprobe error: {probe_e}")
         if shutil.which("ffmpeg"):
             mp4_path = path.replace(".webm", ".mp4")
             conv_ok = False
