@@ -213,7 +213,17 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                 capture_output=True, text=True, timeout=10
             )
             if probe.returncode == 0:
-                logger.info(f"webm input probe: {probe.stdout[:500]}")
+                logger.info(f"webm input probe ({file_size} bytes): {probe.stdout[:1500]}")
+                # Count actual packets/frames
+                pkt = subprocess.run(
+                    ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                     "-show_entries", "packet=pts_time,duration",
+                     "-of", "csv=p=0", path],
+                    capture_output=True, text=True, timeout=10
+                )
+                if pkt.returncode == 0:
+                    lines = [l for l in pkt.stdout.strip().split('\n') if l.strip()]
+                    logger.info(f"webm video packets: {len(lines)}")
         except Exception:
             pass
     # Send to masseur's Telegram if requested (segment recording)
@@ -250,10 +260,26 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
         except Exception as e:
             send_error = str(e)
             logger.warning(f"Failed to send video to masseur {masseur_chat_id}: {e}")
-    return {"ok": True, "file_path": path, "file_ext": ".webm", "telegram_sent": telegram_sent, "send_error": send_error}
+    fname = os.path.basename(path)
+    download_url = f"/debug/file/{fname}"
+    return {"ok": True, "file_path": path, "file_ext": ".webm", "telegram_sent": telegram_sent, "send_error": send_error, "download_url": download_url}
 
 
-@app.post("/api/specialist/list")
+@app.get("/debug/file/{filename:path}")
+async def debug_serve_file(filename: str):
+    import os
+    from config import TEMP_DIR
+    fpath = os.path.join(TEMP_DIR, filename)
+    # Security: only allow files in TEMP_DIR
+    real = os.path.normpath(fpath)
+    if not real.startswith(os.path.normpath(TEMP_DIR)):
+        return {"ok": False, "error": "Access denied"}
+    if not os.path.exists(real):
+        return {"ok": False, "error": "File not found"}
+    from starlette.responses import FileResponse
+    return FileResponse(real, media_type="video/webm")
+
+
 async def api_specialist_list(req: dict):
     from core.agents.agent_factory import get_specialists
     chat_id = req.get("chat_id")
