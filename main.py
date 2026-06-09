@@ -1497,22 +1497,18 @@ def _require_admin_sync(init_data: str, chat_id: int):
 
 
 @app.get("/api/admin/identify")
-async def api_admin_identify(chat_id: int = 0, username: str = ""):
+async def api_admin_identify(chat_id: int = 0, username: str = "", _init_data: str = ""):
     """Check user role: admin, masseur, or client."""
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
-    from config import OWNER_USERNAME
-    # Fallback: if username not provided (Telegram Web), look it up from stored mapping
-    if not username:
+    # Verify initData and extract real username if not provided
+    from config import OWNER_USERNAME, TOKEN
+    if not username and _init_data:
         try:
-            _map_path = os.path.join(DATA_DIR, "username_chat_map.json")
-            if os.path.exists(_map_path):
-                with open(_map_path, "r", encoding="utf-8") as _f:
-                    _m = json.load(_f)
-                for _uname, _cid in _m.items():
-                    if _cid == chat_id:
-                        username = _uname
-                        break
+            from core.tg_auth import verify_init_data
+            verified = verify_init_data(_init_data, TOKEN)
+            if verified and verified.get("username"):
+                username = verified["username"]
         except Exception:
             pass
     is_admin = _is_chat_id_admin(chat_id) or (username and username.lower() == OWNER_USERNAME.lower())
