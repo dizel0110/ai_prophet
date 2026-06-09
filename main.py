@@ -203,6 +203,25 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                     caption += "\n\n" + "\n".join(marker_lines)
         except Exception:
             pass
+    # Convert webm to mp4 for Telegram compatibility
+    send_path = path
+    if ext == ".webm" and file_size > 1024:
+        import shutil
+        if shutil.which("ffmpeg"):
+            mp4_path = path.replace(".webm", ".mp4")
+            try:
+                import subprocess
+                subprocess.run(
+                    ["ffmpeg", "-i", path, "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                     "-c:a", "aac", "-b:a", "128k", mp4_path, "-y"],
+                    capture_output=True, timeout=120
+                )
+                if os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1000:
+                    send_path = mp4_path
+                    ext = ".mp4"
+                    logger.info(f"Converted webm → mp4: {os.path.getsize(mp4_path)} bytes")
+            except Exception as conv_e:
+                logger.warning(f"ffmpeg conversion failed: {conv_e}")
     # Send to masseur's Telegram if requested (segment recording)
     telegram_sent = False
     send_error = None
@@ -227,7 +246,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             else:
                 tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
-            await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(path), caption=caption, supports_streaming=True)
+            await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
@@ -236,6 +255,12 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
         except Exception as e:
             send_error = str(e)
             logger.warning(f"Failed to send video to masseur {masseur_chat_id}: {e}")
+    # Cleanup converted mp4
+    if send_path != path:
+        try:
+            os.remove(send_path)
+        except Exception:
+            pass
     return {"ok": True, "file_path": path, "telegram_sent": telegram_sent, "send_error": send_error}
 
 
