@@ -1313,7 +1313,15 @@ async def conduct_ai_ritual(message: types.Message, bot: Bot, input_text: str, s
         logger.info(f"✅ HF Response received for user {chat_id}")
 
         # Parse and execute tools с chat_id
-        clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
+        # Защита: выполняем MEDIA/PLAYLIST только если пользователь явно просит музыку
+        _ALLOW_MEDIA_KEYWORDS = ["музык", "песн", "трек", "playlist", "плейлист",
+                                  "audio", "видео", "video", "клип", "clip",
+                                  "послуша", "включи", "найди музык"]
+        wants_media = any(kw in input_text.lower() for kw in _ALLOW_MEDIA_KEYWORDS)
+        if wants_media:
+            clean_text, tool_result = parse_and_execute_tools(hf_res, chat_id=chat_id)
+        else:
+            clean_text, tool_result = hf_res, None
 
         await status_msg.edit_text("✨ *Ответ получен через поток HF:*")
         await message.answer(f"🧿 {clean_text}")

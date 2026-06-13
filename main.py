@@ -1092,9 +1092,15 @@ def _compute_delta(a: dict, b: dict) -> dict:
     # Music
     if a.get("music_genre") != b.get("music_genre"):
         delta["music"] = {"from": a.get("music_genre", ""), "to": b.get("music_genre", "")}
-    # Days between
-    if a.get("date") and b.get("date"):
-        delta["days_between"] = int((b["date"] - a["date"]) / 86400)
+    # Days between (supports both timestamps and ISO strings)
+    a_date = a.get("date")
+    b_date = b.get("date")
+    if a_date and b_date:
+        if isinstance(a_date, str):
+            a_date = datetime.fromisoformat(a_date.replace("Z", "+00:00")).timestamp()
+        if isinstance(b_date, str):
+            b_date = datetime.fromisoformat(b_date.replace("Z", "+00:00")).timestamp()
+        delta["days_between"] = int((float(b_date) - float(a_date)) / 86400)
     # Questionnaire fields (weight, bp, etc.)
     aq = a.get("questionnaire_snapshot", {})
     bq = b.get("questionnaire_snapshot", {})
