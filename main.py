@@ -251,29 +251,39 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             else:
                 tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
-            # Convert WebM to MP4 before sending (Telegram plays MP4 inline)
-            send_path = path
-            if ext == ".webm" and file_size > 1024:
+            # Convert WebM→MP4 if possible, else fall back to document
+            use_video = True
+            converted = False
+            mp4_path = None
+            if ext == ".webm" and file_size > 1024 and shutil.which("ffmpeg"):
                 mp4_path = path + ".mp4"
-                import subprocess
                 try:
-                    subprocess.run(
+                    r = subprocess.run(
                         ["ffmpeg", "-y", "-i", path,
-                         "-c:v", "libx264", "-preset", "ultrafast",
-                         "-c:a", "aac", "-b:a", "96k",
-                         "-movflags", "+faststart",
-                         mp4_path],
+                         "-c:v", "libx264", "-preset", "fast",
+                         "-crf", "23", "-c:a", "aac", "-b:a", "96k",
+                         "-movflags", "+faststart", mp4_path],
                         capture_output=True, timeout=120
                     )
-                    if os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
-                        send_path = mp4_path
+                    if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
                         logger.info(f"Converted {path} -> {mp4_path} ({os.path.getsize(mp4_path)} bytes)")
+                        converted = True
+                    else:
+                        logger.warning(f"ffmpeg convert failed (rc={r.returncode}), stderr={r.stderr[:200]}")
+                        use_video = False
                 except Exception as conv_e:
-                    logger.warning(f"ffmpeg conversion failed, sending original webm: {conv_e}")
-            await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
-            if send_path != path:
+                    logger.warning(f"ffmpeg exception: {conv_e}")
+                    use_video = False
+            else:
+                use_video = False
+            send_path = mp4_path if converted else path
+            if use_video and converted:
+                await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
+            else:
+                await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
+            if converted and mp4_path:
                 try:
-                    os.remove(send_path)
+                    os.remove(mp4_path)
                 except Exception:
                     pass
             await tg_bot.session.close()
