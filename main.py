@@ -1150,7 +1150,8 @@ def _compute_delta(a: dict, b: dict) -> dict:
         if isinstance(v, str):
             import json
             try:
-                return json.loads(v)
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, dict) else {}
             except Exception:
                 return {}
         return v if isinstance(v, dict) else {}
