@@ -69,12 +69,3 @@ def get_record(record_id: str):
 def can_access(record: dict, user_chat_id: int) -> bool:
     return user_chat_id in (record["masseur_chat_id"], record["client_chat_id"])
 
-
-def cleanup_old_data(max_age_days: int = 30):
-    data = _load()
-    cutoff = int(datetime.utcnow().timestamp()) - max_age_days * 86400
-    before = len(data["records"])
-    data["records"] = [r for r in data["records"] if r["date"] > cutoff]
-    if len(data["records"]) < before:
-        _save(data)
-        logger.info(f"Video records cleanup: removed {before - len(data['records'])} old entries")

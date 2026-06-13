@@ -2217,8 +2217,6 @@ async def start_bot_polling():
                 _cleanup_counter += 1
                 if _cleanup_counter % 30 == 0:
                     _cleanup_temp_dir()
-                    from core.video_records import cleanup_old_data
-                    cleanup_old_data(max_age_days=30)
             except Exception as e:
                 logger.warning(f"Booking housekeeping error: {e}")
             await asyncio.sleep(60)
