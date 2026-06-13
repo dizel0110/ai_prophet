@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.types import FSInputFile
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from config import TOKEN, PORT, PLATFORM, DATA_DIR, get_vertical_name
@@ -277,15 +277,26 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             else:
                 use_video = False
             send_path = mp4_path if converted else path
+            record_id = None
             if use_video and converted:
-                await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
+                msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
             else:
-                await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
+                msg = await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
             if converted and mp4_path:
                 try:
                     os.remove(mp4_path)
                 except Exception:
                     pass
+            if msg and hasattr(msg, 'video') and msg.video:
+                from core.video_records import save_record
+                record_id = save_record(
+                    client_chat_id=int(chat_id),
+                    masseur_chat_id=chat_id_int,
+                    file_id=msg.video.file_id,
+                    file_unique_id=msg.video.file_unique_id,
+                    duration_min=0,
+                    caption=caption,
+                )
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
@@ -1238,7 +1249,7 @@ async def api_session_media(
                 pass
 
         video = FSInputFile(video_path)
-        await b.send_video(chat_id=masseur_chat_id, video=video, caption=caption)
+        msg = await b.send_video(chat_id=masseur_chat_id, video=video, caption=caption)
         await b.session.close()
 
         if video_path != temp_path:
@@ -1246,6 +1257,18 @@ async def api_session_media(
                 os.remove(mp4_path)
             except Exception:
                 pass
+
+        if msg and msg.video:
+            from core.video_records import save_record
+            save_record(
+                client_chat_id=chat_id,
+                masseur_chat_id=masseur_chat_id,
+                file_id=msg.video.file_id,
+                file_unique_id=msg.video.file_unique_id,
+                duration_min=duration_min,
+                caption=caption,
+                is_training=is_training,
+            )
 
         if not is_training:
             from core.masseur_diary import add_diary_entry
@@ -1270,6 +1293,55 @@ async def api_session_media(
         if os.path.exists(temp_path):
             os.remove(temp_path)
         return {"ok": False, "error": f"Failed to send: {e}"}
+
+
+@app.get("/api/video/records")
+async def api_video_records(chat_id: int = 0):
+    if not chat_id:
+        return {"ok": False, "error": "Missing chat_id"}
+    from core.video_records import get_records_for
+    records = get_records_for(chat_id)
+    return {"ok": True, "records": records}
+
+
+@app.get("/api/video/play/{record_id}")
+async def api_video_play(record_id: str, chat_id: int = 0, request: Request = None):
+    from core.video_records import get_record, can_access
+    record = get_record(record_id)
+    if not record:
+        return {"ok": False, "error": "Record not found"}
+    if not can_access(record, chat_id):
+        return {"ok": False, "error": "Access denied"}
+    file_id = record.get("file_id")
+    if not file_id:
+        return {"ok": False, "error": "No file_id"}
+
+    from starlette.responses import StreamingResponse
+    import aiohttp
+    from config import TOKEN
+
+    from aiogram import Bot
+    b = Bot(token=TOKEN)
+    try:
+        f = await b.get_file(file_id)
+        file_path = f.file_path
+    except Exception as e:
+        await b.session.close()
+        return {"ok": False, "error": f"Telegram file not accessible: {e}"}
+    await b.session.close()
+
+    tg_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+    range_hdr = request.headers.get("range", "") if request else ""
+
+    async def _iter():
+        async with aiohttp.ClientSession() as session:
+            req = {"Range": range_hdr} if range_hdr else {}
+            async with session.get(tg_url, headers=req) as resp:
+                async for chunk in resp.content.iter_chunked(65536):
+                    yield chunk
+
+    headers = {"Accept-Ranges": "bytes"}
+    return StreamingResponse(_iter(), media_type="video/mp4", headers=headers)
 
 
 @app.get("/api/education")
@@ -1981,6 +2053,25 @@ async def api_admin_masseur_clients(masseur_id: int, chat_id: int = 0, _init_dat
 def start_web():
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
+def _cleanup_temp_dir(max_age_hours: int = 24):
+    """Remove temp files older than max_age_hours."""
+    import config as cfg
+    if not os.path.exists(cfg.TEMP_DIR):
+        return
+    now = time.time()
+    removed = 0
+    for fname in os.listdir(cfg.TEMP_DIR):
+        fpath = os.path.join(cfg.TEMP_DIR, fname)
+        try:
+            if os.path.isfile(fpath) and (now - os.path.getmtime(fpath)) > max_age_hours * 3600:
+                os.remove(fpath)
+                removed += 1
+        except Exception:
+            pass
+    if removed:
+        logger.info(f"🧹 Temp cleanup: removed {removed} old files")
+
+
 async def start_bot_polling():
     """Polling режим для локальной разработки"""
     apply_dns_patch()
@@ -2060,7 +2151,9 @@ async def start_bot_polling():
         await bot.delete_webhook(drop_pending_updates=True)
 
     # ─── Booking background task: auto-cancel, reminders, morning digest ───
+    _cleanup_counter = 0
     async def booking_housekeeping():
+        nonlocal _cleanup_counter
         while True:
             try:
                 from core.booking_manager import (
@@ -2103,6 +2196,13 @@ async def start_bot_polling():
                             logger.info(f"🌅 Morning digest to masseur {mid}: {len(blist)} pending")
                         except Exception as e:
                             logger.warning(f"Morning digest to {mid} failed: {e}")
+
+                # 4. Temp cleanup every 30 min (remove files > 24h)
+                _cleanup_counter += 1
+                if _cleanup_counter % 30 == 0:
+                    _cleanup_temp_dir()
+                    from core.video_records import cleanup_old_data
+                    cleanup_old_data(max_age_days=30)
             except Exception as e:
                 logger.warning(f"Booking housekeeping error: {e}")
             await asyncio.sleep(60)
