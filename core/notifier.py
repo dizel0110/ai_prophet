@@ -6,6 +6,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+_FALLBACK_SEANS = "\u0421\u0435\u0430\u043d\u0441"
+
 def _mini_app_url() -> str:
     from config import get_base_url
     return f"{get_base_url().rstrip('/')}/#page-booking"
@@ -125,7 +127,7 @@ def notify_auto_cancel(client_chat_id: int, masseur_chat_id: int,
     c_text = (
         f"\u274c *\u0417\u0430\u043f\u0438\u0441\u044c \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u0430*\n\n"
         f"\U0001f4c6 {slot_date} \u0432 {start_time}\n"
-        f"\U0001f486 {service_name or '\u0421\u0435\u0430\u043d\u0441'}\n\n"
+        f"\U0001f486 {service_name or _FALLBACK_SEANS}\n\n"
         f"\u041c\u0430\u0441\u0441\u0430\u0436\u0438\u0441\u0442 \u043d\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b \u0437\u0430\u043f\u0438\u0441\u044c. "
         f"\u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c\u0441\u044f \u043d\u0430 \u0434\u0440\u0443\u0433\u043e\u0435 \u0432\u0440\u0435\u043c\u044f \u0438\u043b\u0438 \u043a \u0434\u0440\u0443\u0433\u043e\u043c\u0443 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442\u0443."
     )

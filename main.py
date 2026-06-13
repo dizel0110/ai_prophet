@@ -251,8 +251,31 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             else:
                 tg_bot = Bot(token=TOKEN)
             from aiogram.types.input_file import FSInputFile
-            # Send webm as document (Telegram's send_video re-encoding breaks it)
-            await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(path), caption=caption)
+            # Convert WebM to MP4 before sending (Telegram plays MP4 inline)
+            send_path = path
+            if ext == ".webm" and file_size > 1024:
+                mp4_path = path + ".mp4"
+                import subprocess
+                try:
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", path,
+                         "-c:v", "libx264", "-preset", "ultrafast",
+                         "-c:a", "aac", "-b:a", "96k",
+                         "-movflags", "+faststart",
+                         mp4_path],
+                        capture_output=True, timeout=120
+                    )
+                    if os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
+                        send_path = mp4_path
+                        logger.info(f"Converted {path} -> {mp4_path} ({os.path.getsize(mp4_path)} bytes)")
+                except Exception as conv_e:
+                    logger.warning(f"ffmpeg conversion failed, sending original webm: {conv_e}")
+            await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
+            if send_path != path:
+                try:
+                    os.remove(send_path)
+                except Exception:
+                    pass
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
@@ -1102,8 +1125,16 @@ def _compute_delta(a: dict, b: dict) -> dict:
             b_date = datetime.fromisoformat(b_date.replace("Z", "+00:00")).timestamp()
         delta["days_between"] = int((float(b_date) - float(a_date)) / 86400)
     # Questionnaire fields (weight, bp, etc.)
-    aq = a.get("questionnaire_snapshot", {})
-    bq = b.get("questionnaire_snapshot", {})
+    def _ensure_dict(v):
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except Exception:
+                return {}
+        return v if isinstance(v, dict) else {}
+    aq = _ensure_dict(a.get("questionnaire_snapshot", {}))
+    bq = _ensure_dict(b.get("questionnaire_snapshot", {}))
     for field, label in [("weight", "Вес"), ("ad_puls", "Давление/пульс")]:
         av = aq.get(field, "")
         bv = bq.get(field, "")
