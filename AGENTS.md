@@ -818,3 +818,37 @@ massage.py (консультация) ──→ music_db.py (жанры/ссыл
 - `notify_auto_cancel()` — клиенту + кнопка "📅 Записаться"
 - `notify_pending_reminder()` — массажисту "⏰ N неподтверждённых"
 - `notify_morning_digest()` — массажисту "🌅 Доброе утро! N записей"
+
+## 🖥️ VS Code Extension & opencode CLI Integration
+
+Проект использует **opencode CLI** для AI-assisted разработки. CLI установлен через **Scoop** (рекомендовано), также может быть установлен через npm (`opencode-ai` — неофициальный пакет, отстаёт от релизов).
+
+### Антигравность IDE / wenzewoo.opencode-agent
+
+В Antigravity IDE (Google VS Code fork) установлено расширение `wenzewoo.opencode-agent` (v0.0.6) — сторонний адаптер, который запускает opencode в терминале IDE.
+
+### Когда настройка `opencode-agent.cliPath` имеет смысл
+
+`cliPath` явно указывает расширению путь к `opencode.exe`. Без него расширение ищет `opencode` в PATH (через `where`).
+
+| Ситуация | Нужен cliPath? |
+|----------|---------------|
+| Один opencode в системе (через Scoop) | **Нет** — PATH ведёт к нему |
+| Установлены Scoop + npm `opencode-ai` | **Да** — npm может перехватить PATH |
+| Несколько версий (1.14, 1.17 и т.д.) | **Да** — явно выбираешь нужную |
+| Хочется гарантии без сюрпризов | **Да** — одна строка в settings.json |
+
+Формат:
+```json
+"opencode-agent.cliPath": "C:\\Users\\dizel\\scoop\\shims\\opencode.exe"
+```
+
+### Scoop vs npm
+| Критерий | Scoop | npm |
+|----------|-------|-----|
+| Актуальность | GitHub releases (свежие) | Отстаёт |
+| Управление версиями | `scoop reset opencode@1.14.48` | Неудобно |
+| Проект не Node.js | Естественно | Чужеродно |
+| Автообновление | `scoop update opencode` | `npm update -g opencode-ai` |
+
+**Вердикт:** Scoop — основной способ для этого проекта. npm-пакет `opencode-ai` удалён.

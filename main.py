@@ -11,6 +11,7 @@ import asyncio
 import logging
 import multiprocessing
 import uuid
+import subprocess
 import shutil
 import tempfile
 import uvicorn
@@ -1175,9 +1176,29 @@ async def api_session_media(
         if duration_min <= 0:
             caption = f"{mode_tag}\n🆔 Клиент: {chat_id}"
 
-        video = FSInputFile(temp_path)
+        video_path = temp_path
+        if shutil.which("ffmpeg"):
+            mp4_path = temp_path.rsplit(".", 1)[0] + ".mp4"
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-i", temp_path, "-c:v", "libx264", "-preset", "fast",
+                     "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-y", mp4_path],
+                    capture_output=True, timeout=120,
+                )
+                if os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 0:
+                    video_path = mp4_path
+            except Exception:
+                pass
+
+        video = FSInputFile(video_path)
         await b.send_video(chat_id=masseur_chat_id, video=video, caption=caption)
         await b.session.close()
+
+        if video_path != temp_path:
+            try:
+                os.remove(mp4_path)
+            except Exception:
+                pass
 
         if not is_training:
             from core.masseur_diary import add_diary_entry
