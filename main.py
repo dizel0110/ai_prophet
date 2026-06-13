@@ -256,7 +256,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             converted = False
             mp4_path = None
             if ext == ".webm" and file_size > 1024 and shutil.which("ffmpeg"):
-                mp4_path = path + ".mp4"
+                mp4_path = path.rsplit(".", 1)[0] + ".mp4"
                 try:
                     r = subprocess.run(
                         ["ffmpeg", "-y", "-i", path,
