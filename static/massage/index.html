@@ -1178,6 +1178,26 @@ html{scroll-behavior:smooth}
   </div>
 </div>
 
+<!-- VIDEO RECORDS PAGE (admin/masseur only) -->
+<div class="page" id="page-video">
+  <div class="sec">
+    <div class="sec-title" style="margin-bottom:12px">📹 Видеозаписи сеансов</div>
+    <div id="video-record-list" style="font-size:13px;color:var(--hint);text-align:center;padding:24px 0">
+      <p style="margin-bottom:8px">⏳ Загрузка...</p>
+    </div>
+  </div>
+</div>
+
+<!-- VIDEO PLAYER MODAL -->
+<div class="modal-overlay" id="videoPlayerModal" style="display:none">
+  <div class="modal" style="text-align:center;padding:12px;max-height:80dvh;overflow-y:auto">
+    <button class="modal-close" onclick="closeVideoPlayer()" style="position:static;float:right;font-size:22px">✕</button>
+    <h3 id="vp-title" style="margin-bottom:12px;font-size:15px;text-align:left;word-break:break-word">Видеозапись</h3>
+    <video id="vp-player" controls playsinline style="width:100%;max-height:50vh;border-radius:8px;background:#000" preload="auto"></video>
+    <div style="margin-top:8px;font-size:11px;color:var(--hint)" id="vp-meta"></div>
+  </div>
+</div>
+
 <!-- EDUCATION PAGE -->
 <div class="page" id="page-education">
   <div class="sec">
@@ -1403,6 +1423,11 @@ html{scroll-behavior:smooth}
   <button class="tab" id="tab-admin" data-page="admin" onclick="loadAdminClients();navigate('admin')" style="display:none">
     <span class="tab-icon">⚙️</span>
     <span class="tab-label">Админ</span>
+    <span class="tab-indicator"></span>
+  </button>
+  <button class="tab" id="tab-video" data-page="video" onclick="loadVideoRecords();navigate('video')" style="display:none">
+    <span class="tab-icon">📹</span>
+    <span class="tab-label">Записи</span>
     <span class="tab-indicator"></span>
   </button>
 </div>
@@ -3517,6 +3542,7 @@ async function identifyAdmin() {
       adminMode = currentRole !== 'client';
       if (adminMode) {
         qs('tab-admin').style.display = '';
+        qs('tab-video').style.display = '';
         qs('admin-mode-badge').style.display = 'inline-block';
         qs('admin-mode-badge').textContent = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
         qs('admin-panel-title').textContent = currentRole === 'masseur' ? '💆 Панель массажиста' : '📊 Админ-панель';
@@ -3537,6 +3563,7 @@ async function cycleRole() {
   }
   if (adminMode) {
     qs('tab-admin').style.display = '';
+    qs('tab-video').style.display = '';
     qs('admin-mode-badge').style.display = 'inline-block';
     var badgeText = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
     qs('admin-mode-badge').textContent = badgeText;
@@ -3545,6 +3572,7 @@ async function cycleRole() {
     navigate('admin');
   } else {
     qs('tab-admin').style.display = 'none';
+    qs('tab-video').style.display = 'none';
     qs('admin-mode-badge').style.display = 'none';
     navigate('home');
   }
@@ -3620,6 +3648,71 @@ async function loadEducationPage() {
   } catch(e) {
     qs('edu-content').textContent = 'Ошибка сети';
   }
+}
+
+// ─── Video Records ───
+
+async function loadVideoRecords() {
+  const u = uid();
+  if (!u) return;
+  var container = qs('video-record-list');
+  container.innerHTML = '<p style="margin-bottom:8px">⏳ Загрузка...</p>';
+  try {
+    var res = await apiGet('/api/video/records', {chat_id: u});
+    if (!res.ok || !res.records || res.records.length === 0) {
+      container.innerHTML = '<p style="color:var(--hint);padding:24px 0">📹 Нет видеозаписей</p>';
+      return;
+    }
+    var html = '';
+    res.records.forEach(function(r) {
+      var d = new Date((r.date || 0) * 1000);
+      var ds = d.toLocaleDateString('ru-RU', {day:'numeric', month:'short', year:'numeric'});
+      var dur = r.duration_min ? r.duration_min + ' мин' : '';
+      var clientLabel = '🆔 ' + (r.client_chat_id || '?');
+      html +=
+        '<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="playVideoRecord(\'' + r.id + '\')">' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<div style="font-size:28px;flex-shrink:0">📹</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + clientLabel + '</div>' +
+              '<div style="font-size:11px;color:var(--hint)">' + ds + (dur ? ' · ' + dur : '') + '</div>' +
+            '</div>' +
+            '<div style="font-size:20px;color:var(--gold)">▶</div>' +
+          '</div>' +
+        '</div>';
+    });
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = '<p style="color:var(--error);padding:24px 0">⚠ Ошибка загрузки</p>';
+  }
+}
+
+async function playVideoRecord(recordId) {
+  const u = uid();
+  if (!u) return;
+  var player = qs('vp-player');
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+  qs('vp-title').textContent = '📹 Загрузка...';
+  qs('vp-meta').textContent = '';
+  qs('videoPlayerModal').style.display = 'flex';
+  // Build stream URL with initData for auth
+  var initData = getInitData();
+  var src = '/api/video/play/' + recordId + '?chat_id=' + u + '&_init_data=' + encodeURIComponent(initData);
+  player.src = src;
+  player.load();
+  player.play().catch(function(){});
+  qs('vp-title').textContent = '📹 Видеозапись';
+  qs('vp-meta').textContent = 'ID: ' + recordId.slice(0,8) + '…';
+}
+
+function closeVideoPlayer() {
+  var player = qs('vp-player');
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+  qs('videoPlayerModal').style.display = 'none';
 }
 
 function switchEduRole(role) {

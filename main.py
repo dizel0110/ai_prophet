@@ -1333,15 +1333,31 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
     tg_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
     range_hdr = request.headers.get("range", "") if request else ""
 
-    async def _iter():
+    async def _proxy():
         async with aiohttp.ClientSession() as session:
             req = {"Range": range_hdr} if range_hdr else {}
-            async with session.get(tg_url, headers=req) as resp:
-                async for chunk in resp.content.iter_chunked(65536):
-                    yield chunk
+            async with session.get(tg_url, headers=req) as tg_resp:
+                resp_headers = {
+                    "Accept-Ranges": "bytes",
+                    "Content-Type": "video/mp4",
+                }
+                if "Content-Range" in tg_resp.headers:
+                    resp_headers["Content-Range"] = tg_resp.headers["Content-Range"]
+                if "Content-Length" in tg_resp.headers:
+                    resp_headers["Content-Length"] = tg_resp.headers["Content-Length"]
 
-    headers = {"Accept-Ranges": "bytes"}
-    return StreamingResponse(_iter(), media_type="video/mp4", headers=headers)
+                async def _iter():
+                    async for chunk in tg_resp.content.iter_chunked(65536):
+                        yield chunk
+
+                return StreamingResponse(
+                    _iter(),
+                    status_code=tg_resp.status,
+                    media_type="video/mp4",
+                    headers=resp_headers,
+                )
+
+    return await _proxy()
 
 
 @app.get("/api/education")
