@@ -265,8 +265,10 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                 try:
                     r = subprocess.run(
                         ["ffmpeg", "-y", "-i", path,
+                         "-map", "0:v?", "-map", "0:a?",
                          "-c:v", "libx264", "-preset", "fast",
-                         "-crf", "23", "-c:a", "aac", "-b:a", "96k",
+                         "-crf", "23", "-pix_fmt", "yuv420p",
+                         "-c:a", "aac", "-b:a", "96k",
                          "-movflags", "+faststart", mp4_path],
                         capture_output=True, timeout=120
                     )
@@ -1249,8 +1251,12 @@ async def api_session_media(
             mp4_path = temp_path.rsplit(".", 1)[0] + ".mp4"
             try:
                 r = subprocess.run(
-                    ["ffmpeg", "-y", "-i", temp_path, "-c:v", "libx264", "-preset", "fast",
-                     "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", mp4_path],
+                    ["ffmpeg", "-y", "-i", temp_path,
+                     "-map", "0:v?", "-map", "0:a?",
+                     "-c:v", "libx264", "-preset", "fast",
+                     "-crf", "23", "-pix_fmt", "yuv420p",
+                     "-c:a", "aac", "-b:a", "128k",
+                     "-movflags", "+faststart", mp4_path],
                     capture_output=True, timeout=120,
                 )
                 if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 0:
