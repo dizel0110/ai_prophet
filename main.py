@@ -78,6 +78,34 @@ def get_bot_instance() -> Bot:
             return Bot(token=TOKEN, session=session)
     return Bot(token=TOKEN)
 
+def _is_compatible_format(video_path: str) -> bool:
+    """Quick ffprobe check: is the file already H.264 + AAC?
+    If yes, we can skip full re-encode and just remux with -movflags +faststart.
+    """
+    if not shutil.which("ffprobe"):
+        return False
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name",
+             "-of", "csv=p=0", video_path],
+            capture_output=True, timeout=15, text=True,
+        )
+        vcodec = r.stdout.strip().lower()
+        if vcodec not in ("h264", "libx264"):
+            return False
+        r2 = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream=codec_name",
+             "-of", "csv=p=0", video_path],
+            capture_output=True, timeout=15, text=True,
+        )
+        acodec = r2.stdout.strip().lower()
+        return acodec in ("aac", "mp4a")
+    except Exception:
+        return False
+
+
 # Dispatcher создаётся ОДИН раз на весь lifecycle
 dp = Dispatcher()
 dp.include_router(vip.router)
@@ -256,36 +284,61 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             chat_id_int = int(masseur_chat_id)
             tg_bot = get_bot_instance()
             from aiogram.types.input_file import FSInputFile
-            # Convert WebM→MP4 if possible, else fall back to document
-            use_video = True
+            # Smart video handling: convert WebM→MP4, remux compatible files, else document
+            use_video = False
             converted = False
             mp4_path = None
-            if ext == ".webm" and file_size > 1024 and shutil.which("ffmpeg"):
-                mp4_path = path.rsplit(".", 1)[0] + ".mp4"
-                try:
-                    r = subprocess.run(
-                        ["ffmpeg", "-y", "-i", path,
-                         "-map", "0:v?", "-map", "0:a?",
-                         "-c:v", "libx264", "-preset", "fast",
-                         "-crf", "23", "-pix_fmt", "yuv420p",
-                         "-c:a", "aac", "-b:a", "96k",
-                         "-movflags", "+faststart", mp4_path],
-                        capture_output=True, timeout=120
-                    )
-                    if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
-                        logger.info(f"Converted {path} -> {mp4_path} ({os.path.getsize(mp4_path)} bytes)")
-                        converted = True
-                    else:
-                        logger.warning(f"ffmpeg convert failed (rc={r.returncode}), stderr={r.stderr[:200]}")
-                        use_video = False
-                except Exception as conv_e:
-                    logger.warning(f"ffmpeg exception: {conv_e}")
-                    use_video = False
-            else:
-                use_video = False
+            ffmpeg_ok = shutil.which("ffmpeg")
+            if ext in (".mp4", ".webm", ".mov") and file_size > 1024:
+                if ext == ".webm" and ffmpeg_ok:
+                    # WebM always needs full re-encode
+                    mp4_path = path.rsplit(".", 1)[0] + ".mp4"
+                    try:
+                        r = subprocess.run(
+                            ["ffmpeg", "-y", "-i", path,
+                             "-map", "0:v?", "-map", "0:a?",
+                             "-c:v", "libx264", "-preset", "fast",
+                             "-crf", "23", "-pix_fmt", "yuv420p",
+                             "-c:a", "aac", "-b:a", "96k",
+                             "-movflags", "+faststart", mp4_path],
+                            capture_output=True, timeout=120
+                        )
+                        if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
+                            logger.info(f"Converted WebM {path} -> {mp4_path} ({os.path.getsize(mp4_path)} bytes)")
+                            converted = True
+                            use_video = True
+                        else:
+                            logger.warning(f"ffmpeg convert failed (rc={r.returncode}), stderr={r.stderr[:200]}")
+                    except Exception as conv_e:
+                        logger.warning(f"ffmpeg exception: {conv_e}")
+                elif ffmpeg_ok and _is_compatible_format(path):
+                    # Already compatible — send directly as video
+                    use_video = True
+                    logger.info(f"Compatible format, sending directly {path}")
+                elif ffmpeg_ok and ext != ".mp4":
+                    # Non-MP4 that might not be compatible — try converting
+                    mp4_path = path.rsplit(".", 1)[0] + ".mp4"
+                    try:
+                        r = subprocess.run(
+                            ["ffmpeg", "-y", "-i", path,
+                             "-map", "0:v?", "-map", "0:a?",
+                             "-c:v", "libx264", "-preset", "fast",
+                             "-crf", "23", "-pix_fmt", "yuv420p",
+                             "-c:a", "aac", "-b:a", "96k",
+                             "-movflags", "+faststart", mp4_path],
+                            capture_output=True, timeout=120
+                        )
+                        if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
+                            converted = True
+                            use_video = True
+                    except Exception:
+                        pass
+                else:
+                    # MP4 but no ffprobe — try sending as video, Telegram will reject if incompatible
+                    use_video = True
             send_path = mp4_path if converted else path
             record_id = None
-            if use_video and converted:
+            if use_video:
                 msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
             else:
                 msg = await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
@@ -1247,23 +1300,35 @@ async def api_session_media(
         video_path = temp_path
         converted = False
         mp4_path = None
-        if shutil.which("ffmpeg"):
+        ffmpeg_ok = shutil.which("ffmpeg")
+        if ffmpeg_ok:
             mp4_path = temp_path.rsplit(".", 1)[0] + ".mp4"
             try:
-                r = subprocess.run(
-                    ["ffmpeg", "-y", "-i", temp_path,
-                     "-map", "0:v?", "-map", "0:a?",
-                     "-c:v", "libx264", "-preset", "fast",
-                     "-crf", "23", "-pix_fmt", "yuv420p",
-                     "-c:a", "aac", "-b:a", "128k",
-                     "-movflags", "+faststart", mp4_path],
-                    capture_output=True, timeout=120,
-                )
+                if _is_compatible_format(temp_path):
+                    # Already H.264+AAC — quick remux, no re-encode
+                    logger.info(f"Video already compatible, remuxing {temp_path}")
+                    r = subprocess.run(
+                        ["ffmpeg", "-y", "-i", temp_path,
+                         "-c", "copy", "-movflags", "+faststart", mp4_path],
+                        capture_output=True, timeout=30,
+                    )
+                else:
+                    # Full re-encode needed (e.g. WebM VP8 → MP4 H264)
+                    logger.info(f"Converting {temp_path} to compatible format")
+                    r = subprocess.run(
+                        ["ffmpeg", "-y", "-i", temp_path,
+                         "-map", "0:v?", "-map", "0:a?",
+                         "-c:v", "libx264", "-preset", "fast",
+                         "-crf", "23", "-pix_fmt", "yuv420p",
+                         "-c:a", "aac", "-b:a", "128k",
+                         "-movflags", "+faststart", mp4_path],
+                        capture_output=True, timeout=120,
+                    )
                 if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 0:
                     video_path = mp4_path
                     converted = True
                 else:
-                    logger.warning(f"ffmpeg session convert failed (rc={r.returncode}), stderr={r.stderr[:200]}")
+                    logger.warning(f"ffmpeg session convert/remux failed (rc={r.returncode}), stderr={r.stderr[:200]}")
             except Exception as conv_e:
                 logger.warning(f"ffmpeg session exception: {conv_e}")
 
@@ -1383,6 +1448,8 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
                 resp_headers = {
                     "Accept-Ranges": "bytes",
                     "Content-Type": mime_type,
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
                 }
                 if "Content-Range" in tg_resp.headers:
                     resp_headers["Content-Range"] = tg_resp.headers["Content-Range"]

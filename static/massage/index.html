@@ -3697,9 +3697,8 @@ async function playVideoRecord(recordId) {
   qs('vp-title').textContent = '📹 Загрузка...';
   qs('vp-meta').textContent = '';
   qs('videoPlayerModal').style.display = 'flex';
-  // Build stream URL with initData for auth
-  var initData = getInitData();
-  var src = '/api/video/play/' + recordId + '?chat_id=' + u + '&_init_data=' + encodeURIComponent(initData);
+  // Stream via proxy — initData not needed (access control by chat_id + records ownership)
+  var src = '/api/video/play/' + recordId + '?chat_id=' + u;
   player.src = src;
   player.load();
   player.play().catch(function(){});
