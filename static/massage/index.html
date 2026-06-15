@@ -3535,7 +3535,7 @@ async function identifyAdmin() {
   if (!u) return;
   var uname = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username) || '';
   try {
-    const d = await apiGet('/api/admin/identify', {chat_id: u, username: uname, _init_data: getInitData()});
+    const d = await api('/api/admin/identify', {chat_id: u, username: uname, _init_data: getInitData()});
     if (d.ok && (d.is_admin || d.is_masseur)) {
       qs('admin-gear').style.display = 'inline-block';
       currentRole = d.mode === 'admin' || d.mode === 'masseur' ? d.mode : 'client';

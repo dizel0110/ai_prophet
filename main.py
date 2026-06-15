@@ -1782,12 +1782,14 @@ def _require_admin_sync(init_data: str, chat_id: int):
     return int(verified_id)
 
 
-@app.get("/api/admin/identify")
-async def api_admin_identify(chat_id: int = 0, username: str = "", _init_data: str = ""):
+@app.post("/api/admin/identify")
+async def api_admin_identify(req: dict):
     """Check user role: admin, masseur, or client."""
+    chat_id = int(req.get("chat_id", 0))
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
-    # Verify initData and extract real username if not provided
+    username = req.get("username", "") or ""
+    _init_data = req.get("_init_data", "") or ""
     from config import OWNER_USERNAME, TOKEN
     if not username and _init_data:
         try:
@@ -1798,7 +1800,6 @@ async def api_admin_identify(chat_id: int = 0, username: str = "", _init_data: s
         except Exception:
             pass
     is_admin = _is_chat_id_admin(chat_id) or (username and username.lower() == OWNER_USERNAME.lower())
-    # If identified as admin via username, persist chat_id so other endpoints work
     if is_admin and username and username.lower() == OWNER_USERNAME.lower() and not _is_chat_id_admin(chat_id):
         _promote_chat_id_to_admin(chat_id, username)
     from core.masseur_diary import is_masseur
