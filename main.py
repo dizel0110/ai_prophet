@@ -58,6 +58,26 @@ STATIC_DIR.mkdir(exist_ok=True)
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+def get_bot_instance() -> Bot:
+    from config import TOKEN
+    import os
+    telegram_api_url = os.getenv("TELEGRAM_API_URL")
+    is_hf_space = os.getenv("SPACE_ID") is not None
+    if telegram_api_url:
+        from aiogram.client.session.aiohttp import AiohttpSession
+        from aiogram.client.telegram import TelegramAPIServer
+        server = TelegramAPIServer.from_base(telegram_api_url)
+        session = AiohttpSession()
+        session.api = server
+        return Bot(token=TOKEN, session=session)
+    elif is_hf_space:
+        PROXY_URL = os.getenv("PROXY_URL")
+        if PROXY_URL:
+            from aiogram.client.session.aiohttp import AiohttpSession
+            session = AiohttpSession(proxy=PROXY_URL)
+            return Bot(token=TOKEN, session=session)
+    return Bot(token=TOKEN)
+
 # Dispatcher создаётся ОДИН раз на весь lifecycle
 dp = Dispatcher()
 dp.include_router(vip.router)
@@ -234,22 +254,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
         logger.info(f"Sending video segment {segment_index} to Telegram user {masseur_chat_id}, size={file_size}")
         try:
             chat_id_int = int(masseur_chat_id)
-            from aiogram import Bot
-            from aiogram.client.session.aiohttp import AiohttpSession
-            from aiogram.client.telegram import TelegramAPIServer
-            from config import TOKEN
-            _telegram_api_url = os.environ.get("TELEGRAM_API_URL")
-            _proxy_url = os.environ.get("PROXY_URL")
-            if _telegram_api_url:
-                _server = TelegramAPIServer.from_base(_telegram_api_url)
-                _session = AiohttpSession()
-                _session.api = _server
-                tg_bot = Bot(token=TOKEN, session=_session)
-            elif _proxy_url:
-                _session = AiohttpSession(proxy=_proxy_url)
-                tg_bot = Bot(token=TOKEN, session=_session)
-            else:
-                tg_bot = Bot(token=TOKEN)
+            tg_bot = get_bot_instance()
             from aiogram.types.input_file import FSInputFile
             # Convert WebM→MP4 if possible, else fall back to document
             use_video = True
@@ -287,13 +292,15 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                     os.remove(mp4_path)
                 except Exception:
                     pass
-            if msg and hasattr(msg, 'video') and msg.video:
+            if msg and (msg.video or msg.document):
+                file_id = msg.video.file_id if msg.video else msg.document.file_id
+                file_unique_id = msg.video.file_unique_id if msg.video else msg.document.file_unique_id
                 from core.video_records import save_record
                 record_id = save_record(
                     client_chat_id=int(chat_id),
                     masseur_chat_id=chat_id_int,
-                    file_id=msg.video.file_id,
-                    file_unique_id=msg.video.file_unique_id,
+                    file_id=file_id,
+                    file_unique_id=file_unique_id,
                     duration_min=0,
                     caption=caption,
                 )
@@ -1217,7 +1224,8 @@ async def api_session_media(
         return {"ok": False, "error": "No file"}
     is_training = has_questionnaire != "1"
 
-    temp_path = os.path.join(tempfile.gettempdir(), f"session_{chat_id}_{int(time.time())}_{file.filename}")
+    from config import TEMP_DIR
+    temp_path = os.path.join(TEMP_DIR, f"session_{chat_id}_{int(time.time())}_{file.filename}")
     try:
         content = await file.read()
         with open(temp_path, "wb") as f:
@@ -1226,8 +1234,7 @@ async def api_session_media(
         return {"ok": False, "error": f"Failed to save file: {e}"}
 
     try:
-        from config import TOKEN
-        b = Bot(token=TOKEN)
+        b = get_bot_instance()
         mode_tag = "🎬 ТРЕНИРОВКА" if is_training else "🎥 Сеанс массажа"
         caption = f"{mode_tag}\n🆔 Клиент: {chat_id}\n⏱ Длительность: {duration_min} мин"
         if is_training:
@@ -1236,36 +1243,50 @@ async def api_session_media(
             caption = f"{mode_tag}\n🆔 Клиент: {chat_id}"
 
         video_path = temp_path
+        converted = False
+        mp4_path = None
         if shutil.which("ffmpeg"):
             mp4_path = temp_path.rsplit(".", 1)[0] + ".mp4"
             try:
-                subprocess.run(
-                    ["ffmpeg", "-i", temp_path, "-c:v", "libx264", "-preset", "fast",
-                     "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-y", mp4_path],
+                r = subprocess.run(
+                    ["ffmpeg", "-y", "-i", temp_path, "-c:v", "libx264", "-preset", "fast",
+                     "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", mp4_path],
                     capture_output=True, timeout=120,
                 )
-                if os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 0:
+                if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 0:
                     video_path = mp4_path
-            except Exception:
-                pass
+                    converted = True
+                else:
+                    logger.warning(f"ffmpeg session convert failed (rc={r.returncode}), stderr={r.stderr[:200]}")
+            except Exception as conv_e:
+                logger.warning(f"ffmpeg session exception: {conv_e}")
 
-        video = FSInputFile(video_path)
-        msg = await b.send_video(chat_id=masseur_chat_id, video=video, caption=caption)
+        msg = None
+        try:
+            if converted:
+                msg = await b.send_video(chat_id=masseur_chat_id, video=FSInputFile(video_path), caption=caption, supports_streaming=True)
+            else:
+                msg = await b.send_document(chat_id=masseur_chat_id, document=FSInputFile(video_path), caption=caption)
+        except Exception as send_e:
+            logger.warning(f"Failed to send session video/document: {send_e}")
+
         await b.session.close()
 
-        if video_path != temp_path:
+        if converted and mp4_path:
             try:
                 os.remove(mp4_path)
             except Exception:
                 pass
 
-        if msg and msg.video:
+        if msg and (msg.video or msg.document):
+            file_id = msg.video.file_id if msg.video else msg.document.file_id
+            file_unique_id = msg.video.file_unique_id if msg.video else msg.document.file_unique_id
             from core.video_records import save_record
             save_record(
                 client_chat_id=chat_id,
                 masseur_chat_id=masseur_chat_id,
-                file_id=msg.video.file_id,
-                file_unique_id=msg.video.file_unique_id,
+                file_id=file_id,
+                file_unique_id=file_unique_id,
                 duration_min=duration_min,
                 caption=caption,
                 is_training=is_training,
@@ -1321,8 +1342,7 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
     import aiohttp
     from config import TOKEN
 
-    from aiogram import Bot
-    b = Bot(token=TOKEN)
+    b = get_bot_instance()
     try:
         f = await b.get_file(file_id)
         file_path = f.file_path
@@ -1331,16 +1351,32 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
         return {"ok": False, "error": f"Telegram file not accessible: {e}"}
     await b.session.close()
 
-    tg_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+    _telegram_api_url = os.environ.get("TELEGRAM_API_URL")
+    if _telegram_api_url:
+        tg_url = f"{_telegram_api_url.rstrip('/')}/file/bot{TOKEN}/{file_path}"
+    else:
+        tg_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+
     range_hdr = request.headers.get("range", "") if request else ""
+    _proxy_url = os.environ.get("PROXY_URL")
+
+    # Detect mime-type dynamically
+    mime_type = "video/mp4"
+    if file_path.endswith(".webm"):
+        mime_type = "video/webm"
+    elif file_path.endswith(".mov"):
+        mime_type = "video/quicktime"
 
     async def _proxy():
+        client_kwargs = {}
+        if _proxy_url:
+            client_kwargs["proxy"] = _proxy_url
         async with aiohttp.ClientSession() as session:
             req = {"Range": range_hdr} if range_hdr else {}
-            async with session.get(tg_url, headers=req) as tg_resp:
+            async with session.get(tg_url, headers=req, **client_kwargs) as tg_resp:
                 resp_headers = {
                     "Accept-Ranges": "bytes",
-                    "Content-Type": "video/mp4",
+                    "Content-Type": mime_type,
                 }
                 if "Content-Range" in tg_resp.headers:
                     resp_headers["Content-Range"] = tg_resp.headers["Content-Range"]
@@ -1354,7 +1390,7 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
                 return StreamingResponse(
                     _iter(),
                     status_code=tg_resp.status,
-                    media_type="video/mp4",
+                    media_type=mime_type,
                     headers=resp_headers,
                 )
 
@@ -2120,27 +2156,10 @@ async def start_bot_polling():
     from aiogram.types import BotCommand
     from config import HF_TOKEN, GEMINI_KEY
 
-    telegram_api_url = os.getenv("TELEGRAM_API_URL")
-    if telegram_api_url:
-        from aiogram.client.session.aiohttp import AiohttpSession
-        from aiogram.client.telegram import TelegramAPIServer
-        server = TelegramAPIServer.from_base(telegram_api_url)
-        session = AiohttpSession()
-        session.api = server
-        bot = Bot(token=TOKEN, session=session)
-        logger.info(f"🔗 Кастомный Telegram API: {telegram_api_url}")
-    elif IS_HF_SPACE:
-        PROXY_URL = os.getenv("PROXY_URL")
-        if PROXY_URL:
-            from aiogram.client.session.aiohttp import AiohttpSession
-            logger.info(f"🔗 HF Spaces: используем прокси {PROXY_URL}")
-            session = AiohttpSession(proxy=PROXY_URL)
-            bot = Bot(token=TOKEN, session=session)
-        else:
-            logger.error("❌ HF Spaces: установите PROXY_URL или TELEGRAM_API_URL")
-            raise RuntimeError("PROXY_URL or TELEGRAM_API_URL required on HF Spaces")
-    else:
-        bot = Bot(token=TOKEN)
+    if IS_HF_SPACE and not os.getenv("PROXY_URL") and not os.getenv("TELEGRAM_API_URL"):
+        logger.error("❌ HF Spaces: установите PROXY_URL или TELEGRAM_API_URL")
+        raise RuntimeError("PROXY_URL or TELEGRAM_API_URL required on HF Spaces")
+    bot = get_bot_instance()
 
     # Регистрация команд для подсказок (autocomplete)
     commands = [
