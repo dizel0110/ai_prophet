@@ -339,7 +339,11 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             send_path = mp4_path if converted else path
             record_id = None
             if use_video:
-                msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption)
+                video_url = _upload_video_to_url(send_path)
+                if video_url:
+                    msg = await tg_bot.send_video(chat_id=chat_id_int, video=video_url, caption=caption)
+                else:
+                    msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption)
             else:
                 msg = await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
             if converted and mp4_path:
@@ -1264,6 +1268,23 @@ async def api_client_path(chat_id: int):
     }
 
 
+def _upload_video_to_url(file_path: str) -> str | None:
+    """Upload MP4 to temp file host and return public URL."""
+    import requests as _requests
+    for host in ["https://0x0.st", "https://temp.sh/upload"]:
+        try:
+            with open(file_path, "rb") as f:
+                r = _requests.post(host, files={"file": f}, timeout=60)
+            if r.status_code == 200:
+                url = r.text.strip()
+                if url:
+                    logger.info(f"uploaded video to {host} -> {url}")
+                    return url
+        except Exception as e:
+            logger.warning(f"upload to {host} failed: {e}")
+    return None
+
+
 @app.post("/api/massage/session_media")
 async def api_session_media(
     file: UploadFile = File(...),
@@ -1358,11 +1379,19 @@ async def api_session_media(
                 except Exception as probe_e:
                     logger.warning(f"video probe failed: {probe_e}")
                 logger.info(f"sending video {os.path.getsize(video_path)}b {vw}x{vh} dur={vdur}s")
-                msg = await b.send_video(
-                    chat_id=masseur_chat_id, video=FSInputFile(video_path),
-                    caption=caption,
-                    width=vw or None, height=vh or None, duration=vdur or None,
-                )
+                video_url = _upload_video_to_url(video_path)
+                if video_url:
+                    msg = await b.send_video(
+                        chat_id=masseur_chat_id, video=video_url,
+                        caption=caption,
+                        width=vw or None, height=vh or None, duration=vdur or None,
+                    )
+                else:
+                    msg = await b.send_video(
+                        chat_id=masseur_chat_id, video=FSInputFile(video_path),
+                        caption=caption,
+                        width=vw or None, height=vh or None, duration=vdur or None,
+                    )
             else:
                 msg = await b.send_document(chat_id=masseur_chat_id, document=FSInputFile(video_path), caption=caption)
         except Exception as send_e:
