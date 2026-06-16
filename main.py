@@ -1271,14 +1271,18 @@ async def api_client_path(chat_id: int):
 def _upload_video_to_url(file_path: str) -> str | None:
     """Upload MP4 to temp file host and return public URL."""
     import requests as _requests
-    for host in ["https://0x0.st", "https://temp.sh/upload"]:
+    for host in ["https://catbox.moe/user/api.php", "https://0x0.st", "https://temp.sh/upload"]:
         try:
-            with open(file_path, "rb") as f:
-                r = _requests.post(host, files={"file": f}, timeout=60)
+            if "catbox" in host:
+                with open(file_path, "rb") as f:
+                    r = _requests.post(host, data={"reqtype": "fileupload"}, files={"fileToUpload": f}, timeout=120)
+            else:
+                with open(file_path, "rb") as f:
+                    r = _requests.post(host, files={"file": f}, timeout=60)
             if r.status_code == 200:
                 url = r.text.strip()
-                if url:
-                    logger.info(f"uploaded video to {host} -> {url}")
+                if url and url.startswith("http"):
+                    logger.info(f"uploaded video to {host.split('/')[2]} -> {url}")
                     return url
         except Exception as e:
             logger.warning(f"upload to {host} failed: {e}")
