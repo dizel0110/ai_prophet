@@ -1490,17 +1490,19 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
 async def api_video_test_record(request: Request):
     """Create a test video record (admin only) pointing to the local test video."""
     from core.video_records import save_record, RECORDS_FILE
+    from core.tg_auth import verify_init_data
+    from config import TOKEN
     import json
     body = await request.json()
     chat_id = int(body.get("chat_id", 0))
     init_data = body.get("_init_data", "")
     if not chat_id or not init_data:
         return {"ok": False, "error": "Missing chat_id or _init_data"}
-    from core.tg_auth import verify_init_data
-    if not verify_init_data(init_data):
-        return {"ok": False, "error": "Invalid initData"}
-    u = json.loads(init_data).get("user", {})
-    if int(u.get("id", 0)) != chat_id:
+    try:
+        user = verify_init_data(init_data, TOKEN)
+    except Exception as e:
+        return {"ok": False, "error": f"Invalid initData: {e}"}
+    if int(user.get("id", 0)) != chat_id:
         return {"ok": False, "error": "chat_id mismatch"}
     if not _is_chat_id_admin(chat_id):
         return {"ok": False, "error": "Not admin"}
