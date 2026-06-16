@@ -284,8 +284,6 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             chat_id_int = int(masseur_chat_id)
             tg_bot = get_bot_instance()
             from aiogram.types.input_file import FSInputFile
-            # Smart video handling: convert WebM→MP4, remux compatible files, else document
-            use_video = False
             converted = False
             mp4_path = None
             ffmpeg_ok = shutil.which("ffmpeg")
@@ -306,17 +304,13 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                         if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
                             logger.info(f"Converted WebM {path} -> {mp4_path} ({os.path.getsize(mp4_path)} bytes)")
                             converted = True
-                            use_video = True
                         else:
                             logger.warning(f"ffmpeg convert failed (rc={r.returncode}), stderr={r.stderr[:200]}")
                     except Exception as conv_e:
                         logger.warning(f"ffmpeg exception: {conv_e}")
                 elif ffmpeg_ok and _is_compatible_format(path):
-                    # Already compatible — send directly as video
-                    use_video = True
-                    logger.info(f"Compatible format, sending directly {path}")
+                    logger.info(f"Compatible format {path}")
                 elif ffmpeg_ok and ext != ".mp4":
-                    # Non-MP4 that might not be compatible — try converting
                     mp4_path = path.rsplit(".", 1)[0] + ".mp4"
                     try:
                         r = subprocess.run(
@@ -330,39 +324,41 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                         )
                         if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 1024:
                             converted = True
-                            use_video = True
                     except Exception:
                         pass
-                else:
-                    # MP4 but no ffprobe — try sending as video, Telegram will reject if incompatible
-                    use_video = True
             send_path = mp4_path if converted else path
             record_id = None
-            if use_video:
-                video_url = _upload_video_to_url(send_path)
-                if video_url:
-                    msg = await tg_bot.send_video(chat_id=chat_id_int, video=video_url, caption=caption)
-                else:
-                    msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption)
-            else:
-                msg = await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
+            # Save local copy permanently
+            video_dst = os.path.join(DATA_DIR, "videos", f"upload_{int(time.time())}_{chat_id_int}.mp4")
+            os.makedirs(os.path.dirname(video_dst), exist_ok=True)
+            try:
+                shutil.copy2(send_path, video_dst)
+            except Exception as e:
+                logger.warning(f"Failed to save local video copy: {e}")
+                video_dst = None
+            # Create record before notification
+            from core.video_records import save_record
+            record_id = save_record(
+                client_chat_id=int(chat_id),
+                masseur_chat_id=chat_id_int,
+                local_path=video_dst or "",
+                duration_min=0,
+                caption=caption,
+            )
+            # Send Mini App link instead of video file
+            from config import get_base_url
+            mini_url = get_base_url()
+            video_link = f"{mini_url.rstrip('/')}/?video={record_id}"
+            notif_text = f"{caption}\n📹 [Смотреть видео]({video_link})"
+            try:
+                await tg_bot.send_message(chat_id=chat_id_int, text=notif_text, parse_mode="Markdown")
+            except Exception as notif_e:
+                logger.warning(f"Failed to send notification: {notif_e}")
             if converted and mp4_path:
                 try:
                     os.remove(mp4_path)
                 except Exception:
                     pass
-            if msg and (msg.video or msg.document):
-                file_id = msg.video.file_id if msg.video else msg.document.file_id
-                file_unique_id = msg.video.file_unique_id if msg.video else msg.document.file_unique_id
-                from core.video_records import save_record
-                record_id = save_record(
-                    client_chat_id=int(chat_id),
-                    masseur_chat_id=chat_id_int,
-                    file_id=file_id,
-                    file_unique_id=file_unique_id,
-                    duration_min=0,
-                    caption=caption,
-                )
             await tg_bot.session.close()
             telegram_sent = True
         except ValueError:
@@ -1268,25 +1264,7 @@ async def api_client_path(chat_id: int):
     }
 
 
-def _upload_video_to_url(file_path: str) -> str | None:
-    """Upload MP4 to temp file host and return public URL."""
-    import requests as _requests
-    for host in ["https://catbox.moe/user/api.php", "https://0x0.st", "https://temp.sh/upload"]:
-        try:
-            if "catbox" in host:
-                with open(file_path, "rb") as f:
-                    r = _requests.post(host, data={"reqtype": "fileupload"}, files={"fileToUpload": f}, timeout=120)
-            else:
-                with open(file_path, "rb") as f:
-                    r = _requests.post(host, files={"file": f}, timeout=60)
-            if r.status_code == 200:
-                url = r.text.strip()
-                if url and url.startswith("http"):
-                    logger.info(f"uploaded video to {host.split('/')[2]} -> {url}")
-                    return url
-        except Exception as e:
-            logger.warning(f"upload to {host} failed: {e}")
-    return None
+
 
 
 def _parse_chat_id(raw: str | int) -> int | None:
@@ -1395,24 +1373,11 @@ async def api_session_media(
                     vdur = int(float(info.get("format", {}).get("duration", 0)))
                 except Exception as probe_e:
                     logger.warning(f"video probe failed: {probe_e}")
-                logger.info(f"sending video {os.path.getsize(video_path)}b {vw}x{vh} dur={vdur}s")
-                video_url = _upload_video_to_url(video_path)
-                if video_url:
-                    msg = await b.send_video(
-                        chat_id=masseur_cid, video=video_url,
-                        caption=caption,
-                        width=vw or None, height=vh or None, duration=vdur or None,
-                    )
-                else:
-                    msg = await b.send_video(
-                        chat_id=masseur_cid, video=FSInputFile(video_path),
-                        caption=caption,
-                        width=vw or None, height=vh or None, duration=vdur or None,
-                    )
+                logger.info(f"video ready {os.path.getsize(video_path)}b {vw}x{vh} dur={vdur}s")
             else:
-                msg = await b.send_document(chat_id=masseur_chat_id, document=FSInputFile(video_path), caption=caption)
+                logger.info(f"raw video path {video_path}")
         except Exception as send_e:
-            logger.warning(f"Failed to send session video/document: {send_e}")
+            logger.warning(f"Video processing error: {send_e}")
 
         await b.session.close()
 
@@ -1432,31 +1397,31 @@ async def api_session_media(
             except Exception:
                 pass
 
-        # Always create a record — with local_path for playback, file_id if Telegram delivered
-        file_id = ""
-        file_unique_id = ""
-        if msg and (msg.video or msg.document):
-            file_id = msg.video.file_id if msg.video else msg.document.file_id
-            file_unique_id = msg.video.file_unique_id if msg.video else msg.document.file_unique_id
-
+        # Always create a record before sending notification
         record_id = save_record(
             client_chat_id=cid,
             masseur_chat_id=masseur_cid,
-            file_id=file_id,
-            file_unique_id=file_unique_id,
+            file_id="",
+            file_unique_id="",
             local_path=video_dst or "",
             duration_min=duration_min,
             caption=caption,
             is_training=is_training,
         )
 
+        # Send Mini App link instead of video file (bypasses HF proxy binary issue)
+        from config import get_base_url
+        mini_url = get_base_url()
+        video_link = f"{mini_url.rstrip('/')}/?video={record_id}"
+        notif_text = f"{caption}\n📹 [Смотреть видео]({video_link})"
+        try:
+            msg = await b.send_message(chat_id=masseur_cid, text=notif_text, parse_mode="Markdown")
+        except Exception as notif_e:
+            logger.warning(f"Failed to send video notification: {notif_e}")
+
         if not is_training:
             from core.masseur_diary import add_diary_entry
-            notes = f"🎥 Сеанс {duration_min} мин"
-            if file_id:
-                notes += " · отправлено в Telegram"
-            else:
-                notes += " · запись сохранена локально (Telegram недоступен)"
+            notes = f"🎥 Сеанс {duration_min} мин · ссылка отправлена в Telegram"
             add_diary_entry(
                 chat_id=cid,
                 masseur_chat_id=masseur_cid,
