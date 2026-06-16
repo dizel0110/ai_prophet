@@ -1985,7 +1985,10 @@ def _require_admin_sync(init_data: str, chat_id: int):
 @app.post("/api/admin/identify")
 async def api_admin_identify(req: dict):
     """Check user role: admin, masseur, or client."""
-    chat_id = int(req.get("chat_id", 0))
+    try:
+        chat_id = int(req.get("chat_id", 0))
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "Invalid chat_id"}
     if not chat_id:
         return {"ok": False, "error": "Missing chat_id"}
     username = req.get("username", "") or ""
