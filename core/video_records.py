@@ -27,22 +27,28 @@ def _save(data):
 
 
 def save_record(client_chat_id: int, masseur_chat_id: int,
-                file_id: str, file_unique_id: str,
+                file_id: str = "", file_unique_id: str = "",
                 duration_min: int = 0, caption: str = "",
-                is_training: bool = False) -> str:
+                is_training: bool = False,
+                local_path: str = "") -> str:
     data = _load()
     record_id = uuid.uuid4().hex[:12]
-    data["records"].append({
+    rec = {
         "id": record_id,
         "client_chat_id": client_chat_id,
         "masseur_chat_id": masseur_chat_id,
-        "file_id": file_id,
-        "file_unique_id": file_unique_id,
         "date": int(datetime.utcnow().timestamp()),
         "duration_min": duration_min,
         "caption": caption,
         "is_training": is_training,
-    })
+    }
+    if local_path:
+        rec["local_path"] = local_path
+    if file_id:
+        rec["file_id"] = file_id
+    if file_unique_id:
+        rec["file_unique_id"] = file_unique_id
+    data["records"].append(rec)
     _save(data)
     return record_id
 

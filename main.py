@@ -1405,11 +1405,27 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
         return {"ok": False, "error": "Record not found"}
     if not can_access(record, chat_id):
         return {"ok": False, "error": "Access denied"}
+
+    from starlette.responses import FileResponse, StreamingResponse
+
+    # Serve local files directly (for test/dev without Telegram)
+    local_path = record.get("local_path")
+    if local_path and os.path.exists(local_path):
+        mime = "video/mp4"
+        if local_path.endswith(".webm"):
+            mime = "video/webm"
+        elif local_path.endswith(".mov"):
+            mime = "video/quicktime"
+        return FileResponse(local_path, media_type=mime, headers={
+            "Accept-Ranges": "bytes",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+        })
+
     file_id = record.get("file_id")
     if not file_id:
         return {"ok": False, "error": "No file_id"}
 
-    from starlette.responses import StreamingResponse
     import aiohttp
     from config import TOKEN
 
@@ -1468,6 +1484,40 @@ async def api_video_play(record_id: str, chat_id: int = 0, request: Request = No
                 )
 
     return await _proxy()
+
+
+@app.post("/api/video/test_record")
+async def api_video_test_record(request: Request):
+    """Create a test video record (admin only) pointing to the local test video."""
+    from core.video_records import save_record, RECORDS_FILE
+    import json
+    body = await request.json()
+    chat_id = int(body.get("chat_id", 0))
+    init_data = body.get("_init_data", "")
+    if not chat_id or not init_data:
+        return {"ok": False, "error": "Missing chat_id or _init_data"}
+    from core.tg_auth import verify_init_data
+    if not verify_init_data(init_data):
+        return {"ok": False, "error": "Invalid initData"}
+    u = json.loads(init_data).get("user", {})
+    if int(u.get("id", 0)) != chat_id:
+        return {"ok": False, "error": "chat_id mismatch"}
+    if not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Not admin"}
+
+    local_path = os.path.join(DATA_DIR, "videos", "test_video.mp4")
+    if not os.path.exists(local_path):
+        return {"ok": False, "error": "Test video file not found"}
+
+    record_id = save_record(
+        client_chat_id=chat_id,
+        masseur_chat_id=chat_id,
+        local_path=local_path,
+        duration_min=0,
+        caption="🎬 Тестовое видео (синий экран, 2с)",
+        is_training=True,
+    )
+    return {"ok": True, "record_id": record_id}
 
 
 @app.get("/api/education")

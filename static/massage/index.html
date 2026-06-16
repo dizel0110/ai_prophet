@@ -1185,6 +1185,7 @@ html{scroll-behavior:smooth}
     <div id="video-record-list" style="font-size:13px;color:var(--hint);text-align:center;padding:24px 0">
       <p style="margin-bottom:8px">⏳ Загрузка...</p>
     </div>
+    <button class="btn btn-secondary" id="btn-test-video" onclick="loadTestVideo()" style="margin-top:12px;width:100%">🎬 Тестовое видео</button>
   </div>
 </div>
 
@@ -3651,6 +3652,18 @@ async function loadEducationPage() {
 }
 
 // ─── Video Records ───
+
+async function loadTestVideo() {
+  const u = uid();
+  if (!u) return;
+  var r = await api('/api/video/test_record', {chat_id: u, _init_data: getInitData()});
+  if (r.ok) {
+    tg.showAlert('🎬 Тестовое видео загружено!');
+    loadVideoRecords();
+  } else {
+    tg.showAlert('❌ ' + (r.error || 'Ошибка'));
+  }
+}
 
 async function loadVideoRecords() {
   const u = uid();
