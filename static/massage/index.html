@@ -1181,11 +1181,19 @@ html{scroll-behavior:smooth}
 <!-- VIDEO RECORDS PAGE (admin/masseur only) -->
 <div class="page" id="page-video">
   <div class="sec">
-    <div class="sec-title" style="margin-bottom:12px">📹 Видеозаписи сеансов</div>
+    <div class="sec-title" style="margin-bottom:12px">📹 Видеозаписи</div>
+    <div id="video-rec-controls" style="display:none;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--hint);margin-bottom:6px" id="video-rec-status">⏳ Загрузка...</div>
+      <video id="video-rec-preview" playsinline muted style="width:100%;max-height:200px;border-radius:8px;background:#000;display:none"></video>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn btn-secondary" id="btn-video-rec-stop" onclick="stopSelfRecording()" style="flex:1;display:none">⏹ Остановить</button>
+      </div>
+    </div>
     <div id="video-record-list" style="font-size:13px;color:var(--hint);text-align:center;padding:24px 0">
       <p style="margin-bottom:8px">⏳ Загрузка...</p>
     </div>
-    <button class="btn btn-secondary" id="btn-test-video" onclick="loadTestVideo()" style="margin-top:12px;width:100%">🎬 Тестовое видео</button>
+    <button class="btn btn-secondary" onclick="startSelfRecording()" style="margin-top:12px;width:100%">📹 Записать видео</button>
+    <button class="btn btn-secondary" id="btn-test-video" onclick="loadTestVideo()" style="margin-top:8px;width:100%">🎬 Тестовое видео</button>
   </div>
 </div>
 
@@ -1426,7 +1434,7 @@ html{scroll-behavior:smooth}
     <span class="tab-label">Админ</span>
     <span class="tab-indicator"></span>
   </button>
-  <button class="tab" id="tab-video" data-page="video" onclick="loadVideoRecords();navigate('video')" style="display:none">
+  <button class="tab" id="tab-video" data-page="video" onclick="loadVideoRecords();navigate('video')">
     <span class="tab-icon">📹</span>
     <span class="tab-label">Записи</span>
     <span class="tab-indicator"></span>
@@ -3543,7 +3551,6 @@ async function identifyAdmin() {
       adminMode = currentRole !== 'client';
       if (adminMode) {
         qs('tab-admin').style.display = '';
-        qs('tab-video').style.display = '';
         qs('admin-mode-badge').style.display = 'inline-block';
         qs('admin-mode-badge').textContent = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
         qs('admin-panel-title').textContent = currentRole === 'masseur' ? '💆 Панель массажиста' : '📊 Админ-панель';
@@ -3564,7 +3571,6 @@ async function cycleRole() {
   }
   if (adminMode) {
     qs('tab-admin').style.display = '';
-    qs('tab-video').style.display = '';
     qs('admin-mode-badge').style.display = 'inline-block';
     var badgeText = currentRole === 'masseur' ? '💆 МАССАЖИСТ' : '⚙️ АДМИН';
     qs('admin-mode-badge').textContent = badgeText;
@@ -3573,7 +3579,6 @@ async function cycleRole() {
     navigate('admin');
   } else {
     qs('tab-admin').style.display = 'none';
-    qs('tab-video').style.display = 'none';
     qs('admin-mode-badge').style.display = 'none';
     navigate('home');
   }
@@ -3664,6 +3669,81 @@ async function loadTestVideo() {
     tg.showAlert('❌ ' + (r.error || 'Ошибка'));
   }
 }
+// ─── Self Recording ───
+
+var _selfRecorder = null;
+var _selfRecChunks = [];
+var _selfRecStarted = null;
+
+function startSelfRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    tg.showAlert('❌ Камера не поддерживается');
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { width: { max: 640 }, height: { max: 480 } }, audio: true }).then(function(s) {
+    var preview = qs('video-rec-preview');
+    preview.srcObject = s;
+    preview.style.display = 'block';
+    preview.play();
+    _selfRecorder = new MediaRecorder(s, { mimeType: 'video/webm;codecs=vp8,opus' });
+    _selfRecChunks = [];
+    _selfRecStarted = Date.now();
+    _selfRecorder.ondataavailable = function(e) {
+      if (e.data.size > 0) _selfRecChunks.push(e.data);
+    };
+    _selfRecorder.onstop = function() {
+      s.getTracks().forEach(function(t) { t.stop(); });
+      preview.srcObject = null;
+      preview.style.display = 'none';
+      qs('video-rec-status').textContent = '📤 Отправка...';
+      uploadSelfRecording();
+    };
+    _selfRecorder.start(5000);
+    qs('video-rec-status').textContent = '🔴 Запись...';
+    qs('video-rec-controls').style.display = 'block';
+    qs('btn-video-rec-stop').style.display = '';
+    qs('btn-video-rec-stop').textContent = '⏹ Остановить';
+  }).catch(function(err) {
+    tg.showAlert('❌ Нет доступа к камере');
+  });
+}
+
+function stopSelfRecording() {
+  if (_selfRecorder && _selfRecorder.state !== 'inactive') {
+    _selfRecorder.stop();
+    qs('video-rec-status').textContent = '⏳ Остановка...';
+    qs('btn-video-rec-stop').style.display = 'none';
+  }
+}
+
+async function uploadSelfRecording() {
+  if (_selfRecChunks.length === 0) return;
+  var blob = new Blob(_selfRecChunks, { type: 'video/webm' });
+  if (blob.size < 1024) { qs('video-rec-status').textContent = ''; qs('video-rec-controls').style.display = 'none'; return; }
+  var elapsed = Math.round((Date.now() - _selfRecStarted) / 60000);
+  if (elapsed < 1) elapsed = 1;
+  var u = uid();
+  if (!u) return;
+  var formData = new FormData();
+  formData.append('file', blob, 'self_' + u + '_' + Date.now() + '.webm');
+  formData.append('chat_id', u);
+  formData.append('masseur_chat_id', u);
+  formData.append('duration_min', elapsed);
+  formData.append('has_questionnaire', '0');
+  try {
+    var res = await apiUpload('/api/massage/session_media', formData);
+    if (res && res.ok) {
+      tg.showAlert('✅ Видео сохранено');
+    } else {
+      tg.showAlert('❌ Ошибка: ' + ((res && res.error) || ''));
+    }
+  } catch(e) {
+    tg.showAlert('❌ Ошибка сети');
+  }
+  qs('video-rec-status').textContent = '';
+  qs('video-rec-controls').style.display = 'none';
+  loadVideoRecords();
+}
 
 async function deleteVideoRecord(recordId) {
   const u = uid();
@@ -3685,6 +3765,8 @@ async function loadVideoRecords() {
   if (!u) return;
   var container = qs('video-record-list');
   container.innerHTML = '<p style="margin-bottom:8px">⏳ Загрузка...</p>';
+  // Show/hide admin-only elements
+  qs('btn-test-video').style.display = adminMode ? '' : 'none';
   try {
     var res = await apiGet('/api/video/records', {chat_id: u});
     if (!res.ok || !res.records || res.records.length === 0) {
@@ -3697,6 +3779,7 @@ async function loadVideoRecords() {
       var ds = d.toLocaleDateString('ru-RU', {day:'numeric', month:'short', year:'numeric'});
       var dur = r.duration_min ? r.duration_min + ' мин' : '';
       var clientLabel = '🆔 ' + (r.client_chat_id || '?');
+      var delBtn = adminMode ? '<div style="font-size:18px;cursor:pointer;color:var(--error)" onclick="deleteVideoRecord(\'' + r.id + '\')" title="Удалить">🗑</div>' : '';
       html +=
         '<div class="card" style="margin-bottom:8px">' +
           '<div style="display:flex;align-items:center;gap:10px">' +
@@ -3706,7 +3789,7 @@ async function loadVideoRecords() {
               '<div style="font-size:11px;color:var(--hint)">' + ds + (dur ? ' · ' + dur : '') + '</div>' +
             '</div>' +
             '<div style="font-size:20px;color:var(--gold);cursor:pointer" onclick="playVideoRecord(\'' + r.id + '\')">▶</div>' +
-            '<div style="font-size:18px;cursor:pointer;color:var(--error)" onclick="deleteVideoRecord(\'' + r.id + '\')" title="Удалить">🗑</div>' +
+            delBtn +
           '</div>' +
         '</div>';
     });
