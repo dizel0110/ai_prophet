@@ -1285,23 +1285,36 @@ def _upload_video_to_url(file_path: str) -> str | None:
     return None
 
 
+def _parse_chat_id(raw: str | int) -> int | None:
+    """Try to parse chat_id. Returns None for local_xxx fallback."""
+    if not raw:
+        return None
+    if isinstance(raw, int):
+        return raw
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return None
+
+
 @app.post("/api/massage/session_media")
 async def api_session_media(
     file: UploadFile = File(...),
-    chat_id: int = Form(0),
-    masseur_chat_id: int = Form(0),
+    chat_id: str = Form(""),
+    masseur_chat_id: str = Form(""),
     duration_min: int = Form(0),
     has_questionnaire: str = Form("0"),
 ):
-    """Receive a session recording and send it to the masseur's Telegram."""
-    if not chat_id or not masseur_chat_id:
+    cid = _parse_chat_id(chat_id)
+    masseur_cid = _parse_chat_id(masseur_chat_id)
+    if not cid or not masseur_cid:
         return {"ok": False, "error": "Missing chat_id or masseur_chat_id"}
     if not file.filename:
         return {"ok": False, "error": "No file"}
     is_training = has_questionnaire != "1"
 
     from config import TEMP_DIR
-    temp_path = os.path.join(TEMP_DIR, f"session_{chat_id}_{int(time.time())}_{file.filename}")
+    temp_path = os.path.join(TEMP_DIR, f"session_{cid}_{int(time.time())}_{file.filename}")
     try:
         content = await file.read()
         with open(temp_path, "wb") as f:
@@ -1382,13 +1395,13 @@ async def api_session_media(
                 video_url = _upload_video_to_url(video_path)
                 if video_url:
                     msg = await b.send_video(
-                        chat_id=masseur_chat_id, video=video_url,
+                        chat_id=masseur_cid, video=video_url,
                         caption=caption,
                         width=vw or None, height=vh or None, duration=vdur or None,
                     )
                 else:
                     msg = await b.send_video(
-                        chat_id=masseur_chat_id, video=FSInputFile(video_path),
+                        chat_id=masseur_cid, video=FSInputFile(video_path),
                         caption=caption,
                         width=vw or None, height=vh or None, duration=vdur or None,
                     )
@@ -1423,8 +1436,8 @@ async def api_session_media(
             file_unique_id = msg.video.file_unique_id if msg.video else msg.document.file_unique_id
 
         record_id = save_record(
-            client_chat_id=chat_id,
-            masseur_chat_id=masseur_chat_id,
+            client_chat_id=cid,
+            masseur_chat_id=masseur_cid,
             file_id=file_id,
             file_unique_id=file_unique_id,
             local_path=video_dst or "",
@@ -1441,8 +1454,8 @@ async def api_session_media(
             else:
                 notes += " · запись сохранена локально (Telegram недоступен)"
             add_diary_entry(
-                chat_id=chat_id,
-                masseur_chat_id=masseur_chat_id,
+                chat_id=cid,
+                masseur_chat_id=masseur_cid,
                 entry={
                     "technique": "",
                     "intensity": "",
@@ -1464,21 +1477,25 @@ async def api_session_media(
 
 
 @app.get("/api/video/records")
-async def api_video_records(chat_id: int = 0):
-    if not chat_id:
-        return {"ok": False, "error": "Missing chat_id"}
+async def api_video_records(chat_id: str = ""):
+    cid = _parse_chat_id(chat_id)
+    if cid is None:
+        return {"ok": False, "error": "Invalid chat_id (not a Telegram user)"}
     from core.video_records import get_records_for
-    records = get_records_for(chat_id)
+    records = get_records_for(cid)
     return {"ok": True, "records": records}
 
 
 @app.get("/api/video/play/{record_id}")
-async def api_video_play(record_id: str, chat_id: int = 0, request: Request = None):
+async def api_video_play(record_id: str, chat_id: str = "", request: Request = None):
+    cid = _parse_chat_id(chat_id)
+    if cid is None:
+        return {"ok": False, "error": "Invalid chat_id (open Mini App через Telegram)"}
     from core.video_records import get_record, can_access
     record = get_record(record_id)
     if not record:
         return {"ok": False, "error": "Record not found"}
-    if not can_access(record, chat_id):
+    if not can_access(record, cid):
         return {"ok": False, "error": "Access denied"}
 
     from starlette.responses import FileResponse, StreamingResponse
