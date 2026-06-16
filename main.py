@@ -1540,7 +1540,10 @@ async def api_video_test_record(request: Request):
     from config import TOKEN
     import json
     body = await request.json()
-    chat_id = int(body.get("chat_id", 0))
+    try:
+        chat_id = int(body.get("chat_id", 0))
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "Invalid chat_id"}
     init_data = body.get("_init_data", "")
     if not chat_id or not init_data:
         return {"ok": False, "error": "Missing chat_id or _init_data"}
@@ -1593,7 +1596,10 @@ async def api_video_delete_record(request: Request):
     from config import TOKEN
     import json
     body = await request.json()
-    chat_id = int(body.get("chat_id", 0))
+    try:
+        chat_id = int(body.get("chat_id", 0))
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "Invalid chat_id"}
     record_id = body.get("record_id", "")
     init_data = body.get("_init_data", "")
     if not chat_id or not record_id or not init_data:
