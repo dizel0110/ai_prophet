@@ -1320,6 +1320,7 @@ async def api_session_media(
                          "-map", "0:v?", "-map", "0:a?",
                          "-c:v", "libx264", "-preset", "fast",
                          "-crf", "23", "-pix_fmt", "yuv420p",
+                         "-profile:v", "baseline", "-level", "3.0",
                          "-c:a", "aac", "-b:a", "128k",
                          "-movflags", "+faststart", mp4_path],
                         capture_output=True, timeout=120,
@@ -1327,6 +1328,7 @@ async def api_session_media(
                 if r.returncode == 0 and os.path.exists(mp4_path) and os.path.getsize(mp4_path) > 0:
                     video_path = mp4_path
                     converted = True
+                    logger.info(f"ffmpeg conversion ok ({os.path.getsize(mp4_path)} bytes)")
                 else:
                     logger.warning(f"ffmpeg session convert/remux failed (rc={r.returncode}), stderr={r.stderr[:200]}")
             except Exception as conv_e:
@@ -1335,7 +1337,32 @@ async def api_session_media(
         msg = None
         try:
             if converted:
-                msg = await b.send_video(chat_id=masseur_chat_id, video=FSInputFile(video_path), caption=caption, supports_streaming=True)
+                # Probe converted MP4 for video metadata
+                vw = vh = vdur = 0
+                try:
+                    probe = subprocess.run(
+                        ["ffprobe", "-v", "quiet", "-print_format", "json",
+                         "-show_entries", "stream=width,height:format=duration",
+                         video_path],
+                        capture_output=True, timeout=15, text=True,
+                    )
+                    import json as _json
+                    info = _json.loads(probe.stdout)
+                    streams = info.get("streams", [])
+                    for s in streams:
+                        if s.get("width"):
+                            vw = int(s["width"])
+                            vh = int(s["height"])
+                            break
+                    vdur = int(float(info.get("format", {}).get("duration", 0)))
+                except Exception as probe_e:
+                    logger.warning(f"video probe failed: {probe_e}")
+                logger.info(f"sending video {os.path.getsize(video_path)}b {vw}x{vh} dur={vdur}s")
+                msg = await b.send_video(
+                    chat_id=masseur_chat_id, video=FSInputFile(video_path),
+                    caption=caption, supports_streaming=True,
+                    width=vw or None, height=vh or None, duration=vdur or None,
+                )
             else:
                 msg = await b.send_document(chat_id=masseur_chat_id, document=FSInputFile(video_path), caption=caption)
         except Exception as send_e:
