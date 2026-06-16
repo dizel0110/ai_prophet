@@ -336,7 +336,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             except Exception as e:
                 logger.warning(f"Failed to save local video copy: {e}")
                 video_dst = None
-            # Create record before notification
+            # Create record
             from core.video_records import save_record
             record_id = save_record(
                 client_chat_id=int(chat_id),
@@ -345,15 +345,28 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
                 duration_min=0,
                 caption=caption,
             )
-            # Send Mini App link instead of video file
-            from config import get_base_url
-            mini_url = get_base_url()
-            video_link = f"{mini_url.rstrip('/')}/?video={record_id}"
-            notif_text = f"{caption}\n📹 [Смотреть видео]({video_link})"
-            try:
-                await tg_bot.send_message(chat_id=chat_id_int, text=notif_text, parse_mode="Markdown")
-            except Exception as notif_e:
-                logger.warning(f"Failed to send notification: {notif_e}")
+            # Try R2 → send_video, fallback to Mini App link
+            r2_sent = False
+            if converted:
+                from core.r2_client import upload_video, delete_video
+                r2_url = upload_video(send_path)
+                if r2_url:
+                    try:
+                        await tg_bot.send_video(chat_id=chat_id_int, video=r2_url, caption=caption)
+                        r2_sent = True
+                    except Exception as e:
+                        logger.warning(f"send_video from R2 failed: {e}")
+                    finally:
+                        delete_video(r2_url)
+            if not r2_sent:
+                from config import get_base_url
+                mini_url = get_base_url()
+                video_link = f"{mini_url.rstrip('/')}/?video={record_id}"
+                notif_text = f"{caption}\n📹 [Смотреть видео]({video_link})"
+                try:
+                    await tg_bot.send_message(chat_id=chat_id_int, text=notif_text, parse_mode="Markdown")
+                except Exception as notif_e:
+                    logger.warning(f"Failed to send notification: {notif_e}")
             if converted and mp4_path:
                 try:
                     os.remove(mp4_path)
@@ -1350,10 +1363,12 @@ async def api_session_media(
             except Exception as conv_e:
                 logger.warning(f"ffmpeg session exception: {conv_e}")
 
-        msg = None
-        try:
-            if converted:
-                # Probe converted MP4 for video metadata
+        # Try R2 upload + Telegram send_video
+        r2_sent = False
+        if converted:
+            from core.r2_client import upload_video, delete_video
+            r2_url = upload_video(video_path)
+            if r2_url:
                 vw = vh = vdur = 0
                 try:
                     probe = subprocess.run(
@@ -1364,20 +1379,24 @@ async def api_session_media(
                     )
                     import json as _json
                     info = _json.loads(probe.stdout)
-                    streams = info.get("streams", [])
-                    for s in streams:
+                    for s in info.get("streams", []):
                         if s.get("width"):
-                            vw = int(s["width"])
-                            vh = int(s["height"])
-                            break
+                            vw = int(s["width"]); vh = int(s["height"]); break
                     vdur = int(float(info.get("format", {}).get("duration", 0)))
-                except Exception as probe_e:
-                    logger.warning(f"video probe failed: {probe_e}")
-                logger.info(f"video ready {os.path.getsize(video_path)}b {vw}x{vh} dur={vdur}s")
-            else:
-                logger.info(f"raw video path {video_path}")
-        except Exception as send_e:
-            logger.warning(f"Video processing error: {send_e}")
+                except Exception:
+                    pass
+                logger.info(f"R2 upload ok, sending video {os.path.getsize(video_path)}b")
+                try:
+                    await b.send_video(
+                        chat_id=masseur_cid, video=r2_url,
+                        caption=caption,
+                        width=vw or None, height=vh or None, duration=vdur or None,
+                    )
+                    r2_sent = True
+                except Exception as e:
+                    logger.warning(f"send_video from R2 failed: {e}")
+                finally:
+                    delete_video(r2_url)
 
         await b.session.close()
 
@@ -1397,7 +1416,7 @@ async def api_session_media(
             except Exception:
                 pass
 
-        # Always create a record before sending notification
+        # Always create a record
         record_id = save_record(
             client_chat_id=cid,
             masseur_chat_id=masseur_cid,
@@ -1409,15 +1428,16 @@ async def api_session_media(
             is_training=is_training,
         )
 
-        # Send Mini App link instead of video file (bypasses HF proxy binary issue)
-        from config import get_base_url
-        mini_url = get_base_url()
-        video_link = f"{mini_url.rstrip('/')}/?video={record_id}"
-        notif_text = f"{caption}\n📹 [Смотреть видео]({video_link})"
-        try:
-            msg = await b.send_message(chat_id=masseur_cid, text=notif_text, parse_mode="Markdown")
-        except Exception as notif_e:
-            logger.warning(f"Failed to send video notification: {notif_e}")
+        # Fallback: send Mini App link if R2 didn't work
+        if not r2_sent:
+            from config import get_base_url
+            mini_url = get_base_url()
+            video_link = f"{mini_url.rstrip('/')}/?video={record_id}"
+            notif_text = f"{caption}\n📹 [Смотреть видео]({video_link})"
+            try:
+                await b.send_message(chat_id=masseur_cid, text=notif_text, parse_mode="Markdown")
+            except Exception as notif_e:
+                logger.warning(f"Failed to send video notification: {notif_e}")
 
         if not is_training:
             from core.masseur_diary import add_diary_entry

@@ -1,3 +1,7 @@
 name = "ai-prophet-telegram-proxy"
 main = "index.js"
 compatibility_date = "2026-05-27"
+
+[[r2_buckets]]
+binding = "VIDEOS_BUCKET"
+bucket_name = "ai-prophet-videos"
