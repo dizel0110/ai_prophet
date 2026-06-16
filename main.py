@@ -339,7 +339,7 @@ async def api_specialist_upload(chat_id: str = Form(...), file: UploadFile = Fil
             send_path = mp4_path if converted else path
             record_id = None
             if use_video:
-                msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption, supports_streaming=True)
+                msg = await tg_bot.send_video(chat_id=chat_id_int, video=FSInputFile(send_path), caption=caption)
             else:
                 msg = await tg_bot.send_document(chat_id=chat_id_int, document=FSInputFile(send_path), caption=caption)
             if converted and mp4_path:
@@ -1360,7 +1360,7 @@ async def api_session_media(
                 logger.info(f"sending video {os.path.getsize(video_path)}b {vw}x{vh} dur={vdur}s")
                 msg = await b.send_video(
                     chat_id=masseur_chat_id, video=FSInputFile(video_path),
-                    caption=caption, supports_streaming=True,
+                    caption=caption,
                     width=vw or None, height=vh or None, duration=vdur or None,
                 )
             else:
