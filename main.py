@@ -1507,7 +1507,24 @@ async def api_video_test_record(request: Request):
 
     local_path = os.path.join(DATA_DIR, "videos", "test_video.mp4")
     if not os.path.exists(local_path):
-        return {"ok": False, "error": "Test video file not found"}
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        import subprocess, sys
+        try:
+            r = await asyncio.to_thread(
+                subprocess.run,
+                ["ffmpeg", "-y",
+                 "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=2",
+                 "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                 "-c:a", "aac", "-shortest", local_path],
+                capture_output=True, timeout=30,
+            )
+            if r.returncode != 0 or not os.path.exists(local_path):
+                logger.warning(f"ffmpeg test video gen failed: {r.stderr[:200]}")
+                return {"ok": False, "error": "Failed to generate test video"}
+        except Exception as e:
+            logger.warning(f"ffmpeg not available: {e}")
+            return {"ok": False, "error": "ffmpeg not available on server"}
 
     record_id = save_record(
         client_chat_id=chat_id,
