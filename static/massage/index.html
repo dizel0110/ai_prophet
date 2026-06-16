@@ -2023,9 +2023,12 @@ async function apiGet(endpoint, params) {
 
 async function apiUpload(endpoint, formData) {
   try {
-    const r = await fetch(endpoint, { method: 'POST', body: formData });
+    const ac = new AbortController();
+    const to = setTimeout(function() { ac.abort(); }, 120000);
+    const r = await fetch(endpoint, { method: 'POST', body: formData, signal: ac.signal });
+    clearTimeout(to);
     const txt = await r.text();
-    try { return JSON.parse(txt); } catch(e) { return {ok:false, error:'Invalid JSON'}; }
+    try { return JSON.parse(txt); } catch(e) { console.error('apiUpload bad JSON:', txt.slice(0,500), e); return {ok:false, error:'Invalid JSON'}; }
   } catch(e) { return {ok:false, error:'Network error'}; }
 }
 
