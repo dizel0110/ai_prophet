@@ -1343,28 +1343,47 @@ async def api_session_media(
 
         await b.session.close()
 
-        if converted and mp4_path:
+        # Save permanent local copy before cleanup
+        from core.video_records import save_record
+        video_dst = None
+        if converted and mp4_path and os.path.exists(mp4_path):
+            video_dst = os.path.join(DATA_DIR, "videos", f"session_{int(time.time())}_{chat_id}.mp4")
+            os.makedirs(os.path.dirname(video_dst), exist_ok=True)
+            try:
+                shutil.copy2(mp4_path, video_dst)
+            except Exception as e:
+                logger.warning(f"Failed to save local video copy: {e}")
+                video_dst = None
             try:
                 os.remove(mp4_path)
             except Exception:
                 pass
 
+        # Always create a record — with local_path for playback, file_id if Telegram delivered
+        file_id = ""
+        file_unique_id = ""
         if msg and (msg.video or msg.document):
             file_id = msg.video.file_id if msg.video else msg.document.file_id
             file_unique_id = msg.video.file_unique_id if msg.video else msg.document.file_unique_id
-            from core.video_records import save_record
-            save_record(
-                client_chat_id=chat_id,
-                masseur_chat_id=masseur_chat_id,
-                file_id=file_id,
-                file_unique_id=file_unique_id,
-                duration_min=duration_min,
-                caption=caption,
-                is_training=is_training,
-            )
+
+        record_id = save_record(
+            client_chat_id=chat_id,
+            masseur_chat_id=masseur_chat_id,
+            file_id=file_id,
+            file_unique_id=file_unique_id,
+            local_path=video_dst or "",
+            duration_min=duration_min,
+            caption=caption,
+            is_training=is_training,
+        )
 
         if not is_training:
             from core.masseur_diary import add_diary_entry
+            notes = f"🎥 Сеанс {duration_min} мин"
+            if file_id:
+                notes += " · отправлено в Telegram"
+            else:
+                notes += " · запись сохранена локально (Telegram недоступен)"
             add_diary_entry(
                 chat_id=chat_id,
                 masseur_chat_id=masseur_chat_id,
@@ -1375,13 +1394,13 @@ async def api_session_media(
                     "tissue_state": "",
                     "client_feedback": "",
                     "recommendations": "",
-                    "notes": f"🎥 Сеанс {duration_min} мин · запись отправлена в Telegram",
+                    "notes": notes,
                     "planned_technique": "",
                 },
             )
 
         os.remove(temp_path)
-        return {"ok": True, "sent_to": masseur_chat_id}
+        return {"ok": True, "record_id": record_id, "sent_to": masseur_chat_id}
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -1515,7 +1534,7 @@ async def api_video_test_record(request: Request):
             r = await asyncio.to_thread(
                 subprocess.run,
                 ["ffmpeg", "-y",
-                 "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=2",
+                 "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=2,geq=r='gte(T,1)*255':g='0':b='lte(T,1)*255'",
                  "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
                  "-c:v", "libx264", "-pix_fmt", "yuv420p",
                  "-c:a", "aac", "-shortest", local_path],
@@ -1537,6 +1556,51 @@ async def api_video_test_record(request: Request):
         is_training=True,
     )
     return {"ok": True, "record_id": record_id}
+
+
+@app.post("/api/video/delete_record")
+async def api_video_delete_record(request: Request):
+    """Delete a video record (admin only). Also deletes local file if present."""
+    from core.video_records import get_record, RECORDS_FILE
+    from core.tg_auth import verify_init_data
+    from config import TOKEN
+    import json
+    body = await request.json()
+    chat_id = int(body.get("chat_id", 0))
+    record_id = body.get("record_id", "")
+    init_data = body.get("_init_data", "")
+    if not chat_id or not record_id or not init_data:
+        return {"ok": False, "error": "Missing fields"}
+    try:
+        user = verify_init_data(init_data, TOKEN)
+    except Exception as e:
+        return {"ok": False, "error": f"Invalid initData: {e}"}
+    if int(user.get("id", 0)) != chat_id:
+        return {"ok": False, "error": "chat_id mismatch"}
+    if not _is_chat_id_admin(chat_id):
+        return {"ok": False, "error": "Not admin"}
+
+    record = get_record(record_id)
+    if not record:
+        return {"ok": False, "error": "Record not found"}
+
+    # Delete local file if exists
+    local_path = record.get("local_path")
+    if local_path and os.path.exists(local_path):
+        try:
+            os.remove(local_path)
+        except Exception as e:
+            logger.warning(f"Failed to delete local video {local_path}: {e}")
+
+    # Remove from records file
+    try:
+        data = json.loads(open(RECORDS_FILE, "r", encoding="utf-8").read())
+        data["records"] = [r for r in data["records"] if r["id"] != record_id]
+        open(RECORDS_FILE, "w", encoding="utf-8").write(json.dumps(data, ensure_ascii=False, indent=2))
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to update records: {e}"}
+
+    return {"ok": True}
 
 
 @app.get("/api/education")
