@@ -180,8 +180,9 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
   body{background:#0f0f1a;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem}
   .container{max-width:720px;width:100%}
-  h1{font-size:1.8rem;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.3rem}
-  .sub{color:#888;margin-bottom:2rem;font-size:.9rem}
+  h1{font-size:1.8rem;background:linear-gradient(135deg,#c084fc,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.25rem}
+  .badge-salon{display:inline-block;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444;border-radius:6px;padding:.15rem .6rem;font-size:.65rem;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.5px}
+  .sub{color:#888;margin-bottom:2rem;font-size:.85rem;line-height:1.5}
   .card{background:#1a1a2e;border-radius:12px;padding:1.5rem;margin-bottom:1rem;border:1px solid #2a2a3e}
   label{display:block;margin-bottom:.5rem;font-weight:600;color:#a78bfa;font-size:.9rem}
   textarea,input,select{width:100%;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:8px;padding:.8rem;color:#e0e0e0;font-size:.95rem;outline:none;transition:border .2s}
@@ -226,8 +227,9 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="container">
-  <h1>Massage AI Consultant</h1>
-  <div class="sub">AI Prophet · ADK 2.0 Multi-Agent Graph Workflow · 6 Specialists</div>
+  <div class="badge-salon">&#x1F590; Real Business — Massage Studio</div>
+  <h1>AI Massage Consultant</h1>
+  <div class="sub">Powered by Google ADK 2.0 &middot; 6 specialist agents &middot; Built for <strong>Мастерская Массажа</strong></div>
 
   <div class="card">
     <label>Describe your complaint</label>
@@ -276,8 +278,8 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   </div>
 
   <div class="footer">
-    Powered by Google ADK 2.0 · Sequential workflow · gemini-2.5-flash<br>
-    <span style="font-size:.7rem">Kaggle Vibecoding Agents Capstone · June 2026</span>
+    Google ADK 2.0 Workflow &middot; 6 agents (questionnaire &rarr; vision &rarr; techniques &rarr; music &rarr; report)<br>
+    <span style="font-size:.7rem">&#x1F30D; Real production deployment: Telegram bot + Mini App &middot; Kaggle Vibecoding Capstone &middot; June 2026</span>
   </div>
 </div>
 <script>

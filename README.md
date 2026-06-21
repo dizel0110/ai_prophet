@@ -102,11 +102,13 @@ graph TD
 | 1 | **Multi-Agent Orchestration** — 6 agents in sequential graph workflow | ✅ |
 | 2 | **Tool Use / Function Calling** — WebSearch, MediaSearch, QuestionAnalyzer | ✅ |
 | 3 | **Sessions & Memory** — InMemorySessionService + MemoryService | ✅ |
-| 4 | **Observability** — ADK callback logging, workflow event tracing | ✅ |
+| 4 | **Observability** — Workflow event logging per agent | ✅ |
 | 5 | **Deployment** — Docker on Hugging Face Spaces (free tier) | ✅ |
-| 6 | **Agentic Loops** — Parallel fan-out for vision agents (planned) | 🚧 |
+| 6 | **Agent Evaluation** — Eval set created (`massage_consultation_eval`) | ✅ |
 | 7 | **Human-in-the-Loop** — Approval step before sending report | ✅ |
-| 8 | **MCP Protocol** — Client-side AI future capability | 🚧 |
+| 8 | **Agentic Loops** — Parallel fan-out for vision agents (planned) | 🚧 |
+| 9 | **RAG** — Massage music database + technique knowledge | 🚧 |
+| 10 | **MCP Protocol** — Client-side AI future capability | 🚧 |
 
 ---
 
@@ -180,7 +182,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-Tests use mocks — no real API calls or Telegram.
+Tests use mocks — no real API calls or Telegram. **216 tests** across 8 modules (booking, ADK workflow, client profiles, music player, questionnaire, video, white-label).
 
 ---
 
