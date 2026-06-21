@@ -4,9 +4,11 @@
 **Role**: Creator, Developer & Architect
 
 - GitHub: [dizel0110](https://github.com/dizel0110)
-- LinkedIn: [Dmitrii Zelenin](https://www.linkedin.com/in/dmitrii-zelenin-30b9322b3/)
+- LinkedIn: [dizel0110](https://www.linkedin.com/in/dizel0110/)
 - Kaggle: [dizel0110](https://www.kaggle.com/dizel0110)
 - Google Developer: [Dmitrii Zelenin](https://developers.google.com/profile/u/dizel0110)
+- Portfolio: [dizel0110.github.io](https://dizel0110.github.io/)
+- Telegram: [@dizel0110](https://t.me/dizel0110)
 
 ## Anastasiia Zelenina (@zeleninaline)
 **Role**: Co-author, AI Specialist & Massage Therapy Expert
