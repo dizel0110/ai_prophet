@@ -8,8 +8,10 @@
 - Kaggle: [dizel0110](https://www.kaggle.com/dizel0110)
 - Google Developer: [Dmitrii Zelenin](https://developers.google.com/profile/u/dizel0110)
 
-## Anastasiia Susina
+## Anastasiia Zelenina (@zeleninaline)
 **Role**: Co-author, AI Specialist & Massage Therapy Expert
+
+- Facebook: [@zeleninaline](https://facebook.com/zeleninaline)
 
 Anastasiia brings deep domain expertise in massage therapy and rehabilitation, ensuring the AI agents produce clinically sound recommendations. Her practical knowledge shapes the questionnaire design, contraindication logic, and technique selection — bridging AI with real-world massage practice.
 
