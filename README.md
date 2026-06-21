@@ -7,133 +7,187 @@ sdk: docker
 pinned: false
 ---
 
-# 🔮 AI Prophet — ваш ИИ-проводник
+# 🔮 AI Prophet — Multi-Agent Massage Studio Assistant
 
-[![GitHub Stars](https://img.shields.io/github/stars/dizel0110/ai_prophet?style=for-the-badge&color=8b5cf6)](https://github.com/dizel0110/ai_prophet/stargazers)
-[![Telegram](https://img.shields.io/badge/Telegram-Mini_App-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/ai_prophet_io_bot)
-[![Engine](https://img.shields.io/badge/Multimodal-Gemini_%7C_Qwen_%7C_Llama_Vision-orange?style=for-the-badge&logo=google-cloud)](https://aistudio.google.com/)
-[![Secondary Engine](https://img.shields.io/badge/Fallback-HF_Router_%7C_Qwen_2.5-green?style=for-the-badge&logo=huggingface)](https://huggingface.co/)
+[![Kaggle](https://img.shields.io/badge/Kaggle-Vibecoding%20Agents-20BEFF?style=for-the-badge&logo=kaggle)](https://kaggle.com)
+[![Google ADK](https://img.shields.io/badge/ADK-2.0-4285F4?style=for-the-badge&logo=google)](https://google.github.io/adk-docs/)
+[![HF Spaces](https://img.shields.io/badge/Live%20Demo-Hugging%20Face%20Spaces-yellow?style=for-the-badge&logo=huggingface)](https://dizel0110-kaggle-massage-agent.hf.space/demo)
+[![Gemini](https://img.shields.io/badge/Gemini-2.5--Flash-8E75B2?style=for-the-badge&logo=google-cloud)](https://ai.google.dev)
+[![Telegram](https://img.shields.io/badge/Mini%20App-Telegram-2CA5E0?style=for-the-badge&logo=telegram)](https://t.me/ai_prophet_io_bot)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 
-**AI Prophet** — мультимодальный ИИ-агент в Telegram. Ядро проекта — система профильных ИИ-специалистов (агентов), которые анализируют, советуют и помогают в самых разных сферах.
+**Track**: Agents for Business — *A family-run massage salon powered by a Google ADK 2.0 multi-agent system.*
 
-На фундаменте AI Prophet уже built:
-
----
-
-## ✨ Что внутри
-
-### 🧠 Мульти-агентная система
-Не один чат-бот, а команда ИИ-специалистов. Каждый — узкий эксперт со своей ролью, промптом и моделью:
-- **Визуальный Диагност** — анализ фото через Llama Vision / Gemini Vision
-- **Специалист по движениям** — анализ видео (извлечение кадров → vision)
-- **Анкетолог** — сбор и структурирование данных
-- **Эксперт по техникам** — подбор методик
-- **Финальный Эксперт** — синтез → заключение
-
-Пользователь может динамически создавать собственных специалистов под любую задачу (через `/specialist` или Mini App).
-
-### 🖐 Массажный салон (семейный проект)
-Одно из направлений на базе AI Prophet. Полный цикл:
-- Анкета клиента (ШММ — 20 обязательных полей, data-driven JSON-конфиг)
-- Загрузка фото спины / видео походки
-- AI-диагностика (5 агентов-специалистов)
-- Рекомендация техник массажа + музыки под тип процедуры
-- Онлайн-запись
-
-### 🎵 Музыкальная система
-- Встроенный плеер в Mini App (Internet Archive)
-- AI-рекомендация музыки под контекст
-- Именные плейлисты, экспорт/импорт, загрузка своей музыки
-
-### 🎙️ Голос и мультимодальность
-- Транскрибация аудио (Whisper Turbo)
-- Анализ изображений и видео
-- Каждый специалист может работать с медиа
-
-### ⚙️ Админ-панель
-- Управление доступом через Telegram (по chat_id)
-- Список клиентов с анкетами и результатами AI-диагностики
-- Никаких логинов — идентификация через Telegram
+> 👥 [Authors](AUTHORS.md) — Dmitrii Zelenin (dizel0110) & Anastasiia Susina
 
 ---
 
-## 🛠 Технологический стек
+## 📋 Submission Overview
 
-| Компонент | Технология |
+AI Prophet replaces the traditional 15-minute manual massage consultation with a **6-agent AI pipeline** built on Google's Agent Development Kit (ADK) 2.0. Clients fill a questionnaire, upload photos of their back and a video of their walk — and the AI team produces a full diagnostic report with technique recommendations and a personalized music playlist.
+
+### Live Demo
+- **Web Demo** (no Telegram needed): [dizel0110-kaggle-massage-agent.hf.space/demo](https://dizel0110-kaggle-massage-agent.hf.space/demo)
+- **Full Experience** (Telegram Mini App): [@ai_prophet_io_bot](https://t.me/ai_prophet_io_bot) → press 🖐 Massage
+
+### Video Demo
+[2-minute submission video](LINK-TO-VIDEO) — coming soon.
+
+---
+
+## 🤖 Multi-Agent System (Google ADK 2.0)
+
+Six specialized agents collaborate in a **graph-based workflow**:
+
+| Agent | Model | Input | Role |
+|-------|-------|-------|------|
+| **Questionnaire Analyst** | Gemini 2.5 Flash | Text (complaints, history) | Validates data, flags contraindications |
+| **Photo Diagnostician** | Gemini 2.5 Flash (Vision) | Back photos | Postural & scoliosis assessment |
+| **Video Motion Specialist** | Gemini 2.5 Flash (Vision) | Gait video frames | Range-of-motion & asymmetry analysis |
+| **Technique Expert** | Gemini 2.5 Flash | All above outputs | Recommends massage techniques |
+| **Music Recommender** | Gemini 2.5 Flash | Client profile + technique | Suggests therapy-matched playlist |
+| **Final Synthesis** | Gemini 2.5 Flash | All agent outputs | Produces the final report |
+
+### Workflow Graph
+
+```mermaid
+graph TD
+    A[Client Input] --> B[Questionnaire Analyst]
+    B --> C{Contraindications?}
+    C -->|None| D[Photo Diagnostician]
+    C -->|Found| E[Flag & Restrict]
+    D --> F[Video Motion Specialist]
+    F --> G[Technique Expert]
+    G --> H[Music Recommender]
+    H --> I[Final Synthesis]
+    I --> J[Diagnostic Report]
+    
+    style A fill:#8b5cf6,color:#fff
+    style I fill:#10b981,color:#fff
+    style J fill:#f59e0b,color:#fff
+```
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  FastAPI Server                      │
+│  ┌─────────────┐  ┌──────────────────────────────┐  │
+│  │  /demo      │  │  /api/demo/consult           │  │
+│  │  Web Page   │  │  → runs ADK Workflow         │  │
+│  └─────────────┘  └──────────┬───────────────────┘  │
+│                              │                       │
+│  ┌───────────────────────────▼────────────────────┐  │
+│  │           Google ADK 2.0 Runner                │  │
+│  │  ┌─────────────────────────────────────────┐   │  │
+│  │  │              Workflow Graph             │   │  │
+│  │  │   QA → Photo → Video → Tech → Music →   │   │  │
+│  │  │               Final                     │   │  │
+│  │  └─────────────────────────────────────────┘   │  │
+│  │  ┌─────────────────────────────────────────┐   │  │
+│  │  │    Tools: WebSearch, MediaSearch,       │   │  │
+│  │  │    QuestionAnalyzer                     │   │  │
+│  │  └─────────────────────────────────────────┘   │  │
+│  │  ┌─────────────────────────────────────────┐   │  │
+│  │  │    Services: InMemorySession, Memory    │   │  │
+│  │  └─────────────────────────────────────────┘   │  │
+│  └────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### ADK Features Implemented
+
+| # | Feature | Status |
+|---|---------|--------|
+| 1 | **Multi-Agent Orchestration** — 6 agents in sequential graph workflow | ✅ |
+| 2 | **Tool Use / Function Calling** — WebSearch, MediaSearch, QuestionAnalyzer | ✅ |
+| 3 | **Sessions & Memory** — InMemorySessionService + MemoryService | ✅ |
+| 4 | **Observability** — ADK callback logging, workflow event tracing | ✅ |
+| 5 | **Deployment** — Docker on Hugging Face Spaces (free tier) | ✅ |
+| 6 | **Agentic Loops** — Parallel fan-out for vision agents (planned) | 🚧 |
+| 7 | **Human-in-the-Loop** — Approval step before sending report | ✅ |
+| 8 | **MCP Protocol** — Client-side AI future capability | 🚧 |
+
+---
+
+## 🔧 Technical Stack
+
+| Component | Technology |
 |-----------|-----------|
-| **Runtime** | Python 3.11+ & Aiogram 3.x & FastAPI |
-| **Основной AI** | Google Gemini (gemini-3.5-flash → gemini-2.5-pro, fallback chain) |
-| **Fallback AI** | Hugging Face Router (Qwen 2.5-7B, Llama 3.2-11B Vision, Whisper) |
-| **Mini App** | Telegram Web App (vanilla JS, glassmorphism) |
-| **Deploy** | Docker, GitHub Actions → HF Spaces + Render.com |
+| **Agent Framework** | Google ADK 2.3 (google.adk) |
+| **LLM** | Gemini 2.5 Flash (genai) |
+| **Fallback** | Hugging Face Router (Qwen 2.5-7B, Llama 3.2-11B Vision) |
+| **Backend** | Python 3.11, FastAPI, Uvicorn |
+| **Frontend** | Vanilla JS, HTML5, Telegram Mini App |
+| **Infrastructure** | Docker, GitHub Actions → HF Spaces |
+| **Session** | InMemory (ephemeral) |
 
-### Архитектура
+### File Structure (ADK Module)
+
 ```
-Telegram Bot (polling)
-  └── aiogram Dispatcher
-       ├── handlers/vip.py       — доступ, админ-команды
-       ├── handlers/massage.py   — анкета, диагностика, музыка
-       ├── handlers/messages.py  — все сообщения, function calling
-       └── handlers/limits.py    — лимиты скачивания
-
-FastAPI (health + Mini App API)
-  └── static/massage/index.html  — Telegram Mini App
-  └── /api/*                     — массаж, музыка, specialists, admin
-
-core/
-  ├── ai_engine.py               — Gemini client + HF Router
-  ├── tools.py                   — web search, media search, download
-  ├── agents/                    — мульти-агентная система
-  │   ├── agent_base.py          — базовый класс (HF first → Gemini)
-  │   ├── agent_factory.py       — динамические специалисты
-  │   ├── orchestrator.py        — 5 агентов + pipeline
-  │   ├── registry.py            — реестр агентов
-  │   └── music_db.py            — проверенная музыка для массажа
-  ├── questionnaire.py           — модель анкеты (data-driven)
-  ├── music_player.py            — IA-музыка + плейлисты
-  └── network.py                 — DNS patch
+core/adk/
+├── __init__.py      # Exports
+├── agents.py        # 6 Agent definitions
+├── workflow.py      # Graph Workflow + function nodes
+├── tools.py         # FunctionTool wrappers
+└── session.py       # Memory & Session services
 ```
 
 ---
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/dizel0110/ai_prophet
+# 1. Clone the kaggle branch
+git clone -b kaggle https://github.com/dizel0110/ai_prophet
 cd ai_prophet
-cp .env.example .env  # заполнить TELEGRAM_TOKEN, GEMINI_API_KEY, HF_TOKEN
+
+# 2. Set environment variables
+# Required: GEMINI_API_KEY (get from aistudio.google.com)
+# Optional: HF_TOKEN for Hugging Face fallback
+export GEMINI_API_KEY="your-key-here"
+
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Run
 python main.py
+
+# 5. Open http://localhost:7860/demo
 ```
 
-Система требует ffmpeg (для аудио и yt-dlp).
+> **Note**: Without `TELEGRAM_TOKEN`, the bot is skipped — only the demo API runs.
 
 ---
 
-## 🌱 Философия
+## 📊 Feature Checklist
 
-AI Prophet — это **проводник**, а не продукт. Массаж, музыка, поиск — всё это возможности одного ИИ-агента, который соединяет человека с нужным знанием.
-
-Проект растёт снизу вверх: от конкретных семейных задач к универсальной платформе. Если ты видишь в этом потенциал для своей сферы — присоединяйся.
-
----
-
-## 🚀 CI/CD
-
-- `main` → авто-деплой на Hugging Face Spaces (через GitHub Actions)
-- Render.com подхватывает main через Git-интеграцию
-- Ветки → force-push на HF Spaces (без PR gate)
+- [x] **6 specialized agents** with distinct roles and prompts
+- [x] **Graph-based workflow** with sequential data flow
+- [x] **Data validation** at each pipeline junction
+- [x] **Music recommendation** integrated into diagnostic output
+- [x] **Web demo** for judges (no Telegram required)
+- [x] **Full Telegram Mini App** with questionnaire, media upload, and chat
+- [x] **Deployed** on Hugging Face Spaces (CPU Basic, free)
+- [x] **CI/CD** via GitHub Actions (auto-deploy on push)
 
 ---
 
-## ⚖️ Юридическая информация и Лицензия
+## 🧪 Testing
 
-Этот проект является интеллектуальной собственностью **dizel0110**. Уникальные алгоритмы переключения моделей (Fallback Engine) и концепция "AI Prophet" защищены лицензией **Apache 2.0**.
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
 
-*   **Авторское право**: © 2026 dizel0110.
-*   **Использование**: Разрешено для личного и образовательного использования при сохранении ссылок на оригинал.
-*   **Коммерция**: Для интеграции в коммерческие продукты, пожалуйста, свяжитесь с автором.
+Tests use mocks — no real API calls or Telegram.
 
 ---
 
-*Являя суть вещей через код. 2026.*
+## 📄 License
+
+Apache 2.0 — see [LICENSE](LICENSE).
+
+---
+
+*Built with ❤️ for the Kaggle Vibecoding Agents Capstone. June 2026.*
