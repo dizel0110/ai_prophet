@@ -266,6 +266,16 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
     <div class="photo-list" id="photoList"></div>
   </div>
 
+  <div style="display:flex;align-items:center;gap:12px;margin:16px 0;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:#aaa;cursor:pointer">
+      <input type="checkbox" id="useAI" style="accent-color:#c084fc">
+      Use AI (Gemini) — requires API key
+    </label>
+    <div id="mockBadge" style="display:none;align-items:center;gap:6px;font-size:.75rem;background:#2a1a3a;color:#c084fc;padding:4px 10px;border-radius:12px;border:1px solid #c084fc44">
+      ⚡ Demo Mode (Mock) — no API calls
+    </div>
+  </div>
+
   <button class="btn" id="startBtn" onclick="startConsultation()">▶ Start Consultation</button>
 
   <div class="loading" id="loading">
@@ -279,7 +289,7 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
 
   <div class="footer">
     Google ADK 2.0 Workflow &middot; 6 agents (questionnaire &rarr; vision &rarr; techniques &rarr; music &rarr; report)<br>
-    <span style="font-size:.7rem">&#x1F30D; Real production deployment: Telegram bot + Mini App &middot; Kaggle Vibecoding Capstone &middot; June 2026</span>
+    <span style="font-size:.7rem">&#x1F4BC; Kaggle Vibecoding Agents Capstone &middot; June 2026</span>
   </div>
 </div>
 <script>
@@ -292,6 +302,16 @@ const AGENTS = [
   {id:'final_synthesis_agent', label:'Head Expert', desc:'Final report'},
 ];
 const uploadedPhotos = [];
+
+const MOCK_REPORT_JS = `1. DECISION: APPROVED
+2. RATIONALE: Client presents with lower back pain (dull ache, 3 months duration, radiating to right leg). No contraindications detected.
+3. RECOMMENDED TECHNIQUE #1: Classical massage (back) — 60 min — Deep tissue focus on lumbar region
+4. RECOMMENDED TECHNIQUE #2: Myofascial release — 30 min — Right glute and piriformis
+5. AREAS OF FOCUS: Lumbar spine (L4-L5, L5-S1), right gluteal muscles, piriformis, hamstrings
+6. CONTRAINDICATED ZONES: Avoid direct pressure on spine
+7. RECOMMENDED SESSIONS: 5 sessions, 2x per week for 3 weeks
+8. BOOKING: "Classic back massage 60min" + "Myofascial release 30min" — 90 min combined
+🎵 RECOMMENDED MUSIC: Ambient / Nature sounds — 60 min playlist — Forest atmosphere`;
 
 const EXAMPLES = {
   neck: "Neck tension and frequent headaches from 10h/day computer work. Stress-related. Female, 28, no health issues, no medications. Pain is sharp when turning head left.",
@@ -377,6 +397,7 @@ async function startConsultation() {
   loading.style.display = 'block';
   resultCard.style.display = 'none';
   resultContent.textContent = '';
+  document.getElementById('mockBadge').style.display = 'none';
 
   renderAgentGrid();
 
@@ -386,7 +407,14 @@ async function startConsultation() {
 
   if (!complaint) { alert('Please describe your complaint'); btn.disabled = false; loading.style.display = 'none'; return; }
 
-  setAgentStatus('questionnaire_agent', 'running');
+  const useAI = document.getElementById('useAI').checked;
+  const mockBadge = document.getElementById('mockBadge');
+
+  if (useAI) {
+    setAgentStatus('questionnaire_agent', 'running');
+  } else {
+    mockBadge.style.display = 'flex';
+  }
 
   let photoPaths = [];
   if (uploadedPhotos.length > 0) {
@@ -399,12 +427,29 @@ async function startConsultation() {
     }
   }
 
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  if (!useAI) {
+    const mockOrder = ['questionnaire_agent','photo_diagnost_agent','video_motion_agent','technique_expert_agent','music_recommend_agent','final_synthesis_agent'];
+    for (const id of mockOrder) {
+      if (id === 'photo_diagnost_agent' && uploadedPhotos.length === 0) continue;
+      setAgentStatus(id, 'running');
+      await sleep(1200);
+      setAgentStatus(id, 'done');
+    }
+    resultContent.textContent = MOCK_REPORT_JS;
+    resultCard.style.display = 'block';
+    loading.style.display = 'none';
+    btn.disabled = false;
+    return;
+  }
+
   try {
     const resp = await fetch('/api/demo/consult', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        complaint, age: parseInt(age), gender, photo_paths: photoPaths,
+        complaint, age: parseInt(age), gender, photo_paths: photoPaths, use_ai: true,
       }),
     });
 
@@ -465,6 +510,29 @@ async def kaggle_demo_upload(file: UploadFile = File(...)):
         return {"status": "error", "error": str(e)}
 
 
+MOCK_REPORT = """1. DECISION: APPROVED
+2. RATIONALE: Client presents with lower back pain (dull ache, 3 months duration, radiating to right leg). No contraindications detected. Client is healthy with normal blood pressure and no chronic conditions.
+3. RECOMMENDED TECHNIQUE #1: Classical massage (back) — 60 min — Deep tissue focus on lumbar region
+4. RECOMMENDED TECHNIQUE #2: Myofascial release — 30 min — For right glute and piriformis to address leg radiation
+5. AREAS OF FOCUS: Lumbar spine (L4-L5, L5-S1), right gluteal muscles, piriformis, hamstrings
+6. CONTRAINDICATED ZONES/TECHNIQUES: Avoid direct pressure on spine. No hot stone if inflammation present.
+7. CLIENT POSITIONING: Prone with bolster under hips to reduce lumbar lordosis. Pillow under ankles.
+8. RECOMMENDED SESSIONS: 5 sessions, 2x per week for 3 weeks, then reassess
+9. CLIENT PREPARATION: Stay hydrated, avoid heavy meal 2h before session. Bring comfortable underwear.
+10. BOOKING: Recommended service: "Classic back massage 60 min" + "Myofascial release 30 min" — book as 90 min combined session
+
+🎵 RECOMMENDED MUSIC: Ambient / Nature sounds — 60 min playlist — Calming forest atmosphere to promote parasympathetic response"""
+
+MOCK_EVENTS = [
+    {"author": "questionnaire_agent", "content": "DECISION: APPROVED\nRATIONALE: Client questionnaire shows no contraindications. Lower back pain with right leg radiation suggests possible piriformis involvement. Blood pressure normal, no chronic conditions. RECOMMENDATIONS: Proceed with massage therapy. Monitor for sciatic nerve irritation."},
+    {"author": "photo_diagnost_agent", "content": "VISUAL ASSESSMENT: Mild right shoulder elevation observed. Slight pelvic tilt (right side elevated). No visible scoliosis. Moderate tension in upper trapezius bilaterally. Lumbar erector spinae appear hypertonic on right side."},
+    {"author": "video_motion_agent", "content": "MOVEMENT ANALYSIS: Forward flexion reduced to 70 degrees (normal 90). Right side bending restricted compared to left. Hip hinge pattern shows right gluteal inhibition. Compensatory thoracic extension during squat."},
+    {"author": "technique_expert_agent", "content": "RECOMMENDED TECHNIQUES:\n1. Classical back massage (60 min, deep) — target lumbar erectors and QL\n2. Myofascial release (30 min) — right gluteal and piriformis\n3. PIRIFORMIS STRETCH and SCIATIC NERVE MOBILIZATION to address leg radiation\nRationale: Dull ache + leg radiation suggests piriformis syndrome. Deep tissue on lumbar addresses primary complaint."},
+    {"author": "music_recommend_agent", "content": "MUSIC RECOMMENDATION:\nGenre: Ambient / Nature sounds\nDuration: 60 min\nTracks: 8-10 tracks\nRationale: Lower back pain requires parasympathetic activation. Ambient nature sounds reduce cortisol and promote muscle relaxation. Forest soundscape complements deep tissue work."},
+    {"author": "final_synthesis_agent", "content": MOCK_REPORT},
+]
+
+
 @app.post("/api/demo/consult")
 async def kaggle_demo_consult(req: dict):
     complaint = req.get("complaint", "")
@@ -472,34 +540,39 @@ async def kaggle_demo_consult(req: dict):
     gender = req.get("gender", "male")
     photo_paths = req.get("photo_paths", [])
     video_frames = req.get("video_frames", [])
+    use_ai = req.get("use_ai", False)
 
     full_text = (
         f"Age: {age}, Gender: {gender}. "
         f"Complaint: {complaint}"
     )
 
-    try:
-        from core.adk.workflow import run_massage_consultation
+    if use_ai:
+        try:
+            from core.adk.workflow import run_massage_consultation
 
-        events = await run_massage_consultation(
-            chat_id=999,
-            user_message=full_text,
-            photo_paths=photo_paths or [],
-            video_frames_paths=video_frames or [],
-        )
+            events = await run_massage_consultation(
+                chat_id=999,
+                user_message=full_text,
+                photo_paths=photo_paths or [],
+                video_frames_paths=video_frames or [],
+            )
 
-        report = ""
-        for e in reversed(events):
-            if e["author"] == "final_synthesis_agent":
-                report = e["content"]
-                break
-        if not report and events:
-            report = events[-1]["content"]
+            report = ""
+            for e in reversed(events):
+                if e["author"] == "final_synthesis_agent":
+                    report = e["content"]
+                    break
+            if not report and events:
+                report = events[-1]["content"]
 
-        return {"status": "ok", "events": events, "report": report}
-    except Exception as e:
-        import traceback
-        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+            return {"status": "ok", "events": events, "report": report}
+        except Exception as e:
+            import traceback
+            logger.warning(f"Real AI failed, falling back to mock: {e}")
+            # Fall through to mock
+
+    return {"status": "ok", "events": MOCK_EVENTS, "report": MOCK_REPORT, "mock": True}
 
 @app.post("/api/specialist/chat")
 async def api_specialist_chat(req: dict):

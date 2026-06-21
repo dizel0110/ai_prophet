@@ -27,7 +27,7 @@ def _web_search(query: str, max_results: int = 5) -> str:
         )
 
 
-def _search_media(query: str, media_type: str = "audio", max_count: int = 5) -> str:
+def search_media(query: str, media_type: str = "audio", max_count: int = 5) -> str:
     """Search for music or video content suitable for massage sessions.
 
     Args:
@@ -40,7 +40,7 @@ def _search_media(query: str, media_type: str = "audio", max_count: int = 5) -> 
     """
     try:
         from core.tools import search_media_content
-        from core.agents.music_db import MUSIC_DB
+        from core.agents.music_db import MASSAGE_MUSIC_GENRES
         genre_map = {
             "ambient": "ambient",
             "classical": "classical",
@@ -54,7 +54,8 @@ def _search_media(query: str, media_type: str = "audio", max_count: int = 5) -> 
         genre_items = []
         for keyword, genre_key in genre_map.items():
             if keyword in query.lower():
-                tracks = MUSIC_DB.get(genre_key, [])
+                genre_data = MASSAGE_MUSIC_GENRES.get(genre_key, {})
+                tracks = genre_data.get("tracks", [])
                 for t in tracks[:3]:
                     genre_items.append(f"- {t.get('title', 'Track')}: {t.get('url', '#')}")
                 break
@@ -128,7 +129,7 @@ def _analyze_questionnaire(questionnaire_text: str) -> dict:
 
 
 web_search_tool = FunctionTool(func=_web_search)
-search_media_tool = FunctionTool(func=_search_media)
+search_media_tool = FunctionTool(func=search_media)
 question_analyzer_tool = FunctionTool(func=_analyze_questionnaire)
 
 tools_list = [web_search_tool, search_media_tool, question_analyzer_tool]

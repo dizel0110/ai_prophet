@@ -25,9 +25,10 @@ from core.adk.workflow import (
     _pre_analyze_photos,
     _pre_analyze_video,
     _analyze_and_pass,
-    _accumulate_context,
-    _extract_music_recommendation,
-    _finalize_report,
+    _accumulate_for_video,
+    _accumulate_for_technique,
+    _accumulate_for_music,
+    _accumulate_for_final,
 )
 from core.adk.tools import web_search_tool, search_media_tool, question_analyzer_tool
 
@@ -130,20 +131,29 @@ class TestFunctionNodes:
         text = result.content.parts[0].text if hasattr(result, "content") and result.content else str(result.output)
         assert "chronic" in text.lower() or "contraind" in text.lower()
 
-    def test_accumulate_context(self):
-        result = _accumulate_context("test data")
+    def test_accumulate_for_video(self):
+        from core.adk.workflow import _reset_accumulator
+        _reset_accumulator("Age: 35. Back pain.")
+        result = _accumulate_for_video("No visible asymmetry")
         text = result.content.parts[0].text if hasattr(result, "content") and result.content else str(result.output)
-        assert "CONTEXT" in text
+        assert "Photo Diagnostician" in text
+        assert "No visible asymmetry" in text
 
-    def test_extract_music(self):
-        result = _extract_music_recommendation("client needs relaxation")
+    def test_accumulate_for_music(self):
+        from core.adk.workflow import _reset_accumulator
+        _reset_accumulator("Age: 35. Back pain.")
+        result = _accumulate_for_music("Recommend myofascial release")
         text = result.content.parts[0].text if hasattr(result, "content") and result.content else str(result.output)
+        assert "Technique Expert" in text
         assert "MUSIC_REQ" in text
 
-    def test_finalize_report(self):
-        result = _finalize_report("Report: approved, technique: swedish")
+    def test_accumulate_for_final(self):
+        from core.adk.workflow import _reset_accumulator
+        _reset_accumulator("Age: 35. Back pain.")
+        result = _accumulate_for_final("Ambient music recommended")
         text = result.content.parts[0].text if hasattr(result, "content") and result.content else str(result.output)
         assert "Consultation Complete" in text
+        assert "Ambient music" in text
 
 
 # ─── Vision Pre-Analysis Tests ───
@@ -199,8 +209,8 @@ class TestADKTools:
         assert len(result) > 0
 
     def test_search_media_mock_no_crash(self):
-        from core.adk.tools import _search_media
-        result = _search_media("relaxing ambient music", media_type="audio", max_count=3)
+        from core.adk.tools import search_media
+        result = search_media("relaxing ambient music", media_type="audio", max_count=3)
         assert result is not None
         assert len(result) > 0
 
