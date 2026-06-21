@@ -21,6 +21,7 @@ docs/
 !artef/bot_avatar.svg
 .playwright-mcp/
 tests/
+!tests/test_adk_workflow.py
 static/massage/certificates/*.png
 
 # QA / manual testing (not for public)
