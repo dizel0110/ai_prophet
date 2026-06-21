@@ -17,15 +17,21 @@ import tempfile
 import uvicorn
 from datetime import datetime
 from pathlib import Path
-from aiogram import Bot, Dispatcher
-from aiogram.types import FSInputFile
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from config import TOKEN, PORT, PLATFORM, DATA_DIR, get_vertical_name
-from core.tg_auth import verify_init_data
 from core.network import apply_dns_patch
-from handlers import messages, vip, limits, massage, booking
+
+HAS_BOT = bool(TOKEN)
+if HAS_BOT:
+    from aiogram import Bot, Dispatcher
+    from aiogram.types import FSInputFile
+    from core.tg_auth import verify_init_data
+    from handlers import messages, vip, limits, massage, booking
+else:
+    # заглушка для импорта verify_init_data (нужен для API маршрутов)
+    from core.tg_auth import verify_init_data
 
 # Настройка логов
 LOG_DIR = "logs"
@@ -58,25 +64,32 @@ STATIC_DIR.mkdir(exist_ok=True)
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-def get_bot_instance() -> Bot:
-    from config import TOKEN
-    import os
-    telegram_api_url = os.getenv("TELEGRAM_API_URL")
-    is_hf_space = os.getenv("SPACE_ID") is not None
-    if telegram_api_url:
-        from aiogram.client.session.aiohttp import AiohttpSession
-        from aiogram.client.telegram import TelegramAPIServer
-        server = TelegramAPIServer.from_base(telegram_api_url)
-        session = AiohttpSession()
-        session.api = server
-        return Bot(token=TOKEN, session=session)
-    elif is_hf_space:
-        PROXY_URL = os.getenv("PROXY_URL")
-        if PROXY_URL:
+if HAS_BOT:
+
+    def get_bot_instance() -> "Bot":
+        from config import TOKEN
+        import os
+        telegram_api_url = os.getenv("TELEGRAM_API_URL")
+        is_hf_space = os.getenv("SPACE_ID") is not None
+        if telegram_api_url:
             from aiogram.client.session.aiohttp import AiohttpSession
-            session = AiohttpSession(proxy=PROXY_URL)
+            from aiogram.client.telegram import TelegramAPIServer
+            server = TelegramAPIServer.from_base(telegram_api_url)
+            session = AiohttpSession()
+            session.api = server
             return Bot(token=TOKEN, session=session)
-    return Bot(token=TOKEN)
+        elif is_hf_space:
+            PROXY_URL = os.getenv("PROXY_URL")
+            if PROXY_URL:
+                from aiogram.client.session.aiohttp import AiohttpSession
+                session = AiohttpSession(proxy=PROXY_URL)
+                return Bot(token=TOKEN, session=session)
+        return Bot(token=TOKEN)
+
+else:
+
+    def get_bot_instance():
+        raise RuntimeError("TELEGRAM_TOKEN not set")
 
 def _is_compatible_format(video_path: str) -> bool:
     """Quick ffprobe check: is the file already H.264 + AAC?
@@ -107,12 +120,15 @@ def _is_compatible_format(video_path: str) -> bool:
 
 
 # Dispatcher создаётся ОДИН раз на весь lifecycle
-dp = Dispatcher()
-dp.include_router(vip.router)
-dp.include_router(limits.router)
-dp.include_router(booking.router)   # /book, /my_bookings before massage/messages
-dp.include_router(massage.router)
-dp.include_router(messages.router)
+if HAS_BOT:
+    dp = Dispatcher()
+    dp.include_router(vip.router)
+    dp.include_router(limits.router)
+    dp.include_router(booking.router)   # /book, /my_bookings before massage/messages
+    dp.include_router(massage.router)
+    dp.include_router(messages.router)
+else:
+    dp = None
 
 # ──────────────────── Certificate decoder ────────────────────
 CERTS_JSON = Path(__file__).parent / "static" / "massage" / "certificates" / "certs.json"
@@ -153,6 +169,214 @@ async def root():
     mode_map = {"hf": "HF Spaces", "render": "Render.com", "local": "Polling (Local)"}
     mode = mode_map.get(PLATFORM, PLATFORM)
     return {"status": f"{get_vertical_name()} ({mode})", "platform": PLATFORM}
+
+KAGGLE_DEMO_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Massage AI Consultant — Demo</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
+  body{background:#0f0f1a;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem}
+  .container{max-width:720px;width:100%}
+  h1{font-size:1.8rem;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.3rem}
+  .sub{color:#888;margin-bottom:2rem;font-size:.9rem}
+  .card{background:#1a1a2e;border-radius:12px;padding:1.5rem;margin-bottom:1rem;border:1px solid #2a2a3e}
+  label{display:block;margin-bottom:.5rem;font-weight:600;color:#a78bfa;font-size:.9rem}
+  textarea,input{width:100%;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:8px;padding:.8rem;color:#e0e0e0;font-size:.95rem;outline:none;transition:border .2s}
+  textarea:focus,input:focus{border-color:#a78bfa}
+  textarea{min-height:120px;resize:vertical}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+  .btn{background:linear-gradient(135deg,#a78bfa,#60a5fa);color:#fff;border:none;border-radius:8px;padding:1rem 2rem;font-size:1.05rem;font-weight:600;cursor:pointer;width:100%;transition:opacity .2s;margin-top:.5rem}
+  .btn:hover{opacity:.9}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-secondary{background:#2a2a3e;margin-top:0}
+  .loading{text-align:center;padding:2rem;color:#888;display:none}
+  .spinner{display:inline-block;width:24px;height:24px;border:3px solid #2a2a3e;border-top-color:#a78bfa;border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .result{white-space:pre-wrap;font-size:.9rem;line-height:1.6;display:none}
+  .result .label{color:#a78bfa;font-weight:600}
+  .badge{display:inline-block;background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44;border-radius:20px;padding:.2rem .8rem;font-size:.75rem;margin-bottom:.5rem}
+  .footer{text-align:center;color:#555;font-size:.8rem;margin-top:2rem}
+  .example{color:#60a5fa;font-size:.85rem;cursor:pointer;text-decoration:underline;margin-top:.3rem;display:inline-block}
+  .example:hover{color:#93c5fd}
+  .workflow-log{margin-top:1rem;background:#0a0a1a;border-radius:8px;padding:.8rem;font-size:.8rem;color:#888;max-height:200px;overflow-y:auto;display:none;font-family:monospace}
+  .workflow-log .step{color:#60a5fa}
+  .workflow-log .done{color:#4ade80}
+  .workflow-log .error{color:#f87171}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Massage AI Consultant</h1>
+  <div class="sub">AI Prophet · ADK 2.0 Multi-Agent Workflow · Kaggle Vibecoding Capstone</div>
+
+  <div class="card">
+    <label>Describe your complaint</label>
+    <textarea id="complaint" placeholder="e.g. I have lower back pain after sitting at my desk all day. It started 3 months ago. Pain is dull ache, radiates to right leg sometimes. Age 35, male, no chronic conditions, blood pressure normal.">I have lower back pain after sitting at my desk all day. It started 3 months ago. No chronic conditions. Blood pressure normal. Age 35, male, no allergies, no medications.</textarea>
+    <span class="example" onclick="document.getElementById('complaint').value='I have neck tension and headaches from long hours at computer. Stress related. Female, 28, no health issues.'">📋 Use example: Neck tension</span>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <label>Age</label>
+      <input type="number" id="age" value="35" min="1" max="120">
+    </div>
+    <div class="card">
+      <label>Gender</label>
+      <select id="gender" style="width:100%;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:8px;padding:.8rem;color:#e0e0e0;font-size:.95rem;outline:none">
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="btn" id="startBtn" onclick="startConsultation()">▶ Start Consultation</button>
+
+  <div class="loading" id="loading">
+    <span class="spinner"></span> Running multi-agent workflow...
+    <div class="workflow-log" id="workflowLog"></div>
+  </div>
+
+  <div class="card result" id="resultCard">
+    <div class="badge">Consultation Report</div>
+    <div id="resultContent"></div>
+  </div>
+
+  <div class="footer">
+    Powered by Google ADK 2.0 · 6 agents in graph workflow · gemini-2.5-flash
+  </div>
+</div>
+<script>
+const AGENTS = [
+  'questionnaire_agent', 'photo_diagnost_agent', 'video_motion_agent',
+  'technique_expert_agent', 'music_recommend_agent', 'final_synthesis_agent'
+];
+function log(msg, type) {
+  const log = document.getElementById('workflowLog');
+  log.style.display = 'block';
+  const d = document.createElement('div');
+  d.className = type || 'step';
+  d.textContent = '▸ ' + msg;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+async function startConsultation() {
+  const btn = document.getElementById('startBtn');
+  const loading = document.getElementById('loading');
+  const resultCard = document.getElementById('resultCard');
+  const resultContent = document.getElementById('resultContent');
+  const log = document.getElementById('workflowLog');
+
+  btn.disabled = true;
+  loading.style.display = 'block';
+  resultCard.style.display = 'none';
+  log.style.display = 'none';
+  log.innerHTML = '';
+  resultContent.textContent = '';
+
+  const complaint = document.getElementById('complaint').value.trim();
+  const age = document.getElementById('age').value;
+  const gender = document.getElementById('gender').value;
+
+  log('Starting consultation workflow...', 'step');
+  log('Agent 1/6: questionnaire_agent — analyzing intake', 'step');
+
+  try {
+    const resp = await fetch('/api/demo/consult', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        complaint: complaint,
+        age: parseInt(age),
+        gender: gender,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      log('Error: ' + err, 'error');
+      throw new Error(err);
+    }
+
+    const data = await resp.json();
+    if (data.events) {
+      data.events.forEach((e, i) => {
+        const agentName = e.author || 'agent_' + i;
+        log(agentName + ' — response received (' + e.content.length + ' chars)', 'done');
+      });
+    }
+    log('Workflow complete', 'done');
+
+    resultContent.textContent = data.report || 'No report generated';
+    resultCard.style.display = 'block';
+
+  } catch (e) {
+    log('Workflow failed: ' + e.message, 'error');
+    resultContent.textContent = 'Error: ' + e.message;
+    resultCard.style.display = 'block';
+  }
+
+  loading.style.display = 'none';
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>"""
+
+@app.get("/demo")
+async def kaggle_demo():
+    return HTMLResponse(KAGGLE_DEMO_HTML)
+
+@app.post("/api/demo/consult")
+async def kaggle_demo_consult(req: dict):
+    complaint = req.get("complaint", "")
+    age = req.get("age", 35)
+    gender = req.get("gender", "male")
+
+    full_text = (
+        f"Age: {age}, Gender: {gender}. "
+        f"Complaint: {complaint}"
+    )
+
+    try:
+        from core.adk.workflow import _runner
+        from google.genai import types as genai_types
+
+        content = genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text=full_text)],
+        )
+
+        events = []
+        for event in _runner.run(
+            user_id="demo_user",
+            session_id="demo_session",
+            new_message=content,
+        ):
+            if event.content and event.content.parts:
+                text = ""
+                for p in event.content.parts:
+                    if hasattr(p, "text") and p.text:
+                        text += p.text
+                if text:
+                    author = getattr(event, "author", "system")
+                    events.append({"author": author, "content": text})
+
+        report = ""
+        for e in reversed(events):
+            if e["author"] == "final_synthesis_agent":
+                report = e["content"]
+                break
+        if not report and events:
+            report = events[-1]["content"]
+
+        return {"status": "ok", "events": events, "report": report}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
 
 @app.post("/api/specialist/chat")
 async def api_specialist_chat(req: dict):
@@ -2533,17 +2757,20 @@ if __name__ == "__main__":
     logger.info("🛰️ Система авто-восстановления Пророка запущена (Бесконечный цикл)")
 
     # Polling на всех платформах (на HF блокируется без PROXY_URL)
-    platform_name = {"hf": "HF Spaces", "render": "Render.com", "local": "Local"}.get(PLATFORM, PLATFORM)
-    logger.info(f"📡 {platform_name}: Запуск polling режима")
-    while True:
-        try:
-            asyncio.run(start_bot_polling())
-        except (KeyboardInterrupt, SystemExit):
-            logger.info("🛑 Бот остановлен вручную.")
-            break
-        except Exception as e:
-            logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
-            logger.info("⏳ Попытка воскрешения через 15 секунд...")
-            time.sleep(15)
+    if not HAS_BOT:
+        logger.warning("ℹ️ TELEGRAM_TOKEN не задан — бот не запущен. Работает только API (/demo).")
+    else:
+        platform_name = {"hf": "HF Spaces", "render": "Render.com", "local": "Local"}.get(PLATFORM, PLATFORM)
+        logger.info(f"📡 {platform_name}: Запуск polling режима")
+        while True:
+            try:
+                asyncio.run(start_bot_polling())
+            except (KeyboardInterrupt, SystemExit):
+                logger.info("🛑 Бот остановлен вручную.")
+                break
+            except Exception as e:
+                logger.error(f"🧨 КРИТИЧЕСКИЙ СБОЙ В ЦИКЛЕ: {e}")
+                logger.info("⏳ Попытка воскрешения через 15 секунд...")
+                time.sleep(15)
 
     p_web.terminate()
