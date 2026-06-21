@@ -184,38 +184,59 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   .sub{color:#888;margin-bottom:2rem;font-size:.9rem}
   .card{background:#1a1a2e;border-radius:12px;padding:1.5rem;margin-bottom:1rem;border:1px solid #2a2a3e}
   label{display:block;margin-bottom:.5rem;font-weight:600;color:#a78bfa;font-size:.9rem}
-  textarea,input{width:100%;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:8px;padding:.8rem;color:#e0e0e0;font-size:.95rem;outline:none;transition:border .2s}
-  textarea:focus,input:focus{border-color:#a78bfa}
-  textarea{min-height:120px;resize:vertical}
+  textarea,input,select{width:100%;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:8px;padding:.8rem;color:#e0e0e0;font-size:.95rem;outline:none;transition:border .2s}
+  textarea:focus,input:focus,select:focus{border-color:#a78bfa}
+  textarea{min-height:100px;resize:vertical}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
   .btn{background:linear-gradient(135deg,#a78bfa,#60a5fa);color:#fff;border:none;border-radius:8px;padding:1rem 2rem;font-size:1.05rem;font-weight:600;cursor:pointer;width:100%;transition:opacity .2s;margin-top:.5rem}
   .btn:hover{opacity:.9}
   .btn:disabled{opacity:.4;cursor:not-allowed}
-  .btn-secondary{background:#2a2a3e;margin-top:0}
-  .loading{text-align:center;padding:2rem;color:#888;display:none}
-  .spinner{display:inline-block;width:24px;height:24px;border:3px solid #2a2a3e;border-top-color:#a78bfa;border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem;vertical-align:middle}
+  .btn-sm{background:#2a2a3e;border:none;color:#aaa;border-radius:6px;padding:.4rem 1rem;cursor:pointer;font-size:.8rem}
+  .btn-sm:hover{background:#3a3a4e;color:#fff}
+  .upload-zone{border:2px dashed #2a2a3e;border-radius:8px;padding:1rem;text-align:center;color:#666;cursor:pointer;transition:all .2s;margin-bottom:.5rem}
+  .upload-zone:hover,.upload-zone.dragover{border-color:#a78bfa;color:#a78bfa;background:#a78bfa11}
+  .upload-zone.has-photo{border-color:#4ade80;color:#4ade80}
+  .photo-list{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem}
+  .photo-pill{background:#2a2a3e;border-radius:20px;padding:.2rem .8rem;font-size:.75rem;color:#4ade80;display:flex;align-items:center;gap:.4rem}
+  .photo-pill .remove{cursor:pointer;color:#f87171;font-weight:bold;margin-left:.2rem}
+  .loading{text-align:center;padding:1.5rem;color:#888;display:none}
+  .spinner{display:inline-block;width:20px;height:20px;border:3px solid #2a2a3e;border-top-color:#a78bfa;border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem;vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .result{white-space:pre-wrap;font-size:.9rem;line-height:1.6;display:none}
-  .result .label{color:#a78bfa;font-weight:600}
+  .agent-grid{display:grid;gap:.4rem;margin:1rem 0}
+  .agent-row{display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;border-radius:6px;background:#0a0a1a;font-size:.8rem}
+  .agent-row .status{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+  .agent-row .status.pending{background:#2a2a3e}
+  .agent-row .status.running{background:#fbbf24;animation:pulse 1s infinite}
+  .agent-row .status.done{background:#4ade80}
+  .agent-row .status.error{background:#f87171}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .agent-row .name{color:#aaa;flex:1}
+  .agent-row .name.active{color:#fff;font-weight:600}
+  .agent-row .time{color:#555;font-size:.7rem}
+  .result{display:none}
+  .result-content{white-space:pre-wrap;font-size:.9rem;line-height:1.6;background:#0a0a1a;border-radius:8px;padding:1rem;margin-top:.5rem;max-height:500px;overflow-y:auto}
   .badge{display:inline-block;background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44;border-radius:20px;padding:.2rem .8rem;font-size:.75rem;margin-bottom:.5rem}
+  .badge-success{background:#4ade8022;color:#4ade80;border-color:#4ade8044}
+  .badge-error{background:#f8717122;color:#f87171;border-color:#f8717144}
   .footer{text-align:center;color:#555;font-size:.8rem;margin-top:2rem}
-  .example{color:#60a5fa;font-size:.85rem;cursor:pointer;text-decoration:underline;margin-top:.3rem;display:inline-block}
-  .example:hover{color:#93c5fd}
-  .workflow-log{margin-top:1rem;background:#0a0a1a;border-radius:8px;padding:.8rem;font-size:.8rem;color:#888;max-height:200px;overflow-y:auto;display:none;font-family:monospace}
-  .workflow-log .step{color:#60a5fa}
-  .workflow-log .done{color:#4ade80}
-  .workflow-log .error{color:#f87171}
+  .example-links{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.3rem}
+  .example-links span{color:#60a5fa;font-size:.8rem;cursor:pointer;text-decoration:underline}
+  .example-links span:hover{color:#93c5fd}
 </style>
 </head>
 <body>
 <div class="container">
   <h1>Massage AI Consultant</h1>
-  <div class="sub">AI Prophet · ADK 2.0 Multi-Agent Workflow · Kaggle Vibecoding Capstone</div>
+  <div class="sub">AI Prophet · ADK 2.0 Multi-Agent Graph Workflow · 6 Specialists</div>
 
   <div class="card">
     <label>Describe your complaint</label>
-    <textarea id="complaint" placeholder="e.g. I have lower back pain after sitting at my desk all day. It started 3 months ago. Pain is dull ache, radiates to right leg sometimes. Age 35, male, no chronic conditions, blood pressure normal.">I have lower back pain after sitting at my desk all day. It started 3 months ago. No chronic conditions. Blood pressure normal. Age 35, male, no allergies, no medications.</textarea>
-    <span class="example" onclick="document.getElementById('complaint').value='I have neck tension and headaches from long hours at computer. Stress related. Female, 28, no health issues.'">📋 Use example: Neck tension</span>
+    <textarea id="complaint" placeholder="Describe your pain, discomfort, or reason for visit...">I have lower back pain after sitting at my desk all day. Started 3 months ago. Dull ache, radiates to right leg sometimes. No chronic conditions. Blood pressure normal.</textarea>
+    <div class="example-links">
+      <span onclick="setExample('neck')">Neck tension</span>
+      <span onclick="setExample('back')">Lower back pain</span>
+      <span onclick="setExample('shoulder')">Shoulder stiffness</span>
+    </div>
   </div>
 
   <div class="row">
@@ -225,7 +246,7 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
     </div>
     <div class="card">
       <label>Gender</label>
-      <select id="gender" style="width:100%;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:8px;padding:.8rem;color:#e0e0e0;font-size:.95rem;outline:none">
+      <select id="gender">
         <option value="male">Male</option>
         <option value="female">Female</option>
         <option value="other">Other</option>
@@ -233,95 +254,193 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div class="card">
+    <label>Upload photos (optional, for visual diagnosis)</label>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div>+ Click or drop photos here</div>
+      <div style="font-size:.75rem;color:#555;margin-top:.3rem">Posture photos help visual diagnostician agent</div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)">
+    <div class="photo-list" id="photoList"></div>
+  </div>
+
   <button class="btn" id="startBtn" onclick="startConsultation()">▶ Start Consultation</button>
 
   <div class="loading" id="loading">
-    <span class="spinner"></span> Running multi-agent workflow...
-    <div class="workflow-log" id="workflowLog"></div>
+    <div class="agent-grid" id="agentGrid"></div>
   </div>
 
   <div class="card result" id="resultCard">
-    <div class="badge">Consultation Report</div>
-    <div id="resultContent"></div>
+    <div class="badge badge-success">Consultation Report</div>
+    <div class="result-content" id="resultContent"></div>
   </div>
 
   <div class="footer">
-    Powered by Google ADK 2.0 · 6 agents in graph workflow · gemini-2.5-flash
+    Powered by Google ADK 2.0 · Sequential workflow · gemini-2.5-flash<br>
+    <span style="font-size:.7rem">Kaggle Vibecoding Agents Capstone · June 2026</span>
   </div>
 </div>
 <script>
 const AGENTS = [
-  'questionnaire_agent', 'photo_diagnost_agent', 'video_motion_agent',
-  'technique_expert_agent', 'music_recommend_agent', 'final_synthesis_agent'
+  {id:'questionnaire_agent', label:'Questionnaire Analyst', desc:'Intake & contraindications'},
+  {id:'photo_diagnost_agent', label:'Visual Diagnostician', desc:'Posture & asymmetry'},
+  {id:'video_motion_agent', label:'Movement Specialist', desc:'Range of motion'},
+  {id:'technique_expert_agent', label:'Technique Expert', desc:'Massage modalities'},
+  {id:'music_recommend_agent', label:'Music Curator', desc:'Session soundtrack'},
+  {id:'final_synthesis_agent', label:'Head Expert', desc:'Final report'},
 ];
-function log(msg, type) {
-  const log = document.getElementById('workflowLog');
-  log.style.display = 'block';
-  const d = document.createElement('div');
-  d.className = type || 'step';
-  d.textContent = '▸ ' + msg;
-  log.appendChild(d);
-  log.scrollTop = log.scrollHeight;
+const uploadedPhotos = [];
+
+const EXAMPLES = {
+  neck: "Neck tension and frequent headaches from 10h/day computer work. Stress-related. Female, 28, no health issues, no medications. Pain is sharp when turning head left.",
+  back: "Lower back pain after sitting at desk all day. Started 3 months ago. Dull ache that radiates to right leg occasionally. Male, 35. No chronic conditions. BP normal.",
+  shoulder: "Right shoulder stiffness and clicking when raising arm above shoulder height. Swimmer, male, 42. Previous rotator cuff strain 2 years ago. No current medication.",
+};
+
+function setExample(key) {
+  document.getElementById('complaint').value = EXAMPLES[key];
 }
+
+function handleFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/')) continue;
+    uploadedPhotos.push({name: f.name, file: f});
+  }
+  renderPhotoList();
+}
+
+function renderPhotoList() {
+  const list = document.getElementById('photoList');
+  const zone = document.getElementById('uploadZone');
+  if (uploadedPhotos.length === 0) {
+    list.innerHTML = '';
+    zone.className = 'upload-zone';
+    return;
+  }
+  zone.className = 'upload-zone has-photo';
+  list.innerHTML = uploadedPhotos.map((p, i) =>
+    `<div class="photo-pill"><span>&#128247;</span> ${p.name}<span class="remove" onclick="uploadedPhotos.splice(${i},1);renderPhotoList()">&times;</span></div>`
+  ).join('');
+}
+
+async function uploadPhotos() {
+  const paths = [];
+  for (const p of uploadedPhotos) {
+    const form = new FormData();
+    form.append('file', p.file);
+    const resp = await fetch('/api/demo/upload', {method:'POST', body:form});
+    const data = await resp.json();
+    if (data.status === 'ok') paths.push(data.path);
+  }
+  return paths;
+}
+
+function renderAgentGrid() {
+  const grid = document.getElementById('agentGrid');
+  grid.innerHTML = AGENTS.map(a =>
+    `<div class="agent-row" id="row-${a.id}">
+      <div class="status pending" id="dot-${a.id}"></div>
+      <div class="name" id="name-${a.id}">${a.label}</div>
+      <span style="color:#555;font-size:.7rem">${a.desc}</span>
+      <span class="time" id="time-${a.id}"></span>
+    </div>`
+  ).join('');
+}
+
+function setAgentStatus(id, status) {
+  const dot = document.getElementById('dot-' + id);
+  const name = document.getElementById('name-' + id);
+  dot.className = 'status ' + status;
+  name.className = status === 'done' ? 'name active' : 'name';
+  if (status === 'running') {
+    document.getElementById('time-' + id).textContent = '';
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const sec = Math.floor((Date.now() - start) / 1000);
+      document.getElementById('time-' + id).textContent = sec + 's';
+    }, 200);
+    dot._interval = interval;
+  } else {
+    if (dot._interval) clearInterval(dot._interval);
+  }
+}
+
 async function startConsultation() {
   const btn = document.getElementById('startBtn');
   const loading = document.getElementById('loading');
   const resultCard = document.getElementById('resultCard');
   const resultContent = document.getElementById('resultContent');
-  const log = document.getElementById('workflowLog');
 
   btn.disabled = true;
   loading.style.display = 'block';
   resultCard.style.display = 'none';
-  log.style.display = 'none';
-  log.innerHTML = '';
   resultContent.textContent = '';
+
+  renderAgentGrid();
 
   const complaint = document.getElementById('complaint').value.trim();
   const age = document.getElementById('age').value;
   const gender = document.getElementById('gender').value;
 
-  log('Starting consultation workflow...', 'step');
-  log('Agent 1/6: questionnaire_agent — analyzing intake', 'step');
+  if (!complaint) { alert('Please describe your complaint'); btn.disabled = false; loading.style.display = 'none'; return; }
+
+  setAgentStatus('questionnaire_agent', 'running');
+
+  let photoPaths = [];
+  if (uploadedPhotos.length > 0) {
+    setAgentStatus('photo_diagnost_agent', 'running');
+    try {
+      photoPaths = await uploadPhotos();
+      setAgentStatus('photo_diagnost_agent', 'done');
+    } catch(e) {
+      setAgentStatus('photo_diagnost_agent', 'error');
+    }
+  }
 
   try {
     const resp = await fetch('/api/demo/consult', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        complaint: complaint,
-        age: parseInt(age),
-        gender: gender,
+        complaint, age: parseInt(age), gender, photo_paths: photoPaths,
       }),
     });
 
-    if (!resp.ok) {
-      const err = await resp.text();
-      log('Error: ' + err, 'error');
-      throw new Error(err);
-    }
-
+    if (!resp.ok) throw new Error(await resp.text());
     const data = await resp.json();
+
     if (data.events) {
-      data.events.forEach((e, i) => {
-        const agentName = e.author || 'agent_' + i;
-        log(agentName + ' — response received (' + e.content.length + ' chars)', 'done');
+      const eventAuthors = data.events.map(e => e.author);
+      AGENTS.forEach(a => {
+        if (eventAuthors.includes(a.id)) {
+          setAgentStatus(a.id, 'done');
+        } else if (a.id === 'photo_diagnost_agent' && !uploadedPhotos.length) {
+          setAgentStatus(a.id, 'done');
+        }
       });
     }
-    log('Workflow complete', 'done');
 
     resultContent.textContent = data.report || 'No report generated';
     resultCard.style.display = 'block';
-
   } catch (e) {
-    log('Workflow failed: ' + e.message, 'error');
-    resultContent.textContent = 'Error: ' + e.message;
+    AGENTS.forEach(a => setAgentStatus(a.id, 'error'));
     resultCard.style.display = 'block';
+    resultContent.textContent = 'Error: ' + e.message;
   }
 
   loading.style.display = 'none';
   btn.disabled = false;
 }
+
+// Drag & drop support
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+});
 </script>
 </body>
 </html>"""
@@ -330,11 +449,27 @@ async function startConsultation() {
 async def kaggle_demo():
     return HTMLResponse(KAGGLE_DEMO_HTML)
 
+@app.post("/api/demo/upload")
+async def kaggle_demo_upload(file: UploadFile = File(...)):
+    """Upload a photo for massage consultation vision analysis."""
+    try:
+        contents = await file.read()
+        ext = Path(file.filename).suffix if file.filename else ".jpg"
+        dest = Path("temp") / f"demo_upload_{uuid.uuid4().hex}{ext}"
+        dest.parent.mkdir(exist_ok=True)
+        dest.write_bytes(contents)
+        return {"status": "ok", "path": str(dest)}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 @app.post("/api/demo/consult")
 async def kaggle_demo_consult(req: dict):
     complaint = req.get("complaint", "")
     age = req.get("age", 35)
     gender = req.get("gender", "male")
+    photo_paths = req.get("photo_paths", [])
+    video_frames = req.get("video_frames", [])
 
     full_text = (
         f"Age: {age}, Gender: {gender}. "
@@ -342,28 +477,14 @@ async def kaggle_demo_consult(req: dict):
     )
 
     try:
-        from core.adk.workflow import _runner
-        from google.genai import types as genai_types
+        from core.adk.workflow import run_massage_consultation
 
-        content = genai_types.Content(
-            role="user",
-            parts=[genai_types.Part(text=full_text)],
+        events = await run_massage_consultation(
+            chat_id=999,
+            user_message=full_text,
+            photo_paths=photo_paths or [],
+            video_frames_paths=video_frames or [],
         )
-
-        events = []
-        for event in _runner.run(
-            user_id="demo_user",
-            session_id="demo_session",
-            new_message=content,
-        ):
-            if event.content and event.content.parts:
-                text = ""
-                for p in event.content.parts:
-                    if hasattr(p, "text") and p.text:
-                        text += p.text
-                if text:
-                    author = getattr(event, "author", "system")
-                    events.append({"author": author, "content": text})
 
         report = ""
         for e in reversed(events):
