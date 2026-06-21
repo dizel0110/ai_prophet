@@ -1,6 +1,7 @@
 # Core
 aiogram
-google-genai
+google-genai>=2.8.0
+google-adk>=2.0.0
 python-dotenv
 
 # API & DNS
