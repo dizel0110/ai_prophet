@@ -14,7 +14,14 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Push to hub
+      - name: Push main → ai_prophet
+        if: github.ref == 'refs/heads/main'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: git push --force https://dizel0110:$HF_TOKEN@huggingface.co/spaces/dizel0110/ai_prophet HEAD:main
+
+      - name: Push kaggle → kaggle-massage-agent
+        if: github.ref == 'refs/heads/kaggle'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: git push --force https://dizel0110:$HF_TOKEN@huggingface.co/spaces/dizel0110/kaggle-massage-agent HEAD:main
