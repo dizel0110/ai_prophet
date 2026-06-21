@@ -156,8 +156,8 @@ def decode_certs():
 
 decode_certs()
 
-# Webhook routes (только на HF Spaces, после dp — чтобы не красть роутеры)
-if IS_HF_SPACE:
+# Webhook routes (только на HF Spaces с ботом, после dp — чтобы не красть роутеры)
+if IS_HF_SPACE and HAS_BOT:
     try:
         from webhook_only import setup_webhook_routes
         setup_webhook_routes(app)
