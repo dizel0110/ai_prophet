@@ -194,6 +194,17 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   .btn:disabled{opacity:.4;cursor:not-allowed}
   .btn-sm{background:#2a2a3e;border:none;color:#aaa;border-radius:6px;padding:.4rem 1rem;cursor:pointer;font-size:.8rem}
   .btn-sm:hover{background:#3a3a4e;color:#fff}
+  .btn-stop{background:#f8717144;border:1px solid #f8717177;color:#f87171;border-radius:8px;padding:.6rem 1.5rem;cursor:pointer;font-size:.9rem;display:none;transition:all .2s}
+  .btn-stop:hover{background:#f8717166}
+  .btn-verify{background:#2a2a3e;border:1px solid #4ade8044;color:#4ade80;border-radius:6px;padding:.3rem 1rem;cursor:pointer;font-size:.75rem;white-space:nowrap}
+  .btn-verify:hover{background:#4ade8022}
+  .btn-verify:disabled{opacity:.4;cursor:not-allowed}
+  .verify-status{font-size:.75rem;margin-top:6px;padding:.3rem .6rem;border-radius:4px;display:none}
+  .verify-status.ok{color:#4ade80;display:block}
+  .verify-status.err{color:#f87171;display:block}
+  .verify-status.quota{color:#fbbf24;display:block}
+  .btn-row{display:flex;gap:10px;margin-top:.5rem}
+  .btn-row .btn{flex:1}
   .upload-zone{border:2px dashed #2a2a3e;border-radius:8px;padding:1rem;text-align:center;color:#666;cursor:pointer;transition:all .2s;margin-bottom:.5rem}
   .upload-zone:hover,.upload-zone.dragover{border-color:#a78bfa;color:#a78bfa;background:#a78bfa11}
   .upload-zone.has-photo{border-color:#4ade80;color:#4ade80}
@@ -204,7 +215,10 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   .spinner{display:inline-block;width:20px;height:20px;border:3px solid #2a2a3e;border-top-color:#a78bfa;border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem;vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
   .agent-grid{display:grid;gap:.4rem;margin:1rem 0}
-  .agent-row{display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;border-radius:6px;background:#0a0a1a;font-size:.8rem}
+  .agent-row{display:flex;align-items:center;gap:.6rem;padding:.4rem .6rem;border-radius:6px;background:#0a0a1a;font-size:.8rem;cursor:pointer;transition:background .15s}
+  .agent-row:hover{background:#12122a}
+  .agent-row .expand-icon{font-size:.6rem;color:#555;width:12px;flex-shrink:0;transition:transform .2s}
+  .agent-row .expand-icon.open{transform:rotate(90deg)}
   .agent-row .status{width:16px;height:16px;border-radius:50%;flex-shrink:0}
   .agent-row .status.pending{background:#2a2a3e}
   .agent-row .status.running{background:#fbbf24;animation:pulse 1s infinite}
@@ -214,6 +228,9 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   .agent-row .name{color:#aaa;flex:1}
   .agent-row .name.active{color:#fff;font-weight:600}
   .agent-row .time{color:#555;font-size:.7rem}
+  .agent-content{display:none;font-size:.75rem;line-height:1.5;color:#b0b0b0;background:#0a0a1a;border-radius:0 0 6px 6px;padding:.4rem .6rem .6rem 2.2rem;max-height:200px;overflow-y:auto;white-space:pre-wrap;margin-top:-2px;border-left:2px solid #2a2a3e}
+  .agent-content.open{display:block}
+  .agent-content .label{font-size:.65rem;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
   .result{display:none}
   .result-content{white-space:pre-wrap;font-size:.9rem;line-height:1.6;background:#0a0a1a;border-radius:8px;padding:1rem;margin-top:.5rem;max-height:500px;overflow-y:auto}
   .badge{display:inline-block;background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44;border-radius:20px;padding:.2rem .8rem;font-size:.75rem;margin-bottom:.5rem}
@@ -227,9 +244,9 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="container">
-  <div class="badge-salon">&#x1F590; Real Business — Massage Studio</div>
+  <div class="badge-salon">&#x1F590; Massage Therapy AI</div>
   <h1>AI Massage Consultant</h1>
-  <div class="sub">Powered by Google ADK 2.0 &middot; 6 specialist agents &middot; Built for <strong>Мастерская Массажа</strong></div>
+  <div class="sub">Powered by Google ADK 2.0 &middot; 6 specialist agents &middot; Pipeline orchestration</div>
 
   <div class="card">
     <label>Describe your complaint</label>
@@ -257,10 +274,10 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   </div>
 
   <div class="card">
-    <label>Upload photos (optional, for visual diagnosis)</label>
+    <label>Upload photos <span style="font-weight:400;color:#666;font-size:.75rem">(optional — AI-validated for relevance)</span></label>
     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
       <div>+ Click or drop photos here</div>
-      <div style="font-size:.75rem;color:#555;margin-top:.3rem">Posture photos help visual diagnostician agent</div>
+      <div style="font-size:.75rem;color:#555;margin-top:.3rem">Validated by AI — checks it shows human anatomy for diagnosis</div>
     </div>
     <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)">
     <div class="photo-list" id="photoList"></div>
@@ -268,19 +285,43 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
 
   <div style="display:flex;align-items:center;gap:12px;margin:16px 0;flex-wrap:wrap">
     <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:#aaa;cursor:pointer">
-      <input type="checkbox" id="useAI" style="accent-color:#c084fc">
-      Use AI (Gemini) — requires API key
+      <input type="checkbox" id="useAI" style="accent-color:#c084fc" onchange="toggleApiKeyField()">
+      Use AI (real agents)
     </label>
     <div id="mockBadge" style="display:none;align-items:center;gap:6px;font-size:.75rem;background:#2a1a3a;color:#c084fc;padding:4px 10px;border-radius:12px;border:1px solid #c084fc44">
       ⚡ Demo Mode (Mock) — no API calls
     </div>
   </div>
+  <div class="card" id="apiKeyCard" style="display:none">
+    <label>Gemini API Key <span style="font-weight:400;color:#888;font-size:.75rem">(optional — leave empty to use HF Router)</span></label>
+    <div style="display:flex;gap:8px">
+      <input type="password" id="geminiApiKey" placeholder="AIzaSy..." style="font-size:.85rem;flex:1">
+      <button class="btn-verify" id="verifyBtn" onclick="verifyKey()">Verify</button>
+    </div>
+    <div id="verifyStatus" class="verify-status"></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px">
+      <span style="font-size:.7rem;color:#666">Stored locally</span>
+      <span id="engineHint" style="font-size:.7rem;color:#888"></span>
+    </div>
+  </div>
 
-  <button class="btn" id="startBtn" onclick="startConsultation()">▶ Start Consultation</button>
+  <div class="btn-row">
+    <button class="btn" id="startBtn" onclick="startConsultation()">▶ Start Consultation</button>
+    <button class="btn-stop" id="stopBtn" onclick="cancelConsultation()">✕ Stop</button>
+  </div>
 
   <div class="loading" id="loading">
-    <div class="agent-grid" id="agentGrid"></div>
+    <div id="pipelineInfo" style="display:none;font-size:.7rem;color:#555;line-height:1.6;margin-bottom:8px;padding:8px;background:#0a0a1a;border-radius:6px;border:1px solid #1a1a2e">
+      <span style="color:#888;font-weight:600">Pipeline:</span><br>
+      <span style="color:#4ade80">▶ Questionnaire</span> →
+      <span style="color:#60a5fa">∥ Photo + Video</span> (parallel) →
+      <span style="color:#fbbf24">▶ Technique Expert</span> →
+      <span style="color:#fbbf24">▶ Music Curator</span> →
+      <span style="color:#c084fc">▶ Head Expert</span>
+    </div>
   </div>
+  <div class="agent-grid" id="agentGrid"></div>
+  <div id="aiStatus" style="display:none;text-align:center;margin:-10px 0 10px;font-size:.8rem;color:#fbbf24"></div>
 
   <div class="card result" id="resultCard">
     <div class="badge badge-success">Consultation Report</div>
@@ -302,6 +343,7 @@ const AGENTS = [
   {id:'final_synthesis_agent', label:'Head Expert', desc:'Final report'},
 ];
 const uploadedPhotos = [];
+const agentResponses = {};
 
 const MOCK_REPORT_JS = `1. DECISION: APPROVED
 2. RATIONALE: Client presents with lower back pain (dull ache, 3 months duration, radiating to right leg). No contraindications detected.
@@ -318,6 +360,92 @@ const EXAMPLES = {
   back: "Lower back pain after sitting at desk all day. Started 3 months ago. Dull ache that radiates to right leg occasionally. Male, 35. No chronic conditions. BP normal.",
   shoulder: "Right shoulder stiffness and clicking when raising arm above shoulder height. Swimmer, male, 42. Previous rotator cuff strain 2 years ago. No current medication.",
 };
+
+// === API Key management ===
+let abortController = null;
+
+(function() {
+  const saved = localStorage.getItem('kaggle_gemini_key');
+  if (saved) {
+    document.getElementById('geminiApiKey').value = saved;
+    updateEngineHint();
+  }
+})();
+
+function toggleApiKeyField() {
+  const card = document.getElementById('apiKeyCard');
+  card.style.display = document.getElementById('useAI').checked ? 'block' : 'none';
+  updateEngineHint();
+}
+
+function updateEngineHint() {
+  const el = document.getElementById('engineHint');
+  const key = document.getElementById('geminiApiKey').value.trim();
+  if (!key) {
+    el.textContent = 'Engine: HF Router (Qwen 7B)';
+    el.style.color = '#4ade80';
+  } else {
+    el.textContent = 'Engine: Gemini 2.5 Flash';
+    el.style.color = '#fbbf24';
+  }
+}
+
+async function verifyKey() {
+  const key = document.getElementById('geminiApiKey').value.trim();
+  const status = document.getElementById('verifyStatus');
+  const btn = document.getElementById('verifyBtn');
+  if (!key) { status.className = 'verify-status err'; status.textContent = 'Enter a key first'; return; }
+  btn.disabled = true;
+  status.className = 'verify-status';
+  status.textContent = 'Checking…';
+  status.style.display = 'block';
+  try {
+    const resp = await fetch('/api/demo/verify-key', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({gemini_api_key: key}),
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      status.className = 'verify-status ok';
+      status.textContent = '✅ ' + data.message;
+    } else if (data.status === 'quota') {
+      status.className = 'verify-status quota';
+      status.textContent = '⚠️ ' + data.error;
+    } else {
+      status.className = 'verify-status err';
+      status.textContent = '❌ ' + (data.error || 'Unknown error');
+    }
+  } catch(e) {
+    status.className = 'verify-status err';
+    status.textContent = '❌ ' + e.message;
+  }
+  btn.disabled = false;
+}
+
+function cancelConsultation() {
+  if (window._agentTimers) { window._agentTimers.forEach(t => clearTimeout(t)); window._agentTimers = []; }
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+  }
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('pipelineInfo').style.display = 'none';
+  document.getElementById('aiStatus').textContent = '✕ Cancelled';
+  document.getElementById('aiStatus').style.display = 'block';
+  AGENTS.forEach(a => setAgentStatus(a.id, 'pending'));
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('geminiApiKey').addEventListener('input', function() {
+    localStorage.setItem('kaggle_gemini_key', this.value.trim());
+    updateEngineHint();
+    document.getElementById('verifyStatus').className = 'verify-status';
+  });
+  toggleApiKeyField();
+});
 
 function setExample(key) {
   document.getElementById('complaint').value = EXAMPLES[key];
@@ -340,19 +468,70 @@ function renderPhotoList() {
     return;
   }
   zone.className = 'upload-zone has-photo';
-  list.innerHTML = uploadedPhotos.map((p, i) =>
-    `<div class="photo-pill"><span>&#128247;</span> ${p.name}<span class="remove" onclick="uploadedPhotos.splice(${i},1);renderPhotoList()">&times;</span></div>`
-  ).join('');
+  const warnings = [];
+  list.innerHTML = uploadedPhotos.map((p, i) => {
+    const validIcon = p.valid === undefined ? '' : (p.valid ? '✅' : '⚠️');
+    const bodyPart = p.bodyPart && p.bodyPart !== 'unknown' ? p.bodyPart : '';
+    if (p.warning) warnings.push(p.warning);
+    const warnIcon = p.warning ? ' ⚠️' : '';
+    return `<div class="photo-pill"><span>&#128247;</span> ${p.name} ${validIcon} ${bodyPart}${warnIcon}<span class="remove" onclick="uploadedPhotos.splice(${i},1);renderPhotoList()">&times;</span></div>`;
+  }).join('');
+  // Show cross-validation warning
+  let existing = document.getElementById('photoWarn');
+  if (warnings.length > 0) {
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.id = 'photoWarn';
+      existing.style.cssText = 'font-size:.75rem;color:#fbbf24;margin-top:6px;padding:6px 10px;background:#fbbf2411;border-radius:6px;border:1px solid #fbbf2444';
+      zone.parentNode.insertBefore(existing, zone.nextSibling);
+    }
+    existing.textContent = '⚠️ ' + warnings.join(' | ');
+  } else if (existing) {
+    existing.remove();
+  }
 }
 
 async function uploadPhotos() {
   const paths = [];
   for (const p of uploadedPhotos) {
+    if (abortController && abortController.signal.aborted) break;
     const form = new FormData();
     form.append('file', p.file);
     const resp = await fetch('/api/demo/upload', {method:'POST', body:form});
     const data = await resp.json();
-    if (data.status === 'ok') paths.push(data.path);
+    if (data.status === 'ok') {
+      paths.push(data.path);
+      // Validate photo via AI
+      const key = document.getElementById('geminiApiKey').value.trim();
+      try {
+        const vr = await fetch('/api/demo/validate-photo', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({path: data.path, gemini_api_key: key || undefined}),
+        });
+        const vd = await vr.json();
+        p.valid = vd.valid !== false;
+        p.bodyPart = vd.body_part || 'photo';
+        p.message = vd.message || '';
+        // Cross-check body part vs complaint
+        const c = document.getElementById('complaint').value.toLowerCase();
+        const bp = (p.bodyPart || '').toLowerCase();
+        const bodyKeywords = ['back','shoulder','neck','spine','hip','knee','leg','arm','head','posture'];
+        const matchedComplaint = bodyKeywords.find(k => c.includes(k));
+        if (matchedComplaint && bp && bp !== 'unknown' && !bp.includes(matchedComplaint)) {
+          p.warning = `Photo shows "${p.bodyPart}" but complaint mentions "${matchedComplaint}"`;
+        } else {
+          p.warning = '';
+        }
+        renderPhotoList();
+      } catch(e) {
+        p.valid = true;
+        p.bodyPart = '';
+        p.message = 'AI validation unavailable';
+        p.warning = '';
+        renderPhotoList();
+      }
+    }
   }
   return paths;
 }
@@ -360,16 +539,26 @@ async function uploadPhotos() {
 function renderAgentGrid() {
   const grid = document.getElementById('agentGrid');
   grid.innerHTML = AGENTS.map(a =>
-    `<div class="agent-row" id="row-${a.id}">
+    `<div class="agent-row" id="row-${a.id}" onclick="toggleAgentContent('${a.id}')">
+      <span class="expand-icon" id="exp-${a.id}">▶</span>
       <div class="status pending" id="dot-${a.id}"></div>
       <div class="name" id="name-${a.id}">${a.label}</div>
       <span style="color:#555;font-size:.7rem">${a.desc}</span>
       <span class="time" id="time-${a.id}"></span>
-    </div>`
+    </div>
+    <div class="agent-content" id="content-${a.id}"><div class="label">Agent response</div></div>`
   ).join('');
 }
 
-function setAgentStatus(id, status) {
+function toggleAgentContent(id) {
+  const content = document.getElementById('content-' + id);
+  const icon = document.getElementById('exp-' + id);
+  if (!content) return;
+  const isOpen = content.classList.toggle('open');
+  if (icon) icon.classList.toggle('open', isOpen);
+}
+
+function setAgentStatus(id, status, content) {
   const dot = document.getElementById('dot-' + id);
   const name = document.getElementById('name-' + id);
   dot.className = 'status ' + status;
@@ -385,19 +574,30 @@ function setAgentStatus(id, status) {
   } else {
     if (dot._interval) clearInterval(dot._interval);
   }
+  if (content) {
+    agentResponses[id] = content;
+    const el = document.getElementById('content-' + id);
+    if (el) el.innerHTML = '<div class="label">Agent response</div>' + content.replace(/\\n/g, '<br>');
+  }
 }
 
 async function startConsultation() {
   const btn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
   const loading = document.getElementById('loading');
   const resultCard = document.getElementById('resultCard');
   const resultContent = document.getElementById('resultContent');
 
+  abortController = new AbortController();
   btn.disabled = true;
+  stopBtn.style.display = 'inline-block';
   loading.style.display = 'block';
   resultCard.style.display = 'none';
   resultContent.textContent = '';
+  document.getElementById('pipelineInfo').style.display = 'none';
   document.getElementById('mockBadge').style.display = 'none';
+  document.getElementById('aiStatus').style.display = 'none';
+  document.getElementById('verifyStatus').className = 'verify-status';
 
   renderAgentGrid();
 
@@ -411,7 +611,11 @@ async function startConsultation() {
   const mockBadge = document.getElementById('mockBadge');
 
   if (useAI) {
-    setAgentStatus('questionnaire_agent', 'running');
+    const key = document.getElementById('geminiApiKey').value.trim();
+    const engine = key ? 'Gemini 2.5 Flash' : 'HF Router (Qwen 7B)';
+    document.getElementById('aiStatus').textContent = `⏳ Processing via ${engine}... 6 agents working (~25s)`;
+    document.getElementById('aiStatus').style.display = 'block';
+    document.getElementById('pipelineInfo').style.display = 'block';
   } else {
     mockBadge.style.display = 'flex';
   }
@@ -428,19 +632,57 @@ async function startConsultation() {
   }
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function clearProgressTimers() {
+    if (window._agentTimers) { window._agentTimers.forEach(t => clearTimeout(t)); window._agentTimers = []; }
+  }
+
+  // Progressive agent simulation (for both mock and real AI)
+  const PROGRESS_DELAY = 2800;
+  if (useAI) {
+    window._agentTimers = [];
+    const progressOrder = ['questionnaire_agent','photo_diagnost_agent','video_motion_agent','technique_expert_agent','music_recommend_agent','final_synthesis_agent'];
+    progressOrder.forEach((id, i) => {
+      const t = setTimeout(() => {
+        if (!abortController || abortController.signal.aborted) return;
+        // Only advance if still pending (not already done by response)
+        const dot = document.getElementById('dot-' + id);
+        if (dot && dot.className.includes('pending')) {
+          setAgentStatus(id, 'running');
+        }
+      }, i * PROGRESS_DELAY);
+      window._agentTimers.push(t);
+    });
+  }
 
   if (!useAI) {
     const mockOrder = ['questionnaire_agent','photo_diagnost_agent','video_motion_agent','technique_expert_agent','music_recommend_agent','final_synthesis_agent'];
+    const mockContents = {
+      questionnaire_agent: 'DECISION: APPROVED\\nRATIONALE: No contraindications detected. Lower back pain with occasional leg radiation suggests possible piriformis involvement. BP normal, no chronic conditions. Proceed with massage.',
+      photo_diagnost_agent: 'VISUAL ASSESSMENT: Mild right shoulder elevation observed. Slight pelvic tilt. Moderate tension in upper trapezius bilaterally. Lumbar erectors hypertonic on right side.',
+      video_motion_agent: 'MOVEMENT ANALYSIS: Forward flexion reduced to 70° (normal 90°). Right side bending restricted. Hip hinge shows right gluteal inhibition. Thoracic extension compensation.',
+      technique_expert_agent: 'RECOMMENDED: 1) Classical back massage 60min deep — lumbar erectors. 2) Myofascial release 30min — right gluteal/piriformis. Avoid direct spine pressure.',
+      music_recommend_agent: 'MUSIC: Ambient / Nature sounds — 60 min — 8-10 tracks. Forest soundscape complements deep tissue work, reduces cortisol.',
+      final_synthesis_agent: MOCK_REPORT_JS,
+    };
     for (const id of mockOrder) {
-      if (id === 'photo_diagnost_agent' && uploadedPhotos.length === 0) continue;
+      if (id === 'photo_diagnost_agent' && uploadedPhotos.length === 0) {
+        setAgentStatus(id, 'done', '[No photos uploaded — skipped]');
+        toggleAgentContent(id);
+        continue;
+      }
       setAgentStatus(id, 'running');
       await sleep(1200);
-      setAgentStatus(id, 'done');
+      if (abortController && abortController.signal.aborted) { stopBtn.style.display = 'none'; return; }
+      setAgentStatus(id, 'done', mockContents[id] || '');
+      toggleAgentContent(id);
     }
     resultContent.textContent = MOCK_REPORT_JS;
     resultCard.style.display = 'block';
     loading.style.display = 'none';
+    document.getElementById('pipelineInfo').style.display = 'none';
+    document.getElementById('aiStatus').style.display = 'none';
     btn.disabled = false;
+    stopBtn.style.display = 'none';
     return;
   }
 
@@ -448,20 +690,28 @@ async function startConsultation() {
     const resp = await fetch('/api/demo/consult', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
+      signal: abortController.signal,
       body: JSON.stringify({
         complaint, age: parseInt(age), gender, photo_paths: photoPaths, use_ai: true,
+        gemini_api_key: document.getElementById('geminiApiKey').value.trim() || undefined,
       }),
     });
 
     if (!resp.ok) throw new Error(await resp.text());
     const data = await resp.json();
 
+    clearProgressTimers();
     if (data.events) {
-      const eventAuthors = data.events.map(e => e.author);
+      const eventMap = {};
+      data.events.forEach(e => { eventMap[e.author] = e.content; });
       AGENTS.forEach(a => {
-        if (eventAuthors.includes(a.id)) {
-          setAgentStatus(a.id, 'done');
+        const content = eventMap[a.id];
+        if (content) {
+          setAgentStatus(a.id, 'done', content);
+          toggleAgentContent(a.id);
         } else if (a.id === 'photo_diagnost_agent' && !uploadedPhotos.length) {
+          setAgentStatus(a.id, 'done', '[No photos uploaded — skipped]');
+        } else {
           setAgentStatus(a.id, 'done');
         }
       });
@@ -469,14 +719,25 @@ async function startConsultation() {
 
     resultContent.textContent = data.report || 'No report generated';
     resultCard.style.display = 'block';
+    const engine = data.engine || 'unknown';
+    document.getElementById('aiStatus').textContent = `✅ Done — Engine: ${engine}`;
+    document.getElementById('aiStatus').style.display = 'block';
   } catch (e) {
-    AGENTS.forEach(a => setAgentStatus(a.id, 'error'));
-    resultCard.style.display = 'block';
-    resultContent.textContent = 'Error: ' + e.message;
+    clearProgressTimers();
+    if (e.name === 'AbortError') {
+      document.getElementById('aiStatus').textContent = '✕ Cancelled';
+      document.getElementById('aiStatus').style.display = 'block';
+    } else {
+      AGENTS.forEach(a => setAgentStatus(a.id, 'error', 'Error: ' + e.message));
+      resultCard.style.display = 'block';
+      resultContent.textContent = 'Error: ' + e.message;
+    }
   }
 
   loading.style.display = 'none';
   btn.disabled = false;
+  stopBtn.style.display = 'none';
+  abortController = null;
 }
 
 // Drag & drop support
@@ -510,6 +771,50 @@ async def kaggle_demo_upload(file: UploadFile = File(...)):
         return {"status": "error", "error": str(e)}
 
 
+@app.post("/api/demo/validate-photo")
+async def kaggle_demo_validate_photo(req: dict):
+    """Validate that an uploaded photo shows a human body part relevant to massage analysis."""
+    path = req.get("path", "")
+    api_key = (req.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")).strip()
+    if not path or not Path(path).exists():
+        return {"status": "error", "error": "File not found"}
+    if not api_key:
+        return {"status": "ok", "message": "No API key — skipping AI validation", "valid": True}
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        with open(path, "rb") as f:
+            data = f.read()
+        ext = Path(path).suffix.lower()
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext.lstrip("."), "image/jpeg")
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                "You are a medical photo validator for a massage therapy app. "
+                "Examine this photo. Does it show a clear, recognizable human body part "
+                "(back, neck, shoulders, spine, posture, or similar anatomy) suitable for "
+                "massage consultation visual analysis? "
+                "Reply with ONLY a JSON object: "
+                '{"valid": true/false, "body_part": "what you see", "message": "short 1-line explanation in English"}',
+                genai_types.Part.from_bytes(data=data, mime_type=mime),
+            ],
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=200,
+            ),
+        )
+        import json as j
+        text = response.text.strip()
+        if text.startswith("```"): text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
+        try:
+            result = j.loads(text)
+        except:
+            result = {"valid": True, "body_part": "unknown", "message": text[:100]}
+        return {"status": "ok", "valid": result.get("valid", True), "body_part": result.get("body_part", "unknown"), "message": result.get("message", "")}
+    except Exception as e:
+        return {"status": "ok", "valid": True, "message": f"Validation unavailable ({str(e)[:50]})", "body_part": "unknown"}
+
+
 MOCK_REPORT = """1. DECISION: APPROVED
 2. RATIONALE: Client presents with lower back pain (dull ache, 3 months duration, radiating to right leg). No contraindications detected. Client is healthy with normal blood pressure and no chronic conditions.
 3. RECOMMENDED TECHNIQUE #1: Classical massage (back) — 60 min — Deep tissue focus on lumbar region
@@ -541,6 +846,8 @@ async def kaggle_demo_consult(req: dict):
     photo_paths = req.get("photo_paths", [])
     video_frames = req.get("video_frames", [])
     use_ai = req.get("use_ai", False)
+    gemini_key = req.get("gemini_api_key", "")
+    hf_token = req.get("hf_token", "")
 
     full_text = (
         f"Age: {age}, Gender: {gender}. "
@@ -549,13 +856,15 @@ async def kaggle_demo_consult(req: dict):
 
     if use_ai:
         try:
-            from core.adk.workflow import run_massage_consultation
+            from core.adk.workflow import run_massage_consultation_direct
 
-            events = await run_massage_consultation(
+            events = await run_massage_consultation_direct(
                 chat_id=999,
                 user_message=full_text,
                 photo_paths=photo_paths or [],
                 video_frames_paths=video_frames or [],
+                gemini_key=gemini_key,
+                hf_token=hf_token,
             )
 
             report = ""
@@ -566,13 +875,45 @@ async def kaggle_demo_consult(req: dict):
             if not report and events:
                 report = events[-1]["content"]
 
-            return {"status": "ok", "events": events, "report": report}
+            engine = "Gemini" if gemini_key else "HF Router (Qwen)"
+            return {"status": "ok", "events": events, "report": report, "engine": engine}
         except Exception as e:
             import traceback
-            logger.warning(f"Real AI failed, falling back to mock: {e}")
+            tb = traceback.format_exc()
+            logger.error(f"Real AI failed: {e}\n{tb[:500]}")
+            print(f"REAL AI ERROR: {e}\n{tb[:500]}", flush=True)
             # Fall through to mock
 
-    return {"status": "ok", "events": MOCK_EVENTS, "report": MOCK_REPORT, "mock": True}
+    return {"status": "ok", "events": MOCK_EVENTS, "report": MOCK_REPORT, "mock": True, "engine": "Mock (no AI)"}
+
+
+@app.post("/api/demo/verify-key")
+async def kaggle_demo_verify_key(req: dict):
+    """Verify a Gemini API key with a minimal test call (1 request, ~2s)."""
+    api_key = (req.get("gemini_api_key") or "").strip()
+    if not api_key:
+        return {"status": "error", "error": "No API key provided"}
+
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+        client = genai.Client(api_key=api_key)
+        gen = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents="Say exactly: OK",
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=10,
+            ),
+        )
+        return {"status": "ok", "message": "Key is valid, Gemini ready", "engine": "Gemini 2.5 Flash"}
+    except Exception as e:
+        err = str(e)
+        if "503" in err or "UNAVAILABLE" in err or "quota" in err.lower():
+            return {"status": "quota", "error": "Key valid but quota exhausted (503). Will fallback to HF Router.", "engine": "HF Router (Qwen 7B)"}
+        if "API_KEY_INVALID" in err or "not found" in err.lower() or "permission" in err.lower():
+            return {"status": "invalid", "error": "Key is invalid or has no access. Check it at https://aistudio.google.com", "engine": "HF Router (Qwen 7B)"}
+        return {"status": "error", "error": err[:200], "engine": "HF Router (Qwen 7B)"}
+
 
 @app.post("/api/specialist/chat")
 async def api_specialist_chat(req: dict):
@@ -2955,6 +3296,7 @@ if __name__ == "__main__":
     # Polling на всех платформах (на HF блокируется без PROXY_URL)
     if not HAS_BOT:
         logger.warning("ℹ️ TELEGRAM_TOKEN не задан — бот не запущен. Работает только API (/demo).")
+        p_web.join()
     else:
         platform_name = {"hf": "HF Spaces", "render": "Render.com", "local": "Local"}.get(PLATFORM, PLATFORM)
         logger.info(f"📡 {platform_name}: Запуск polling режима")

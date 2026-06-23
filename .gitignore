@@ -3,18 +3,23 @@ venv/
 __pycache__/
 *.pyc
 *.jpg
+*.png
 *.ogg
 *.wav
+*.pdf
+*.docx
 .DS_Store
 temp/
 data/
 user_audio/
 logs/
 internal/
+docs/planning.md
+docs/massage/
+docs/massage_conference/
 .vscode/
 .prompts/
 node_modules/
-docs/
 
 # Медиа (кроме аватарки бота)
 !artef/bot_avatar.png
@@ -22,7 +27,6 @@ docs/
 .playwright-mcp/
 tests/
 !tests/test_adk_workflow.py
-static/massage/certificates/*.png
 
 # QA / manual testing (not for public)
 CLIENT_JOURNEY.md
@@ -33,6 +37,9 @@ STRATEGY.md
 # Personal profile for AI context (not for public)
 _PERSONA.md
 dizel0110_homepage.txt
+
+# Test/temp scripts
+temp_*.py
 
 # Future ideas (PWA, APK, Capacitor, etc.)
 IDEAS.md

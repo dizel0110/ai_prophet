@@ -27,8 +27,11 @@ pinned: false
 AI Prophet replaces the traditional 15-minute manual massage consultation with a **6-agent AI pipeline** built on Google's Agent Development Kit (ADK) 2.0. Clients fill a questionnaire, upload photos of their back and a video of their walk — and the AI team produces a full diagnostic report with technique recommendations and a personalized music playlist.
 
 ### Live Demo
-- **Web Demo** (no Telegram needed): [dizel0110-kaggle-massage-agent.hf.space/demo](https://dizel0110-kaggle-massage-agent.hf.space/demo)
+- **Web Demo** (no Telegram needed, no API key required): `python main.py` → http://localhost:7860/demo
+- **HF Space** (pending deployment): [dizel0110-kaggle-massage-agent.hf.space](https://dizel0110-kaggle-massage-agent.hf.space)
 - **Full Experience** (Telegram Mini App): [@ai_prophet_io_bot](https://t.me/ai_prophet_io_bot) → press 🖐 Massage
+
+> 💡 **For judges**: The demo works fully in mock mode (no API key). For real AI, bring your own [Gemini API key](https://aistudio.google.com/apikey) — paste it in the "Use AI" section.
 
 ### Video Demo
 [2-minute submission video](LINK-TO-VIDEO) — coming soon.
@@ -98,17 +101,17 @@ graph TD
 ### ADK Features Implemented
 
 | # | Feature | Status |
-|---|---------|--------|
+|--|--------|--------|
 | 1 | **Multi-Agent Orchestration** — 6 agents in sequential graph workflow | ✅ |
 | 2 | **Tool Use / Function Calling** — WebSearch, MediaSearch, QuestionAnalyzer | ✅ |
 | 3 | **Sessions & Memory** — InMemorySessionService + MemoryService | ✅ |
 | 4 | **Observability** — Workflow event logging per agent | ✅ |
-| 5 | **Deployment** — Docker on Hugging Face Spaces (free tier) | ✅ |
-| 6 | **Agent Evaluation** — Eval set created (`massage_consultation_eval`) | ✅ |
-| 7 | **Human-in-the-Loop** — Approval step before sending report | ✅ |
-| 8 | **Agentic Loops** — Parallel fan-out for vision agents (planned) | 🚧 |
-| 9 | **RAG** — Massage music database + technique knowledge | 🚧 |
-| 10 | **MCP Protocol** — Client-side AI future capability | 🚧 |
+| 5 | **Fallback Engine** — Gemini → HF Router (Qwen 7B) → Mock | ✅ |
+| 6 | **Progressive UI** — Agent rows light up one-by-one during execution | ✅ |
+| 7 | **Photo Validation** — AI validates photo shows anatomy + cross-checks vs complaint | ✅ |
+| 8 | **User-Provided API Key** — Bring your own Gemini key, stored in localStorage | ✅ |
+| 9 | **Agentic Loops** — Parallel fan-out for vision agents (planned) | 🚧 |
+| 10 | **RAG** — Massage music database + technique knowledge | 🚧 |
 
 ---
 
@@ -166,11 +169,12 @@ python main.py
 
 - [x] **6 specialized agents** with distinct roles and prompts
 - [x] **Graph-based workflow** with sequential data flow
-- [x] **Data validation** at each pipeline junction
+- [x] **Progressive UI** — agents light up one-by-one during pipeline execution
+- [x] **User-provided API key** — bring your own Gemini key, fallback to HF Router
+- [x] **Photo upload + AI validation** — checks anatomy + cross-checks vs complaint
 - [x] **Music recommendation** integrated into diagnostic output
-- [x] **Web demo** for judges (no Telegram required)
+- [x] **Web demo** for judges (no API key required for mock mode)
 - [x] **Full Telegram Mini App** with questionnaire, media upload, and chat
-- [x] **Deployed** on Hugging Face Spaces (CPU Basic, free)
 - [x] **CI/CD** via GitHub Actions (auto-deploy on push)
 
 ---

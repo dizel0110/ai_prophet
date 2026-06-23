@@ -1,4 +1,4 @@
-from core.adk.workflow import create_massage_workflow, run_massage_consultation
+from core.adk.workflow import create_massage_workflow, run_massage_consultation_direct as run_massage_consultation
 from core.adk.session import get_session_service, get_memory_service
 from core.adk.agents import (
     questionnaire_agent,
