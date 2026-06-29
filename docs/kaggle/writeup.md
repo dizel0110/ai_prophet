@@ -11,48 +11,48 @@ The AI Massage Consultant is a **6-agent sequential pipeline** built on Google A
 
 ## Architecture Overview
 
-```
-            ┌──────────────────────────────────────┐
-            │         Question Analyst             │
-            │  (parses complaint → pain location,  │
-            │   duration, type, chronic conditions) │
-            └──────────────┬───────────────────────┘
-                           │ context: field_extracted
-                           ▼
-            ┌──────────────────────────────────────┐
-            │      Visual Diagnostician            │
-            │  (vision: analyzes uploaded photos   │
-            │   for posture, body mechanics)       │
-            └──────────────┬───────────────────────┘
-                           │ context: vision_analysis
-                           ▼
-            ┌──────────────────────────────────────┐
-            │     Video Motion Analyst             │
-            │  (vision: analyzes movement from     │
-            │   uploaded video frames)             │
-            └──────────────┬───────────────────────┘
-                           │ context: video_analysis
-                           ▼
-            ┌──────────────────────────────────────┐
-            │        Technique Expert              │
-            │  (text: MCP knowledge base + web     │
-            │   search + 3 ADK Skills → techniques)│
-            └──────────────┬───────────────────────┘
-                           │ context: techniques
-                           ▼
-            ┌──────────────────────────────────────┐
-            │      Music Therapist                 │
-            │  (text: recommends genre/duration    │
-            │   based on client profile)           │
-            └──────────────┬───────────────────────┘
-                           │ context: music
-                           ▼
-            ┌──────────────────────────────────────┐
-            │       Final Synthesis                │
-            │  (all context → structured report    │
-            │   with diagnosis, contraindications, │
-            │   session plan, music, precautions)  │
-            └──────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Input["User Input"]
+        A1[Complaint Text]
+        A2[Photo Upload]
+        A3[Video Upload]
+    end
+
+    subgraph Pipeline["6-Agent ADK Sequential Pipeline"]
+        Q[Question Analyst<br/>parses complaint → structured fields]
+        V[Visual Diagnostician<br/>vision: posture & body analysis]
+        M[Video Motion Analyst<br/>vision: gait & movement analysis]
+        T[Technique Expert<br/>MCP + Skills + web search]
+        R[Music Therapist<br/>genre & duration recommendation]
+        F[Final Synthesis<br/>compiles full report]
+    end
+
+    subgraph Tools["Tools & Infrastructure"]
+        MCP[MCP Server<br/>fetch_url + knowledge base]
+        SK[ADK Skills<br/>3 skill references]
+        WS[Web Search]
+        MS[Media Search]
+    end
+
+    subgraph Output["Output"]
+        O1[Diagnosis Summary]
+        O2[Session Plan]
+        O3[Contraindications]
+        O4[Music Playlist]
+    end
+
+    Input --> Q
+    Q --> V
+    V --> M
+    M --> T
+    T --> R
+    R --> F
+    T --> MCP
+    T --> SK
+    T --> WS
+    R --> MS
+    F --> Output
 ```
 
 ### Multi-Agent Sequential Workflow (ADK)
