@@ -150,7 +150,7 @@ Both attached via `SkillToolset(skills=[...])` which auto-generates `list_skills
 
 - **Live demo**: https://dizel0110-kaggle-massage-agent.hf.space/demo
 - **GitHub**: https://github.com/dizel0110/ai_prophet/tree/kaggle
-- **Video**: https://youtu.be/_wwL4HRd9jk
+- **Video**: https://youtu.be/wAQYEVdhpOI
 - **Cover image**: `docs/kaggle/cover.jpg`
 - **Scoring checklist**: `docs/kaggle/SCORING_CHECKLIST.md`
 - **Submission guide**: `docs/kaggle/SUBMISSION_GUIDE.md`
