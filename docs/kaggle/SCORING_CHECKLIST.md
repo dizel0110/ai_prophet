@@ -35,12 +35,12 @@
 
 ---
 
-## 3. Pitch — Writeup (10 pts) — ⏳ Day 4
+## 3. Pitch — Writeup (10 pts)
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| Max 2500 words | ⏳ | Draft in progress |
-| Architecture diagram | ⏳ | Include in writeup |
+| Max 2500 words | ✅ | `docs/kaggle/writeup.md` — ~1800 words |
+| Architecture diagram | ⏳ | Pending — Mermaid diagram in writeup |
 | Links to GitHub | ✅ | `github.com/dizel0110/ai_prophet/tree/kaggle` |
 | Links to HF Space | ✅ | `dizel0110-kaggle-massage-agent.hf.space/demo` |
 | Cover image | ⏳ | Create 1280×640 PNG for Kaggle writeup |
@@ -141,21 +141,18 @@
 |---------|-----|---------|------|
 | Pitch — Core Concept | 10 | ✅ 10 | 0 |
 | Pitch — Video | 10 | ⏳ 0 | 10 |
-| Pitch — Writeup | 10 | ⏳ 0 | 10 |
+| Pitch — Writeup | 10 | ✅ 7 | 3 (diagram + cover + publish) |
 | Multi-Agent ADK | ~8 | ✅ 8 | 0 |
 | MCP Server | ~8 | ✅ 8 | 0 |
-| Antigravity IDE | ~8 | ⏳ 0 | 8 |
+| Antigravity IDE | ~8 | ⏳ 4 | 4 (mentioned in writeup, video pending) |
 | Security | ~8 | ✅ 8 | 0 |
 | Deployability | ~9 | ✅ 9 | 0 |
 | Agent Skills | ~9 | ✅ 9 | 0 |
-| Documentation | 20 | ✅ 18 | 2 |
-| **Total** | **100** | **~70** | **~30** |
+| Documentation | 20 | ✅ 18 | 2 (diagram + cover image) |
+| **Total** | **100** | **~81** | **~19** |
 
 **Remaining work (Days 3-6):**
-- Day 3 (Jun 30): Writeup draft + architecture diagram + cover image
-- Day 4 (Jul 1): Publish writeup to Kaggle
-- Day 5 (Jul 2): Record 5-min video, upload to YouTube
-- Day 6 (Jul 3-6): Final review, make repo public, submit
+- Day 3 (Jun 29): Writeup draft ✅ — diagram + cover image pending
 
 ---
 
