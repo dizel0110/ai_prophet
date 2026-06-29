@@ -17,10 +17,11 @@ import tempfile
 import uvicorn
 from datetime import datetime
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, Request
+from fastapi import FastAPI, UploadFile, File, Form, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from config import TOKEN, PORT, PLATFORM, DATA_DIR, get_vertical_name
+from core.demo_auth import verify_demo_key
 from core.network import apply_dns_patch
 
 HAS_BOT = bool(TOKEN)
@@ -305,6 +306,12 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div class="card" style="padding:.5rem 1rem;display:flex;align-items:center;gap:8px">
+    <span style="font-size:.75rem;color:#666">🔑 Demo API Key:</span>
+    <input type="text" id="demoApiKey" placeholder="empty (no auth)" style="font-size:.75rem;padding:.3rem .6rem;width:auto;flex:1;background:#0f0f1a;border:1px solid #2a2a3e;border-radius:4px;color:#e0e0e0">
+    <span style="font-size:.65rem;color:#555">X-API-Key header</span>
+  </div>
+
   <div class="btn-row">
     <button class="btn" id="startBtn" onclick="startConsultation()">▶ Start Consultation</button>
     <button class="btn-stop" id="stopBtn" onclick="cancelConsultation()">✕ Stop</button>
@@ -334,6 +341,13 @@ KAGGLE_DEMO_HTML = """<!DOCTYPE html>
   </div>
 </div>
 <script>
+function getHeaders(extra) {
+  const h = extra || {};
+  const key = document.getElementById('demoApiKey').value.trim();
+  if (key) h['X-API-Key'] = key;
+  return h;
+}
+
 const AGENTS = [
   {id:'questionnaire_agent', label:'Questionnaire Analyst', desc:'Intake & contraindications'},
   {id:'photo_diagnost_agent', label:'Visual Diagnostician', desc:'Posture & asymmetry'},
@@ -402,7 +416,7 @@ async function verifyKey() {
   try {
     const resp = await fetch('/api/demo/verify-key', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: getHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify({gemini_api_key: key}),
     });
     const data = await resp.json();
@@ -497,7 +511,7 @@ async function uploadPhotos() {
     if (abortController && abortController.signal.aborted) break;
     const form = new FormData();
     form.append('file', p.file);
-    const resp = await fetch('/api/demo/upload', {method:'POST', body:form});
+    const resp = await fetch('/api/demo/upload', {method:'POST', headers:getHeaders({}), body:form});
     const data = await resp.json();
     if (data.status === 'ok') {
       paths.push(data.path);
@@ -506,7 +520,7 @@ async function uploadPhotos() {
       try {
         const vr = await fetch('/api/demo/validate-photo', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: getHeaders({'Content-Type': 'application/json'}),
           body: JSON.stringify({path: data.path, gemini_api_key: key || undefined}),
         });
         const vd = await vr.json();
@@ -689,7 +703,7 @@ async function startConsultation() {
   try {
     const resp = await fetch('/api/demo/consult', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: getHeaders({'Content-Type': 'application/json'}),
       signal: abortController.signal,
       body: JSON.stringify({
         complaint, age: parseInt(age), gender, photo_paths: photoPaths, use_ai: true,
@@ -758,7 +772,7 @@ async def kaggle_demo():
     return HTMLResponse(KAGGLE_DEMO_HTML)
 
 @app.post("/api/demo/upload")
-async def kaggle_demo_upload(file: UploadFile = File(...)):
+async def kaggle_demo_upload(file: UploadFile = File(...), _auth: None = Depends(verify_demo_key)):
     """Upload a photo for massage consultation vision analysis."""
     try:
         contents = await file.read()
@@ -772,7 +786,7 @@ async def kaggle_demo_upload(file: UploadFile = File(...)):
 
 
 @app.post("/api/demo/validate-photo")
-async def kaggle_demo_validate_photo(req: dict):
+async def kaggle_demo_validate_photo(req: dict, _auth: None = Depends(verify_demo_key)):
     """Validate that an uploaded photo shows a human body part relevant to massage analysis."""
     path = req.get("path", "")
     api_key = (req.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")).strip()
@@ -839,7 +853,7 @@ MOCK_EVENTS = [
 
 
 @app.post("/api/demo/consult")
-async def kaggle_demo_consult(req: dict):
+async def kaggle_demo_consult(req: dict, _auth: None = Depends(verify_demo_key)):
     complaint = req.get("complaint", "")
     age = req.get("age", 35)
     gender = req.get("gender", "male")
@@ -888,7 +902,7 @@ async def kaggle_demo_consult(req: dict):
 
 
 @app.post("/api/demo/verify-key")
-async def kaggle_demo_verify_key(req: dict):
+async def kaggle_demo_verify_key(req: dict, _auth: None = Depends(verify_demo_key)):
     """Verify a Gemini API key with a minimal test call (1 request, ~2s)."""
     api_key = (req.get("gemini_api_key") or "").strip()
     if not api_key:
