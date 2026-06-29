@@ -76,9 +76,9 @@
 
 | Criterion | Status | Notes |
 |-----------|--------|-------|
-| Code shown in Antigravity | ⏳ | Day 5 — record video with Antigravity IDE visible |
-| Multiple files opened | ⏳ | Show agents.py, skills.py, mcp_server.py, workflow.py |
-| Git integration visible | ⏳ | Show `git log --oneline` in terminal |
+| Code shown in Antigravity | ✅ | Slide 14 — Antigravity IDE with workflow.py + git log in terminal |
+| Multiple files opened | ✅ | File tree shows 8 files (workflow, agents, tools, skills, mcp, demo_auth, Dockerfile) |
+| Git integration visible | ✅ | `git log --oneline -6` shown in bottom terminal |
 
 ### 4d. 🔐 Security (Code + Video)
 
@@ -143,12 +143,12 @@
 | Pitch — Writeup | 10 | 8 | 2 (publish on Kaggle + cover image) |
 | Multi-Agent ADK | ~8 | 8 | 0 |
 | MCP Server | ~8 | 8 | 0 |
-| Antigravity IDE | ~8 | 6 | 2 (clearer IDE branding in video) |
+| Antigravity IDE | ~8 | 8 | 0 |
 | Security | ~8 | 8 | 0 |
 | Deployability | ~9 | 9 | 0 |
 | Agent Skills | ~9 | 9 | 0 |
-| Documentation | 20 | 18 | 2 (cover image + diagram finalized) |
-| **Total** | **100** | **~94** | **~6** |
+| Documentation | 20 | 18 | 2 (publish writeup on Kaggle) |
+| **Total** | **100** | **~96** | **~4** |
 
 **Remaining work (Days 3-6):**
 - Day 3 (Jun 29): Writeup draft ✅ — diagram + cover image pending
