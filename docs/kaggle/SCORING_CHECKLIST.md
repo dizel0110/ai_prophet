@@ -23,15 +23,14 @@
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| 5 min max | ⏳ | Plan: 5 min. Script in SUBMISSION_GUIDE.md |
-| Shows problem | ⏳ | Open with "80% of people have back pain. Massage therapists lack tools." |
-| Shows demo working | ⏳ | Record `/demo` page — mock consultation, agent grid, report |
-| Shows code in Antigravity IDE | ⏳ | Must show Antigravity IDE with open code files |
-| Shows MCP Server | ⏳ | Show `mcp_server.py` + `mcp_client.py` |
-| Shows Security | ⏳ | Show `demo_auth.py` + `X-API-Key` header in JS |
-| Shows Agent Skills | ⏳ | Show `skills.py` — 3 ADK Skills |
-| Shows Deployability | ⏳ | Show HF Space running, Dockerfile, `.github/workflows/` |
-| Upload to YouTube | ⏳ | Unlisted. Link in writeup. |
+| 5 min max | ✅ | 4:00 — within limit |
+| Shows demo working | ✅ | Screenshots of `/demo` page with 6 agents grid |
+| Shows code in Antigravity IDE | ✅ | Code files visible in editor |
+| Shows MCP Server | ✅ | `mcp_server.py` + `mcp_client.py` on screen |
+| Shows Security | ✅ | `demo_auth.py` + API key header |
+| Shows Agent Skills | ✅ | `skills.py` — 3 ADK Skills on screen |
+| Shows Deployability | ✅ | Dockerfile + HF Space + GitHub Action |
+| Upload to YouTube (unlisted) | ✅ | https://youtu.be/_wwL4HRd9jk |
 
 ---
 
@@ -139,17 +138,17 @@
 
 | Section | Max | Current | Left |
 |---------|-----|---------|------|
-| Pitch — Core Concept | 10 | ✅ 10 | 0 |
-| Pitch — Video | 10 | ⏳ 0 | 10 |
-| Pitch — Writeup | 10 | ✅ 7 | 3 (diagram + cover + publish) |
-| Multi-Agent ADK | ~8 | ✅ 8 | 0 |
-| MCP Server | ~8 | ✅ 8 | 0 |
-| Antigravity IDE | ~8 | ⏳ 4 | 4 (mentioned in writeup, video pending) |
-| Security | ~8 | ✅ 8 | 0 |
-| Deployability | ~9 | ✅ 9 | 0 |
-| Agent Skills | ~9 | ✅ 9 | 0 |
-| Documentation | 20 | ✅ 18 | 2 (diagram + cover image) |
-| **Total** | **100** | **~81** | **~19** |
+| Pitch — Core Concept | 10 | 10 | 0 |
+| Pitch — Video | 10 | 10 | 0 |
+| Pitch — Writeup | 10 | 8 | 2 (publish on Kaggle + cover image) |
+| Multi-Agent ADK | ~8 | 8 | 0 |
+| MCP Server | ~8 | 8 | 0 |
+| Antigravity IDE | ~8 | 6 | 2 (clearer IDE branding in video) |
+| Security | ~8 | 8 | 0 |
+| Deployability | ~9 | 9 | 0 |
+| Agent Skills | ~9 | 9 | 0 |
+| Documentation | 20 | 18 | 2 (cover image + diagram finalized) |
+| **Total** | **100** | **~94** | **~6** |
 
 **Remaining work (Days 3-6):**
 - Day 3 (Jun 29): Writeup draft ✅ — diagram + cover image pending
