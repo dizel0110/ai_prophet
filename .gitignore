@@ -29,6 +29,7 @@ node_modules/
 .playwright-mcp/
 tests/
 !tests/test_adk_workflow.py
+!tests/test_booking.py
 !tests/test_mcp.py
 !tests/test_security.py
 !tests/test_skills.py
