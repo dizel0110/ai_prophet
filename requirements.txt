@@ -18,6 +18,9 @@ aiohttp-socks
 # Search
 duckduckgo-search
 
+# MCP (Model Context Protocol) — for tool server communication
+mcp>=1.0.0
+
 # Media (требует ffmpeg в системе)
 yt-dlp
 

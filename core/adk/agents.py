@@ -1,6 +1,6 @@
 import logging
 from google.adk.agents.llm_agent import Agent
-from core.adk.tools import web_search_tool, search_media_tool
+from core.adk.tools import web_search_tool, search_media_tool, mcp_fetch_url_tool, mcp_search_knowledge_tool
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,14 @@ technique_expert_agent = Agent(
     model="gemini-2.5-flash",
     instruction=TECHNIQUE_EXPERT_INSTRUCTION,
     description="Recommends specific massage techniques based on all diagnostic data",
-    tools=[web_search_tool],
+    tools=[
+        web_search_tool,
+        # MCP tools: communicate with the local MCP server via JSON-RPC stdio protocol.
+        # The server runs as a subprocess and exposes fetch_url + search_massage_knowledge.
+        # This demonstrates MCP Server integration (Kaggle capstone concept #3).
+        mcp_fetch_url_tool,
+        mcp_search_knowledge_tool,
+    ],
 )
 
 music_recommend_agent = Agent(

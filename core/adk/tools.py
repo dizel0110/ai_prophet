@@ -1,7 +1,69 @@
+import asyncio
 import logging
 from google.adk.tools import FunctionTool
 
 logger = logging.getLogger(__name__)
+
+
+
+# ---------------------------------------------------------------------------
+# MCP (Model Context Protocol) tool — connects to local MCP server via stdio
+#
+# Demonstrates MCP Server integration for the Kaggle capstone (6th concept).
+# The MCP server runs as a subprocess and exposes tools over JSON-RPC.
+# This wrapper makes those tools available to ADK agents as FunctionTool.
+#
+# Protocol flow:
+#   1. ADK agent requests tool call
+#   2. This wrapper calls ProphetMCPClient.call_tool()
+#   3. Client sends JSON-RPC request to server via stdin
+#   4. Server processes and returns result via stdout
+#   5. Client passes result back to agent
+# ---------------------------------------------------------------------------
+async def _mcp_fetch_url(url: str) -> str:
+    """Fetch web content via the MCP server for technique research.
+
+    The MCP server runs fetch_url tool which makes HTTP requests
+    and returns page text content. Used by Technique Expert to
+    research massage modalities, verify contraindications, etc.
+
+    Args:
+        url: Full URL to fetch (http/https only)
+    Returns:
+        Page text content or error message
+    """
+    from core.mcp_client import mcp_client
+    try:
+        result = await mcp_client.call_tool("fetch_url", {"url": url})
+        return result
+    except Exception as e:
+        return f"[MCP fetch_url error: {e}]"
+
+
+async def _mcp_search_knowledge(query: str) -> str:
+    """Search massage therapy knowledge base via the MCP server.
+
+    The MCP server's search_massage_knowledge tool queries a curated
+    knowledge base covering techniques, contraindications, anatomy,
+    and treatment protocols.
+
+    Args:
+        query: Search query about massage techniques or conditions
+    Returns:
+        Knowledge base entries matching the query
+    """
+    from core.mcp_client import mcp_client
+    try:
+        result = await mcp_client.call_tool("search_massage_knowledge", {"query": query})
+        return result
+    except Exception as e:
+        return f"[MCP search_massage_knowledge error: {e}]"
+
+
+# Wrap MCP client calls as ADK FunctionTool instances
+# These are passed to ADK agents via the tools= parameter
+mcp_fetch_url_tool = FunctionTool(func=_mcp_fetch_url)
+mcp_search_knowledge_tool = FunctionTool(func=_mcp_search_knowledge)
 
 
 def _web_search(query: str, max_results: int = 5) -> str:

@@ -25,6 +25,7 @@ from core.adk.agents import (
 )
 from core.adk.session import get_session_service, get_memory_service, create_session
 from core.adk.tools import question_analyzer_tool
+from core.mcp_client import mcp_client
 from config import HF_TOKEN
 
 # Alias for workflow direct pipeline
@@ -327,7 +328,34 @@ async def run_massage_consultation_direct(
 
     events = []
 
+    # Connect MCP client (lazy — no-op if already connected)
+    # The MCP server provides knowledge retrieval tools over stdio transport
+    try:
+        await mcp_client.connect()
+    except Exception:
+        pass  # MCP is optional — agents work without it
+
     for i, (name, instruction, prompt_override) in enumerate(agents_config):
+        # For the Technique Expert, inject MCP-retrieved knowledge about the complaint
+        # This demonstrates MCP Server integration: the server runs as a subprocess
+        # and communicates via the Model Context Protocol over stdio transport.
+        if name == "technique_expert_agent" and mcp_client._connected:
+            try:
+                # Retrieve relevant massage knowledge via MCP protocol
+                mcp_result = await asyncio.wait_for(
+                    mcp_client.call_tool("search_massage_knowledge", {"query": user_message}),
+                    timeout=10,
+                )
+                if mcp_result and "Error" not in mcp_result[:20]:
+                    _context_accumulator["full"] += (
+                        "\n\n===== MCP Knowledge Retrieval =====\n"
+                        f"{mcp_result}"
+                        "\n===================================\n"
+                    )
+                    logger.info("MCP knowledge injected for Technique Expert")
+            except Exception as e:
+                logger.warning(f"MCP knowledge retrieval skipped: {e}")
+
         if prompt_override is not None:
             prompt = prompt_override
         else:

@@ -3183,6 +3183,16 @@ async def start_bot_polling():
             logger.warning(f"⚠️ Не удалось полностью очистить temp: {e}")
     else: os.makedirs(cfg.TEMP_DIR)
 
+    # Initialize MCP client: connects to the local MCP server via stdio transport.
+    # The server (core/mcp_server.py) provides fetch_url and search_massage_knowledge tools.
+    # This demonstrates MCP Server integration (Kaggle capstone concept).
+    try:
+        from core.mcp_client import mcp_client
+        asyncio.create_task(mcp_client.connect())
+        logger.info("🔌 MCP client initialized (server will connect on first tool call)")
+    except Exception as e:
+        logger.warning(f"MCP init skipped: {e}")
+
     # Supabase: auto-create tables + migrate + restore
     try:
         from core.supabase_manager import init_schema, migrate_from_json, restore_from_supabase
