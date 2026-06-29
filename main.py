@@ -929,6 +929,23 @@ async def kaggle_demo_verify_key(req: dict, _auth: None = Depends(verify_demo_ke
         return {"status": "error", "error": err[:200], "engine": "HF Router (Qwen 7B)"}
 
 
+@app.get("/api/demo/auth-test")
+async def kaggle_demo_auth_test(_auth: None = Depends(verify_demo_key)):
+    """Test endpoint for judges to verify API key authentication works.
+
+    - Without valid X-API-Key: returns 403
+    - With valid X-API-Key: returns 200 + auth info
+    """
+    from core.demo_auth import DEMO_API_KEY
+    masked = (DEMO_API_KEY[:4] + "..." + DEMO_API_KEY[-4:]) if len(DEMO_API_KEY) > 8 else "not-configured"
+    return {
+        "status": "ok",
+        "message": "Authentication successful",
+        "auth_type": "X-API-Key header",
+        "key_hint": masked,
+    }
+
+
 @app.post("/api/specialist/chat")
 async def api_specialist_chat(req: dict):
     from core.agents.agent_factory import SpecialistFactory, get_specialist, get_specialists

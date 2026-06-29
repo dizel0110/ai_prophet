@@ -16,6 +16,8 @@ Usage:
     agent = Agent(..., tools=[skill_toolset])
 """
 import logging
+import os
+from pathlib import Path
 from google.adk.skills import models
 from google.adk.tools.skill_toolset import SkillToolset
 
@@ -166,7 +168,61 @@ music_therapy_skill = models.Skill(
 )
 
 
-# ── SkillToolset: bundle all skills together ────────────────────────────────
+# ── File-based skills (loaded from SKILL.md files on disk) ──────────────────
+# ADK supports loading skills from filesystem directories. Each directory
+# must contain a SKILL.md with frontmatter + instructions, plus optional
+# references/ subdirectory for L3 resources.
+#
+# Here we parse SKILL.md manually and create Skill model instances.
+# This demonstrates that skills can be defined both inline (above) and
+# on disk — same format, different source, loaded dynamically at runtime.
+_file_skills_dir = Path(__file__).parent.parent.parent / "adk_skills"
+_file_based_skills = []
+if _file_skills_dir.exists():
+    for _skill_dir in sorted(_file_skills_dir.iterdir()):
+        skill_md = _skill_dir / "SKILL.md"
+        if _skill_dir.is_dir() and skill_md.exists():
+            try:
+                text = skill_md.read_text(encoding="utf-8")
+                # Parse simple YAML frontmatter (--- ... ---)
+                parts = text.split("---", 2)
+                if len(parts) >= 3:
+                    frontmatter_text = parts[1]
+                    body = parts[2].strip()
+                    import re
+                    name = ""
+                    desc_match = re.search(r"description:\s*>\s*\n((?:\s+.*\n?)*)", frontmatter_text)
+                    if desc_match:
+                        description = " ".join(desc_match.group(1).strip().split("\n")).strip()
+                    else:
+                        desc_match = re.search(r"description:\s*(.+)", frontmatter_text)
+                        description = desc_match.group(1).strip() if desc_match else ""
+                    name_match = re.search(r"name:\s*(\S+)", frontmatter_text)
+                    if name_match:
+                        name = name_match.group(1).strip()
+                    if not description:
+                        description = f"File-based skill loaded from {_skill_dir.name}"
+                    # Load references
+                    refs_dir = _skill_dir / "references"
+                    references = {}
+                    if refs_dir.exists():
+                        for ref_file in refs_dir.iterdir():
+                            if ref_file.is_file():
+                                references[ref_file.name] = ref_file.read_text(encoding="utf-8")
+                    _skill = models.Skill(
+                        frontmatter=models.Frontmatter(
+                            name=name or _skill_dir.name,
+                            description=description.strip() or f"File-based skill: {_skill_dir.name}",
+                        ),
+                        instructions=body,
+                        resources=models.Resources(references=references),
+                    )
+                    _file_based_skills.append(_skill)
+                    logger.info(f"Loaded file-based skill: {_skill.name}")
+            except Exception as e:
+                logger.warning(f"Could not load skill from {_skill_dir.name}: {e}")
+
+# ── SkillToolset: bundle inline + file-based skills together ────────────────
 # The SkillToolset auto-generates three tools that agents can call:
 #   list_skills (L1) — returns names + descriptions of all skills
 #   load_skill (L2) — loads full instructions of a named skill
@@ -178,5 +234,6 @@ massage_skills_toolset = SkillToolset(
         massage_tech_skill,
         anatomy_knowledge_skill,
         music_therapy_skill,
+        *_file_based_skills,
     ],
 )

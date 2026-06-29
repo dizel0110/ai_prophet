@@ -29,6 +29,10 @@ node_modules/
 .playwright-mcp/
 tests/
 !tests/test_adk_workflow.py
+!tests/test_mcp.py
+!tests/test_security.py
+!tests/test_skills.py
+!tests/conftest.py
 
 # QA / manual testing (not for public)
 CLIENT_JOURNEY.md

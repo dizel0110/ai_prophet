@@ -154,7 +154,15 @@ def search_massage_knowledge(query: str) -> str:
     results = []
     for keyword, info in knowledge_base.items():
         words = keyword.split()
-        if any(w in query_lower for w in words) or all(w in query_lower for w in query_lower.split() if len(w) > 3 and w in keyword):
+        kw_lower = keyword.lower()
+        query_words = query_lower.split()
+        match = any(w in query_lower for w in words)
+        if not match:
+            for qw in query_words:
+                if len(qw) > 3 and qw in kw_lower:
+                    match = True
+                    break
+        if match:
             results.append(f"\n{'='*50}\n{keyword.upper()}\n{'='*50}\n{info}")
 
     if results:
