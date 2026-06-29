@@ -1,6 +1,7 @@
 import logging
 from google.adk.agents.llm_agent import Agent
 from core.adk.tools import web_search_tool, search_media_tool, mcp_fetch_url_tool, mcp_search_knowledge_tool
+from core.adk.skills import massage_skills_toolset
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,10 @@ technique_expert_agent = Agent(
         # This demonstrates MCP Server integration (Kaggle capstone concept #3).
         mcp_fetch_url_tool,
         mcp_search_knowledge_tool,
+        # ADK Skills: self-contained instruction bundles with progressive disclosure.
+        # SkillToolset auto-generates list_skills / load_skill / load_skill_resource.
+        # This demonstrates Agent Skills integration (Kaggle capstone concept #6).
+        massage_skills_toolset,
     ],
 )
 
