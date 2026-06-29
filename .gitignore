@@ -15,8 +15,10 @@ user_audio/
 logs/
 internal/
 docs/planning.md
+docs/vladimirosipov/
 docs/massage/
 docs/massage_conference/
+docs/шмм/
 .vscode/
 .prompts/
 node_modules/
